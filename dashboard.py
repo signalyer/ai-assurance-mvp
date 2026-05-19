@@ -24,11 +24,15 @@ load_dotenv(dotenv_path=str(env_path), override=True)
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.traces import router as traces_router
 from api.evaluate import router as evaluate_router
 from api.demo_run import router as demo_router
+from api.analytics import router as analytics_router
+from api.security import router as security_router
+from api.domains_api import router as domains_api_router
+from api.batch import router as batch_router
 
 load_dotenv()
 
@@ -88,6 +92,9 @@ def print_startup_status():
 
 app = FastAPI(title="AI Assurance Dashboard")
 
+# Mount static files
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
 # CORS for localhost only
 app.add_middleware(
     CORSMiddleware,
@@ -101,6 +108,10 @@ app.add_middleware(
 app.include_router(traces_router)
 app.include_router(evaluate_router)
 app.include_router(demo_router)
+app.include_router(analytics_router)
+app.include_router(security_router)
+app.include_router(domains_api_router)
+app.include_router(batch_router)
 
 
 @app.get("/api/health")
@@ -112,6 +123,64 @@ async def health_check() -> dict:
         "status": "ready" if all_required else "incomplete",
         "api_keys": status,
     }
+
+
+@app.get("/api/report/compliance")
+async def get_compliance_report(
+    report_type: str = "HIPAA",
+    days: int = 30,
+    organization: str = "Customer Organization",
+) -> HTMLResponse:
+    """Generate compliance audit report HTML (printable to PDF)."""
+    from datetime import datetime, timedelta
+    from pdf_report import generate_compliance_report_html
+    from storage import get_runs
+    from audit import global_audit
+
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    runs = get_runs(limit=10000, start_date=start_date, end_date=end_date)
+    audit_logs = global_audit.get_logs_for_period(start_date, end_date)
+
+    html = generate_compliance_report_html(
+        runs=runs,
+        audit_logs=audit_logs,
+        start_date=start_date,
+        end_date=end_date,
+        report_type=report_type,
+        organization=organization,
+    )
+
+    return HTMLResponse(content=html)
+
+
+@app.get("/analytics")
+async def serve_analytics() -> FileResponse:
+    """Serve the analytics page."""
+    static_dir = Path(__file__).parent / "static"
+    return FileResponse(static_dir / "analytics.html", media_type="text/html")
+
+
+@app.get("/security")
+async def serve_security() -> FileResponse:
+    """Serve the security testing page."""
+    static_dir = Path(__file__).parent / "static"
+    return FileResponse(static_dir / "security.html", media_type="text/html")
+
+
+@app.get("/domains")
+async def serve_domains_page() -> FileResponse:
+    """Serve the domain builder page."""
+    static_dir = Path(__file__).parent / "static"
+    return FileResponse(static_dir / "domains.html", media_type="text/html")
+
+
+@app.get("/compare")
+async def serve_compare_page() -> FileResponse:
+    """Serve the model comparison page."""
+    static_dir = Path(__file__).parent / "static"
+    return FileResponse(static_dir / "compare.html", media_type="text/html")
 
 
 @app.get("/")

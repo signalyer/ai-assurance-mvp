@@ -13,6 +13,9 @@ from tracer import trace_call
 from evaluator import evaluate_response
 from api.evaluate import eval_cache, runs_cache, _normalize_eval_scores
 from domains import load_domain, list_domains
+from storage import save_run
+from audit import log_evaluation
+from guardrails import apply_guardrails, filter_output
 
 # Load env vars from project root .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -146,6 +149,9 @@ async def run_live_demo(domain: str = Query(None)):
         eval_scores = _normalize_eval_scores(raw_evals)
         eval_cache[trace_id] = eval_scores
 
+        # Apply output guardrails (filter PII, log violations)
+        guardrail_result = filter_output(response_text, domain=domain)
+
         run_data = {
             "id": trace_id,
             "model": "claude-sonnet-4-6",
@@ -159,9 +165,19 @@ async def run_live_demo(domain: str = Query(None)):
             "tokens_used": tokens,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "eval_scores": eval_scores,
+            "guardrails": guardrail_result,
         }
         runs.append(run_data)
         runs_cache.insert(0, run_data)
+
+        # Persist to disk and audit log
+        save_run(run_data)
+        log_evaluation(
+            model="claude-sonnet-4-6",
+            domain=domain_name,
+            trace_id=trace_id,
+            eval_scores=eval_scores,
+        )
 
     except Exception as e:
         error = str(e)[:200]
@@ -198,6 +214,9 @@ async def run_live_demo(domain: str = Query(None)):
         eval_scores = _normalize_eval_scores(raw_evals)
         eval_cache[trace_id] = eval_scores
 
+        # Apply output guardrails
+        guardrail_result = filter_output(response_text, domain=domain)
+
         run_data = {
             "id": trace_id,
             "model": "gpt-4o-mini",
@@ -211,9 +230,19 @@ async def run_live_demo(domain: str = Query(None)):
             "tokens_used": tokens,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "eval_scores": eval_scores,
+            "guardrails": guardrail_result,
         }
         runs.append(run_data)
         runs_cache.insert(0, run_data)
+
+        # Persist to disk and audit log
+        save_run(run_data)
+        log_evaluation(
+            model="gpt-4o-mini",
+            domain=domain_name,
+            trace_id=trace_id,
+            eval_scores=eval_scores,
+        )
 
     except Exception as e:
         if not error:

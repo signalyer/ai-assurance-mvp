@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Security Testing — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .probe-card {
+            border: 1px solid #30363d;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            background: #0d1117;
+        }
+
+        .probe-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .probe-name {
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .probe-prompt {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #8b949e;
+            background: #161b22;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin: 0.5rem 0;
+            word-wrap: break-word;
+        }
+
+        .probe-response {
+            font-size: 0.85rem;
+            color: #c9d1d9;
+            background: #161b22;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            max-height: 150px;
+            overflow-y: auto;
+            border-left: 3px solid #30363d;
+        }
+
+        .probe-response.resisted {
+            border-left-color: #22c55e;
+        }
+
+        .probe-response.failed {
+            border-left-color: #ef4444;
+        }
+
+        .checkbox-list {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .checkbox-item input {
+            margin: 0;
+        }
+
+        .guardrail-test {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-brand">
+            <h1>AI Assurance</h1>
+            <span class="subtitle">Security Testing</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/analytics" class="nav-link">Analytics</a>
+            <a href="/security" class="nav-link active">Security</a>
+            <a href="/domains" class="nav-link">Domains</a>
+            <a href="/compare" class="nav-link">Compare</a>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Loading...</span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-header">
+            <h2>Adversarial Testing & Guardrails</h2>
+            <div class="desc">Test model robustness against jailbreaks, prompt injection, and data exfiltration attempts</div>
+        </div>
+
+        <div class="card">
+            <h3>Run Adversarial Test Suite</h3>
+            <div class="form-group">
+                <label class="form-label">Model</label>
+                <select class="form-select" id="modelSelect">
+                    <option value="anthropic|claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                    <option value="openai|gpt-4o-mini">GPT-4o Mini</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Categories</label>
+                <div class="checkbox-list" id="categoryList">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+
+            <button class="btn" id="runBtn">
+                <span id="runBtnText">Run Test Suite</span>
+                <span class="spinner" id="runSpinner" style="display: none;"></span>
+            </button>
+            <span id="runStatus" style="margin-left: 1rem; color: #8b949e;"></span>
+        </div>
+
+        <div class="card" id="resultsCard" style="display: none;">
+            <h3>Test Results</h3>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Security Score</div>
+                    <div class="stat-value" id="secScore">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Risk Level</div>
+                    <div class="stat-value" id="riskLevel">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Probes Resisted</div>
+                    <div class="stat-value success" id="resistedCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Failures</div>
+                    <div class="stat-value danger" id="failedCount">0</div>
+                </div>
+            </div>
+
+            <div id="probeResults"></div>
+        </div>
+
+        <div class="card">
+            <h3>Guardrails Live Test</h3>
+            <p style="color: #8b949e; margin-bottom: 1rem;">Test if a prompt or response would be blocked by guardrails</p>
+            <div class="form-group">
+                <label class="form-label">Direction</label>
+                <select class="form-select" id="grDirection">
+                    <option value="input">Input (before model)</option>
+                    <option value="output">Output (after model)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Domain (optional)</label>
+                <select class="form-select" id="grDomain">
+                    <option value="">None</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="financial_services">Financial Services</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Text to test</label>
+                <textarea class="form-textarea" id="grText" placeholder="Enter prompt or response to test..."></textarea>
+            </div>
+            <button class="btn" id="grTestBtn">Test Guardrails</button>
+
+            <div id="grResult" style="margin-top: 1rem;"></div>
+        </div>
+    </div>
+
+    <script>
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        async function checkHealth() {
+            try {
+                const r = await fetch('/api/health');
+                const d = await r.json();
+                if (d.status === 'ready') {
+                    statusDot.classList.add('ready');
+                    statusText.textContent = 'Ready';
+                } else {
+                    statusText.textContent = 'Setup needed';
+                }
+            } catch (e) {
+                statusText.textContent = 'Error';
+            }
+        }
+
+        async function loadCategories() {
+            try {
+                const r = await fetch('/api/security/adversarial/categories');
+                const d = await r.json();
+
+                const list = document.getElementById('categoryList');
+                list.innerHTML = d.categories.map(c => `
+                    <label class="checkbox-item">
+                        <input type="checkbox" name="category" value="${c.name}" checked>
+                        <span>${c.name.replace(/_/g, ' ')} (${c.probe_count})</span>
+                    </label>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function runTests() {
+            const btn = document.getElementById('runBtn');
+            const btnText = document.getElementById('runBtnText');
+            const spinner = document.getElementById('runSpinner');
+            const status = document.getElementById('runStatus');
+
+            const checked = Array.from(document.querySelectorAll('input[name="category"]:checked')).map(c => c.value);
+            if (checked.length === 0) {
+                status.textContent = 'Please select at least one category';
+                status.style.color = '#ef4444';
+                return;
+            }
+
+            const [provider, model] = document.getElementById('modelSelect').value.split('|');
+
+            btn.disabled = true;
+            btnText.style.display = 'none';
+            spinner.style.display = 'inline-block';
+            status.style.color = '#8b949e';
+            status.textContent = 'Running probes... (this may take a minute)';
+
+            try {
+                const url = `/api/security/adversarial/run?provider=${provider}&model=${encodeURIComponent(model)}&categories=${checked.join(',')}`;
+                const r = await fetch(url, { method: 'POST' });
+                const data = await r.json();
+
+                if (data.error) {
+                    status.textContent = 'Error: ' + data.error;
+                    status.style.color = '#ef4444';
+                } else {
+                    renderResults(data);
+                    status.textContent = `Completed: ${data.resisted_count}/${data.total_probes} resisted`;
+                    status.style.color = '#22c55e';
+                }
+            } catch (e) {
+                status.textContent = 'Error: ' + e.message;
+                status.style.color = '#ef4444';
+            } finally {
+                btn.disabled = false;
+                btnText.style.display = 'inline';
+                spinner.style.display = 'none';
+            }
+        }
+
+        function renderResults(data) {
+            document.getElementById('resultsCard').style.display = 'block';
+            document.getElementById('secScore').textContent = (data.security_score * 100).toFixed(0) + '%';
+            const riskEl = document.getElementById('riskLevel');
+            riskEl.textContent = data.risk_level;
+            riskEl.className = 'stat-value ' + ({
+                LOW: 'success',
+                MEDIUM: 'warning',
+                HIGH: 'danger',
+                CRITICAL: 'danger'
+            }[data.risk_level] || '');
+            document.getElementById('resistedCount').textContent = data.resisted_count;
+            document.getElementById('failedCount').textContent = data.failed_count;
+
+            const container = document.getElementById('probeResults');
+            container.innerHTML = data.results.map(r => {
+                if (r.error) {
+                    return `<div class="probe-card">
+                        <div class="probe-header">
+                            <span class="probe-name">${r.probe_name}</span>
+                            <span class="badge badge-medium">ERROR</span>
+                        </div>
+                        <div style="color: #ef4444; font-size: 0.875rem;">${r.error}</div>
+                    </div>`;
+                }
+
+                const resistedBadge = r.resisted
+                    ? '<span class="badge badge-pass">RESISTED</span>'
+                    : '<span class="badge badge-fail">FAILED</span>';
+
+                const sevBadge = `<span class="badge badge-${r.severity.toLowerCase()}">${r.severity}</span>`;
+
+                return `<div class="probe-card">
+                    <div class="probe-header">
+                        <span class="probe-name">[${r.category}] ${r.probe_name}</span>
+                        <div style="display: flex; gap: 0.5rem;">
+                            ${sevBadge}
+                            ${resistedBadge}
+                        </div>
+                    </div>
+                    <div class="probe-prompt">${r.prompt}</div>
+                    <div class="probe-response ${r.resisted ? 'resisted' : 'failed'}">${r.response || 'No response'}</div>
+                    <div style="font-size: 0.75rem; color: #8b949e; margin-top: 0.5rem;">
+                        ${r.reason} • Confidence: ${r.confidence} • Latency: ${r.latency_ms}ms
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function testGuardrails() {
+            const text = document.getElementById('grText').value.trim();
+            if (!text) return;
+
+            const direction = document.getElementById('grDirection').value;
+            const domain = document.getElementById('grDomain').value || null;
+
+            try {
+                const r = await fetch('/api/security/guardrails/check', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text, direction, domain }),
+                });
+                const data = await r.json();
+
+                const container = document.getElementById('grResult');
+                if (direction === 'input') {
+                    container.innerHTML = `
+                        <div class="card" style="margin: 0; background: ${data.allowed ? '#0d2818' : '#2a0f0f'}; border-color: ${data.allowed ? '#22c55e' : '#ef4444'};">
+                            <h3 style="margin-bottom: 0.5rem;">${data.allowed ? '✓ Allowed' : '✗ Blocked'}</h3>
+                            <p style="color: #c9d1d9; font-size: 0.875rem;">${data.reason}</p>
+                            ${data.violation ? `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: #8b949e;">
+                                Category: ${data.violation.category}<br>
+                                Severity: ${data.violation.severity}
+                            </div>` : ''}
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="card" style="margin: 0; background: ${data.safe ? '#0d2818' : '#2a0f0f'}; border-color: ${data.safe ? '#22c55e' : '#ef4444'};">
+                            <h3 style="margin-bottom: 0.5rem;">${data.safe ? '✓ Safe' : '✗ ' + data.violation_count + ' violations'}</h3>
+                            ${data.redacted ? '<p style="color: #f59e0b;">⚠ PII automatically redacted</p>' : ''}
+                            <p style="color: #c9d1d9; font-size: 0.875rem; margin-top: 0.5rem;">Filtered response:</p>
+                            <pre style="background: #0d1117; padding: 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; white-space: pre-wrap; margin-top: 0.5rem;">${data.response}</pre>
+                            ${data.violations.length > 0 ? `<div style="margin-top: 0.5rem; font-size: 0.75rem;">
+                                ${data.violations.map(v => `<div>• ${v.category}: ${v.message}</div>`).join('')}
+                            </div>` : ''}
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        document.getElementById('runBtn').addEventListener('click', runTests);
+        document.getElementById('grTestBtn').addEventListener('click', testGuardrails);
+
+        checkHealth();
+        loadCategories();
+    </script>
+</body>
+</html>

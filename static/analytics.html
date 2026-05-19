@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Analytics — AI Assurance Dashboard</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .pie-chart {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+        }
+
+        .pie-chart svg {
+            transform: rotate(-90deg);
+        }
+
+        .pie-segment {
+            fill: none;
+            stroke-width: 30;
+        }
+
+        .pie-legend {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .pie-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .pie-legend-dot {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+        }
+
+        .trend-line {
+            height: 200px;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            padding: 1rem;
+            background: #0d1117;
+            border-radius: 0.375rem;
+        }
+
+        .trend-bar {
+            flex: 1;
+            background: linear-gradient(to top, #6366f1, #a5b4fc);
+            min-height: 2px;
+            border-radius: 2px 2px 0 0;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .trend-bar:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1c2128;
+            border: 1px solid #30363d;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            margin-bottom: 0.5rem;
+            z-index: 10;
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .failure-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .failure-bar-name {
+            flex: 0 0 150px;
+            font-size: 0.875rem;
+        }
+
+        .failure-bar-track {
+            flex: 1;
+            height: 1.5rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 0.25rem;
+            overflow: hidden;
+            margin: 0 0.75rem;
+        }
+
+        .failure-bar-fill {
+            height: 100%;
+            background: linear-gradient(to right, #dc2626, #ef4444);
+            display: flex;
+            align-items: center;
+            padding: 0 0.5rem;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .failure-bar-count {
+            flex: 0 0 40px;
+            font-weight: 600;
+            text-align: right;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-brand">
+            <h1>AI Assurance</h1>
+            <span class="subtitle">Analytics</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/analytics" class="nav-link active">Analytics</a>
+            <a href="/security" class="nav-link">Security</a>
+            <a href="/domains" class="nav-link">Domains</a>
+            <a href="/compare" class="nav-link">Compare</a>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Loading...</span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-header">
+            <h2>Analytics & Trends</h2>
+            <div class="desc">Evaluation metrics, pass rates, and historical trends</div>
+        </div>
+
+        <div class="filter-bar">
+            <select class="form-select" id="periodSelect" style="width: 200px;">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="365">Last year</option>
+            </select>
+            <button class="btn" id="refreshBtn">Refresh</button>
+            <div style="flex: 1;"></div>
+            <button class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
+            <button class="btn btn-secondary" id="exportJsonBtn">Export JSON</button>
+            <button class="btn btn-secondary" id="compHipaaBtn">HIPAA Report</button>
+            <button class="btn btn-secondary" id="compSoc2Btn">SOC2 Report</button>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Evaluations</div>
+                <div class="stat-value" id="totalRuns">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pass Rate</div>
+                <div class="stat-value success" id="passRate">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg Latency</div>
+                <div class="stat-value" id="avgLatency">0ms</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Tokens</div>
+                <div class="stat-value" id="totalTokens">0</div>
+            </div>
+        </div>
+
+        <div class="two-col">
+            <div class="card">
+                <h3>Risk Distribution</h3>
+                <div class="pie-chart" id="riskChart">
+                    <svg width="200" height="200" viewBox="0 0 200 200">
+                        <circle cx="100" cy="100" r="70" stroke="#30363d" stroke-width="30" fill="none"/>
+                    </svg>
+                </div>
+                <div class="pie-legend" id="riskLegend"></div>
+            </div>
+
+            <div class="card">
+                <h3>Top Failure Types</h3>
+                <div id="failureTypes">
+                    <div class="empty-state">No failures yet</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Daily Trends</h3>
+            <div class="trend-line" id="trendChart"></div>
+            <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: #8b949e;">
+                <span id="trendStart">—</span>
+                <span id="trendEnd">—</span>
+            </div>
+        </div>
+
+        <div class="two-col">
+            <div class="card">
+                <h3>By Domain</h3>
+                <table class="data-table" id="domainTable">
+                    <thead>
+                        <tr>
+                            <th>Domain</th>
+                            <th>Total</th>
+                            <th>Pass</th>
+                            <th>Fail</th>
+                            <th>Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="5" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>By Model</h3>
+                <table class="data-table" id="modelTable">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Total</th>
+                            <th>Pass</th>
+                            <th>Fail</th>
+                            <th>Avg Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="5" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const periodSelect = document.getElementById('periodSelect');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        async function checkHealth() {
+            try {
+                const r = await fetch('/api/health');
+                const d = await r.json();
+                if (d.status === 'ready') {
+                    statusDot.classList.add('ready');
+                    statusText.textContent = 'Ready';
+                } else {
+                    statusText.textContent = 'Setup needed';
+                }
+            } catch (e) {
+                statusText.textContent = 'Error';
+            }
+        }
+
+        async function loadAnalytics() {
+            const days = periodSelect.value;
+            try {
+                const r = await fetch(`/api/analytics?days=${days}`);
+                const data = await r.json();
+                renderAnalytics(data);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderAnalytics(data) {
+            // Stats
+            document.getElementById('totalRuns').textContent = data.total_runs;
+            document.getElementById('passRate').textContent = (data.pass_rate || 0) + '%';
+            document.getElementById('avgLatency').textContent = (data.average_latency_ms || 0) + 'ms';
+            document.getElementById('totalTokens').textContent = (data.total_tokens || 0).toLocaleString();
+
+            // Pass rate color
+            const passRateEl = document.getElementById('passRate');
+            passRateEl.className = 'stat-value ' + (data.pass_rate >= 90 ? 'success' : data.pass_rate >= 70 ? 'warning' : 'danger');
+
+            // Risk distribution pie
+            renderRiskChart(data.by_risk);
+
+            // Failure types
+            renderFailureTypes(data.failure_types);
+
+            // Trends
+            renderTrends(data.trends);
+
+            // Domain table
+            renderDomainTable(data.by_domain);
+
+            // Model table
+            renderModelTable(data.by_model);
+        }
+
+        function renderRiskChart(byRisk) {
+            const colors = {LOW: '#22c55e', MEDIUM: '#f59e0b', HIGH: '#ef4444', CRITICAL: '#dc2626'};
+            const total = Object.values(byRisk).reduce((a, b) => a + b, 0);
+
+            const chart = document.getElementById('riskChart');
+            const legend = document.getElementById('riskLegend');
+
+            if (total === 0) {
+                chart.innerHTML = '<svg width="200" height="200" viewBox="0 0 200 200"><circle cx="100" cy="100" r="70" stroke="#30363d" stroke-width="30" fill="none"/></svg>';
+                legend.innerHTML = '<div class="empty-state" style="padding: 1rem;">No data</div>';
+                return;
+            }
+
+            const circumference = 2 * Math.PI * 70;
+            let offset = 0;
+            let svg = '<svg width="200" height="200" viewBox="0 0 200 200">';
+
+            Object.entries(byRisk).forEach(([level, count]) => {
+                if (count > 0) {
+                    const portion = count / total;
+                    const length = circumference * portion;
+                    svg += `<circle cx="100" cy="100" r="70" stroke="${colors[level]}" stroke-width="30" fill="none"
+                             stroke-dasharray="${length} ${circumference - length}" stroke-dashoffset="${-offset}"/>`;
+                    offset += length;
+                }
+            });
+
+            svg += `<text x="100" y="100" text-anchor="middle" dy="0.35em" fill="#fff" font-size="1.5rem" font-weight="700" transform="rotate(90 100 100)">${total}</text>`;
+            svg += '</svg>';
+            chart.innerHTML = svg;
+
+            legend.innerHTML = Object.entries(byRisk)
+                .filter(([_, c]) => c > 0)
+                .map(([level, count]) => `
+                    <div class="pie-legend-item">
+                        <span class="pie-legend-dot" style="background: ${colors[level]}"></span>
+                        <span>${level}: ${count} (${Math.round(count/total*100)}%)</span>
+                    </div>
+                `).join('');
+        }
+
+        function renderFailureTypes(types) {
+            const container = document.getElementById('failureTypes');
+            if (!types || Object.keys(types).length === 0) {
+                container.innerHTML = '<div class="empty-state">No failures yet</div>';
+                return;
+            }
+
+            const max = Math.max(...Object.values(types));
+            container.innerHTML = Object.entries(types).slice(0, 5).map(([name, count]) => `
+                <div class="failure-bar">
+                    <div class="failure-bar-name">${name.replace(/_/g, ' ')}</div>
+                    <div class="failure-bar-track">
+                        <div class="failure-bar-fill" style="width: ${Math.round(count/max*100)}%">${count}</div>
+                    </div>
+                    <div class="failure-bar-count">${count}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderTrends(trends) {
+            const container = document.getElementById('trendChart');
+            if (!trends || trends.length === 0) {
+                container.innerHTML = '<div class="empty-state">No trend data yet</div>';
+                return;
+            }
+
+            const max = Math.max(...trends.map(t => t.total));
+            container.innerHTML = trends.map(t => {
+                const height = (t.total / max) * 100;
+                const passRate = t.total > 0 ? Math.round(t.pass / t.total * 100) : 0;
+                return `<div class="trend-bar" style="height: ${height}%" data-tooltip="${t.date}: ${t.total} runs, ${passRate}% pass"></div>`;
+            }).join('');
+
+            document.getElementById('trendStart').textContent = trends[0].date;
+            document.getElementById('trendEnd').textContent = trends[trends.length - 1].date;
+        }
+
+        function renderDomainTable(byDomain) {
+            const tbody = document.querySelector('#domainTable tbody');
+            const entries = Object.entries(byDomain);
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No data</td></tr>';
+                return;
+            }
+            tbody.innerHTML = entries.map(([name, s]) => {
+                const rate = s.total > 0 ? Math.round(s.pass / s.total * 100) : 0;
+                const cls = rate >= 90 ? 'badge-pass' : rate >= 70 ? 'badge-medium' : 'badge-fail';
+                return `<tr>
+                    <td>${name}</td>
+                    <td>${s.total}</td>
+                    <td>${s.pass}</td>
+                    <td>${s.fail}</td>
+                    <td><span class="badge ${cls}">${rate}%</span></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderModelTable(byModel) {
+            const tbody = document.querySelector('#modelTable tbody');
+            const entries = Object.entries(byModel);
+            if (entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No data</td></tr>';
+                return;
+            }
+            tbody.innerHTML = entries.map(([name, s]) => {
+                const rate = s.total > 0 ? Math.round(s.pass / s.total * 100) : 0;
+                return `<tr>
+                    <td>${name}</td>
+                    <td>${s.total}</td>
+                    <td>${s.pass}</td>
+                    <td>${s.fail}</td>
+                    <td>${s.avg_latency || 0}ms</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // Wire up buttons
+        refreshBtn.addEventListener('click', loadAnalytics);
+        periodSelect.addEventListener('change', loadAnalytics);
+
+        document.getElementById('exportCsvBtn').addEventListener('click', () => {
+            const days = periodSelect.value;
+            window.location.href = `/api/export/csv?days=${days}`;
+        });
+
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            const days = periodSelect.value;
+            window.location.href = `/api/export/json?days=${days}`;
+        });
+
+        document.getElementById('compHipaaBtn').addEventListener('click', () => {
+            const days = periodSelect.value;
+            window.open(`/api/report/compliance?report_type=HIPAA&days=${days}`, '_blank');
+        });
+
+        document.getElementById('compSoc2Btn').addEventListener('click', () => {
+            const days = periodSelect.value;
+            window.open(`/api/report/compliance?report_type=SOC2&days=${days}`, '_blank');
+        });
+
+        // Init
+        checkHealth();
+        loadAnalytics();
+        setInterval(loadAnalytics, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Domains — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .domain-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+            height: calc(100vh - 10rem);
+        }
+
+        .domain-list {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 0.5rem;
+            overflow-y: auto;
+        }
+
+        .domain-item {
+            padding: 1rem;
+            border-bottom: 1px solid #21262d;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .domain-item:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .domain-item.selected {
+            background: #1c2128;
+            border-left: 3px solid #6366f1;
+            padding-left: calc(1rem - 3px);
+        }
+
+        .domain-item-name {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.25rem;
+        }
+
+        .domain-item-desc {
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+
+        .domain-item-tags {
+            display: flex;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .domain-tag {
+            font-size: 0.65rem;
+            padding: 0.125rem 0.5rem;
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border-radius: 0.25rem;
+            font-weight: 600;
+        }
+
+        .domain-editor {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .list-input {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .list-input-item {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .list-input-item input {
+            flex: 1;
+        }
+
+        .remove-btn {
+            background: #dc2626;
+            color: white;
+            border: none;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .add-btn {
+            background: #21262d;
+            border: 1px dashed #30363d;
+            color: #8b949e;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+
+        .add-btn:hover {
+            color: #fff;
+            border-color: #58a6ff;
+        }
+
+        .weights-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .weight-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0d1117;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            border: 1px solid #30363d;
+        }
+
+        .weight-item label {
+            font-size: 0.875rem;
+        }
+
+        .weight-item input {
+            width: 70px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            text-align: right;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-brand">
+            <h1>AI Assurance</h1>
+            <span class="subtitle">Domain Builder</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Dashboard</a>
+            <a href="/analytics" class="nav-link">Analytics</a>
+            <a href="/security" class="nav-link">Security</a>
+            <a href="/domains" class="nav-link active">Domains</a>
+            <a href="/compare" class="nav-link">Compare</a>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Loading...</span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-header">
+            <h2>Domain Management</h2>
+            <div class="desc">Create, edit, and manage custom evaluation domains</div>
+        </div>
+
+        <div class="editor-actions">
+            <button class="btn" id="newBtn">+ New Domain</button>
+            <button class="btn btn-secondary" id="saveBtn" style="display: none;">Save Changes</button>
+            <button class="btn btn-danger" id="deleteBtn" style="display: none;">Delete</button>
+        </div>
+
+        <div class="domain-grid">
+            <div class="domain-list" id="domainList">
+                <div class="loading">Loading...</div>
+            </div>
+
+            <div class="domain-editor" id="domainEditor">
+                <div class="empty-state">
+                    <h3>Select a domain to edit</h3>
+                    <p>Or click "New Domain" to create one</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDomain = null;
+        let isNewDomain = false;
+
+        async function loadDomains() {
+            try {
+                const r = await fetch('/api/domains/');
+                const d = await r.json();
+                const list = document.getElementById('domainList');
+                if (d.domains.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No domains yet</div>';
+                    return;
+                }
+                list.innerHTML = d.domains.map(dom => `
+                    <div class="domain-item" data-id="${dom.id}">
+                        <div class="domain-item-name">${dom.name}</div>
+                        <div class="domain-item-desc">${dom.description || ''}</div>
+                        <div class="domain-item-tags">
+                            ${(dom.compliance || []).map(c => `<span class="domain-tag">${c}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+
+                document.querySelectorAll('.domain-item').forEach(item => {
+                    item.addEventListener('click', () => selectDomain(item.dataset.id));
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function selectDomain(id) {
+            isNewDomain = false;
+            document.querySelectorAll('.domain-item').forEach(i => i.classList.remove('selected'));
+            document.querySelector(`.domain-item[data-id="${id}"]`)?.classList.add('selected');
+
+            try {
+                const r = await fetch(`/api/domains/${id}`);
+                currentDomain = await r.json();
+                renderEditor();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function newDomain() {
+            isNewDomain = true;
+            currentDomain = {
+                id: '',
+                name: '',
+                description: '',
+                prompt: '',
+                context: [],
+                industry: '',
+                compliance: [],
+                eval_weights: {
+                    hallucination: 0.2,
+                    answer_relevancy: 0.2,
+                    toxicity: 0.2,
+                    pii_leakage: 0.2,
+                    faithfulness: 0.2,
+                },
+                risk_rules: {
+                    high_threshold: 3,
+                    medium_threshold: 1,
+                    critical_metrics: [],
+                },
+                regulatory_context: [],
+            };
+            document.querySelectorAll('.domain-item').forEach(i => i.classList.remove('selected'));
+            renderEditor();
+        }
+
+        function renderEditor() {
+            if (!currentDomain) return;
+
+            const editor = document.getElementById('domainEditor');
+            editor.innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Domain ID ${isNewDomain ? '(alphanumeric + underscore)' : ''}</label>
+                    <input class="form-input" id="fId" value="${currentDomain.id || ''}" ${isNewDomain ? '' : 'readonly'}>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Name</label>
+                    <input class="form-input" id="fName" value="${currentDomain.name || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input class="form-input" id="fDesc" value="${currentDomain.description || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Industry</label>
+                    <input class="form-input" id="fIndustry" value="${currentDomain.industry || ''}" placeholder="healthcare, financial_services...">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Compliance Standards (comma-separated)</label>
+                    <input class="form-input" id="fCompliance" value="${(currentDomain.compliance || []).join(', ')}" placeholder="HIPAA, SOC2, GDPR">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Default Prompt</label>
+                    <textarea class="form-textarea" id="fPrompt" style="min-height: 100px;">${currentDomain.prompt || ''}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Context / Regulatory Constraints</label>
+                    <div class="list-input" id="contextList"></div>
+                    <button class="add-btn" id="addContextBtn">+ Add Constraint</button>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Evaluation Weights (must sum to 1.0)</label>
+                    <div class="weights-grid" id="weightsGrid"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Risk Rules</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: #8b949e;">Medium threshold</label>
+                            <input class="form-input" id="fMedThr" value="${currentDomain.risk_rules?.medium_threshold || 1}">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #8b949e;">High threshold</label>
+                            <input class="form-input" id="fHighThr" value="${currentDomain.risk_rules?.high_threshold || 3}">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Render context list
+            renderContextList(currentDomain.context || currentDomain.regulatory_context || []);
+
+            // Render weights
+            renderWeights(currentDomain.eval_weights || {});
+
+            // Wire up
+            document.getElementById('addContextBtn').addEventListener('click', () => addContext(''));
+
+            // Show save/delete
+            document.getElementById('saveBtn').style.display = 'inline-block';
+            document.getElementById('deleteBtn').style.display = isNewDomain ? 'none' : 'inline-block';
+        }
+
+        function renderContextList(items) {
+            const list = document.getElementById('contextList');
+            list.innerHTML = items.map((item, i) => `
+                <div class="list-input-item">
+                    <input class="form-input" value="${item.replace(/"/g, '&quot;')}" data-idx="${i}">
+                    <button class="remove-btn" data-remove="${i}">×</button>
+                </div>
+            `).join('');
+
+            list.querySelectorAll('[data-remove]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.remove);
+                    const items = Array.from(list.querySelectorAll('input')).map(i => i.value);
+                    items.splice(idx, 1);
+                    renderContextList(items);
+                });
+            });
+        }
+
+        function addContext(value) {
+            const list = document.getElementById('contextList');
+            const items = Array.from(list.querySelectorAll('input')).map(i => i.value);
+            items.push(value);
+            renderContextList(items);
+        }
+
+        function renderWeights(weights) {
+            const standardMetrics = ['hallucination', 'answer_relevancy', 'toxicity', 'pii_leakage', 'faithfulness'];
+            const grid = document.getElementById('weightsGrid');
+            grid.innerHTML = standardMetrics.map(m => `
+                <div class="weight-item">
+                    <label>${m.replace(/_/g, ' ')}</label>
+                    <input type="number" step="0.05" min="0" max="1" value="${weights[m] || 0.2}" data-metric="${m}">
+                </div>
+            `).join('');
+        }
+
+        async function saveDomain() {
+            const id = document.getElementById('fId').value.trim();
+            if (!id || !/^[a-z0-9_]+$/i.test(id)) {
+                alert('Domain ID must be alphanumeric (underscores allowed)');
+                return;
+            }
+
+            const data = {
+                name: document.getElementById('fName').value,
+                description: document.getElementById('fDesc').value,
+                industry: document.getElementById('fIndustry').value,
+                compliance: document.getElementById('fCompliance').value.split(',').map(s => s.trim()).filter(Boolean),
+                prompt: document.getElementById('fPrompt').value,
+                context: Array.from(document.getElementById('contextList').querySelectorAll('input')).map(i => i.value).filter(Boolean),
+                eval_weights: Object.fromEntries(
+                    Array.from(document.querySelectorAll('[data-metric]')).map(i => [i.dataset.metric, parseFloat(i.value)])
+                ),
+                risk_rules: {
+                    medium_threshold: parseInt(document.getElementById('fMedThr').value),
+                    high_threshold: parseInt(document.getElementById('fHighThr').value),
+                    critical_metrics: currentDomain.risk_rules?.critical_metrics || [],
+                },
+            };
+
+            try {
+                const method = isNewDomain ? 'POST' : 'PUT';
+                const r = await fetch(`/api/domains/${id}`, {
+                    method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data),
+                });
+
+                if (!r.ok) {
+                    const err = await r.json();
+                    alert('Error: ' + (err.detail || 'Failed to save'));
+                    return;
+                }
+
+                isNewDomain = false;
+                await loadDomains();
+                selectDomain(id);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function deleteDomain() {
+            if (!currentDomain || isNewDomain) return;
+            if (!confirm(`Delete domain "${currentDomain.name}"?`)) return;
+
+            try {
+                const r = await fetch(`/api/domains/${currentDomain.id}`, { method: 'DELETE' });
+                if (!r.ok) {
+                    alert('Failed to delete');
+                    return;
+                }
+                currentDomain = null;
+                document.getElementById('domainEditor').innerHTML = '<div class="empty-state"><h3>Select a domain to edit</h3></div>';
+                document.getElementById('saveBtn').style.display = 'none';
+                document.getElementById('deleteBtn').style.display = 'none';
+                await loadDomains();
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function checkHealth() {
+            try {
+                const r = await fetch('/api/health');
+                const d = await r.json();
+                document.getElementById('statusDot').classList.toggle('ready', d.status === 'ready');
+                document.getElementById('statusText').textContent = d.status === 'ready' ? 'Ready' : 'Setup needed';
+            } catch (e) {
+                document.getElementById('statusText').textContent = 'Error';
+            }
+        }
+
+        document.getElementById('newBtn').addEventListener('click', newDomain);
+        document.getElementById('saveBtn').addEventListener('click', saveDomain);
+        document.getElementById('deleteBtn').addEventListener('click', deleteDomain);
+
+        checkHealth();
+        loadDomains();
+    </script>
+</body>
+</html>
