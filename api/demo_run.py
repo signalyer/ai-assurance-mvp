@@ -3,7 +3,7 @@
 import time
 import os
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from anthropic import Anthropic
@@ -11,7 +11,8 @@ from openai import OpenAI
 
 from tracer import trace_call
 from evaluator import evaluate_response
-from api.evaluate import eval_cache, _normalize_eval_scores
+from api.evaluate import eval_cache, runs_cache, _normalize_eval_scores
+from domains import load_domain, list_domains
 
 # Load env vars from project root .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -42,42 +43,85 @@ class DemoRunResponse(BaseModel):
     error: str | None = None
 
 
+class DomainsResponse(BaseModel):
+    """Response listing available domains."""
+    domains: list[dict]
+
+
+@router.get("/domains")
+async def get_domains() -> DomainsResponse:
+    """Get list of available domains."""
+    domain_names = list_domains()
+    domains_info = []
+
+    for name in domain_names:
+        try:
+            domain = load_domain(name)
+            domains_info.append({
+                "name": domain.name,
+                "id": name,
+                "description": domain.description,
+            })
+        except Exception:
+            pass
+
+    return {"domains": domains_info}
+
+
 @router.post("/demo/run")
-async def run_live_demo():
+async def run_live_demo(domain: str = Query(None)):
     """
     Run the adversarial demo: call Claude and GPT-4o, trace both, evaluate both.
 
+    Args:
+        domain: Domain name to use (e.g., "finance", "healthcare"). If None, uses default.
+
     Returns list of run results with trace_id and eval_scores.
     """
-    # Ensure env vars are loaded (in case module-level load didn't work)
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        env_path = Path(__file__).parent.parent / ".env"
-        if env_path.exists():
-            env_content = env_path.read_text()
-            for line in env_content.split('\n'):
-                line = line.strip()
-                if '=' in line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    if not os.getenv(key):
-                        os.environ[key] = value
+    # Ensure env vars are loaded from .env file
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        env_content = env_path.read_text()
+        for line in env_content.split('\n'):
+            line = line.strip()
+            if '=' in line and not line.startswith('#'):
+                key, value = line.split('=', 1)
+                os.environ[key] = value
 
     runs = []
     error = None
 
     # Validate API keys
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if not anthropic_key:
         return {"runs": [], "error": "ANTHROPIC_API_KEY not configured"}
-    if not os.getenv("OPENAI_API_KEY"):
+    if not openai_key:
         return {"runs": [], "error": "OPENAI_API_KEY not configured"}
+
+    # Load domain configuration
+    prompt = DEMO_PROMPT
+    context = DEMO_CONTEXT
+    domain_name = "Default (Finance)"
+
+    if domain:
+        try:
+            domain_obj = load_domain(domain)
+            prompt = domain_obj.prompt
+            context = domain_obj.context
+            domain_name = domain_obj.name
+        except Exception as e:
+            return {"runs": [], "error": f"Failed to load domain '{domain}': {str(e)[:100]}"}
 
     # Call Claude
     try:
         start = time.time()
         client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_tokens=500,
-            messages=[{"role": "user", "content": DEMO_PROMPT}],
+            messages=[{"role": "user", "content": prompt}],
         )
         latency = int((time.time() - start) * 1000)
         response_text = message.content[0].text
@@ -85,30 +129,39 @@ async def run_live_demo():
 
         # Trace it
         trace_id = trace_call(
-            model="claude-3-5-sonnet-20241022",
-            prompt=DEMO_PROMPT,
+            model="claude-sonnet-4-6",
+            prompt=prompt,
             response=response_text,
             latency_ms=latency,
             tokens_used=tokens,
-            metadata={"demo": True},
+            metadata={"demo": True, "domain": domain_name},
         )
 
         # Evaluate it
         raw_evals = evaluate_response(
-            input_prompt=DEMO_PROMPT,
+            input_prompt=prompt,
             actual_output=response_text,
-            context=DEMO_CONTEXT,
+            context=context,
         )
         eval_scores = _normalize_eval_scores(raw_evals)
         eval_cache[trace_id] = eval_scores
 
-        runs.append({
-            "model": "claude-3-5-sonnet-20241022",
+        run_data = {
+            "id": trace_id,
+            "model": "claude-sonnet-4-6",
             "trace_id": trace_id,
+            "domain": domain_name,
+            "prompt": prompt,
+            "prompt_preview": prompt[:100],
+            "response": response_text,
+            "response_preview": response_text[:100],
             "latency_ms": latency,
             "tokens_used": tokens,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "eval_scores": eval_scores,
-        })
+        }
+        runs.append(run_data)
+        runs_cache.insert(0, run_data)
 
     except Exception as e:
         error = str(e)[:200]
@@ -120,7 +173,7 @@ async def run_live_demo():
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             max_tokens=500,
-            messages=[{"role": "user", "content": DEMO_PROMPT}],
+            messages=[{"role": "user", "content": prompt}],
         )
         latency = int((time.time() - start) * 1000)
         response_text = response.choices[0].message.content
@@ -129,29 +182,38 @@ async def run_live_demo():
         # Trace it
         trace_id = trace_call(
             model="gpt-4o-mini",
-            prompt=DEMO_PROMPT,
+            prompt=prompt,
             response=response_text,
             latency_ms=latency,
             tokens_used=tokens,
-            metadata={"demo": True},
+            metadata={"demo": True, "domain": domain_name},
         )
 
         # Evaluate it
         raw_evals = evaluate_response(
-            input_prompt=DEMO_PROMPT,
+            input_prompt=prompt,
             actual_output=response_text,
-            context=DEMO_CONTEXT,
+            context=context,
         )
         eval_scores = _normalize_eval_scores(raw_evals)
         eval_cache[trace_id] = eval_scores
 
-        runs.append({
+        run_data = {
+            "id": trace_id,
             "model": "gpt-4o-mini",
             "trace_id": trace_id,
+            "domain": domain_name,
+            "prompt": prompt,
+            "prompt_preview": prompt[:100],
+            "response": response_text,
+            "response_preview": response_text[:100],
             "latency_ms": latency,
             "tokens_used": tokens,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "eval_scores": eval_scores,
-        })
+        }
+        runs.append(run_data)
+        runs_cache.insert(0, run_data)
 
     except Exception as e:
         if not error:

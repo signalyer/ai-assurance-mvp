@@ -57,6 +57,46 @@
             align-items: center;
         }
 
+        .api-status {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+
+        .api-status-indicator {
+            display: inline-block;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 50%;
+            background-color: #ef4444;
+        }
+
+        .api-status-indicator.ready {
+            background-color: #22c55e;
+        }
+
+        .domain-select {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .domain-select:hover {
+            border-color: #58a6ff;
+        }
+
+        .domain-select:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.1);
+        }
+
         .demo-button {
             background-color: #6366f1;
             color: white;
@@ -416,6 +456,13 @@
             <span class="subtitle">by SignalLayer</span>
         </div>
         <div class="controls">
+            <div class="api-status" id="apiStatus">
+                <span class="api-status-indicator"></span>
+                <span id="apiStatusText">Checking...</span>
+            </div>
+            <select class="domain-select" id="domainSelect">
+                <option value="">Default (Finance)</option>
+            </select>
             <button class="demo-button" id="demoButton">
                 <span id="demoButtonText">Run Live Demo</span>
                 <span id="spinner" class="spinner" style="display: none;"></span>
@@ -447,6 +494,10 @@
                         <div class="meta-item">
                             <span class="meta-label">Model</span>
                             <span class="meta-value" id="detailModel">—</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Domain</span>
+                            <span class="meta-value" id="detailDomain">—</span>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Trace ID</span>
@@ -487,6 +538,7 @@
         let selectedTraceId = null;
         let refreshInterval = null;
         let isRefreshing = false;
+        let apiReady = false;
 
         // DOM elements
         const tracesList = document.getElementById('tracesList');
@@ -498,6 +550,64 @@
         const demoError = document.getElementById('demoError');
         const detailPlaceholder = document.getElementById('detailPlaceholder');
         const detailContent = document.getElementById('detailContent');
+        const apiStatus = document.getElementById('apiStatus');
+        const apiStatusText = document.getElementById('apiStatusText');
+        const apiStatusIndicator = apiStatus.querySelector('.api-status-indicator');
+        const domainSelect = document.getElementById('domainSelect');
+
+        // Check API health
+        async function checkApiHealth() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+
+                apiReady = data.status === 'ready';
+                const keys = data.api_keys || {};
+
+                if (apiReady) {
+                    apiStatusIndicator.classList.add('ready');
+                    apiStatusText.textContent = 'Ready';
+                } else {
+                    apiStatusIndicator.classList.remove('ready');
+                    const missing = [];
+                    if (!keys.ANTHROPIC_API_KEY) missing.push('Anthropic');
+                    if (!keys.OPENAI_API_KEY) missing.push('OpenAI');
+                    apiStatusText.textContent = `Missing: ${missing.join(', ')}`;
+                }
+
+                demoButton.disabled = !apiReady;
+            } catch (err) {
+                apiStatusIndicator.classList.remove('ready');
+                apiStatusText.textContent = 'Error';
+                demoButton.disabled = true;
+            }
+        }
+
+        // Load available domains
+        async function loadDomains() {
+            try {
+                const response = await fetch('/api/domains');
+                const data = await response.json();
+
+                if (data.domains && data.domains.length > 0) {
+                    // Clear existing options except first
+                    const currentValue = domainSelect.value;
+                    domainSelect.innerHTML = '<option value="">Default (Finance)</option>';
+
+                    // Add other domains
+                    data.domains.forEach(domain => {
+                        const option = document.createElement('option');
+                        option.value = domain.id;
+                        option.textContent = domain.name + ' — ' + domain.description;
+                        domainSelect.appendChild(option);
+                    });
+
+                    domainSelect.value = currentValue;
+                }
+            } catch (err) {
+                console.error('Failed to load domains:', err);
+            }
+        }
 
         // Fetch traces from API
         async function fetchTraces() {
@@ -604,6 +714,7 @@
         // Display trace details in right panel
         function displayTraceDetails(trace) {
             document.getElementById('detailModel').textContent = trace.model;
+            document.getElementById('detailDomain').textContent = trace.domain || '—';
             document.getElementById('detailTraceId').textContent = trace.id;
             document.getElementById('detailLatency').textContent = `${trace.latency_ms}ms`;
             document.getElementById('detailTokens').textContent = trace.tokens_used;
@@ -671,7 +782,12 @@
             demoError.style.display = 'none';
 
             try {
-                const response = await fetch('/api/demo/run', { method: 'POST' });
+                const selectedDomain = domainSelect.value;
+                const url = selectedDomain
+                    ? `/api/demo/run?domain=${encodeURIComponent(selectedDomain)}`
+                    : '/api/demo/run';
+
+                const response = await fetch(url, { method: 'POST' });
                 const data = await response.json();
 
                 if (data.error) {
@@ -690,7 +806,7 @@
                 demoError.textContent = 'Failed to run demo: ' + err.message;
                 demoError.style.display = 'block';
             } finally {
-                demoButton.disabled = false;
+                demoButton.disabled = !apiReady;
                 demoButtonText.style.display = 'inline';
                 spinner.style.display = 'none';
             }
@@ -703,7 +819,13 @@
         }
 
         // Init
-        startAutoRefresh();
+        async function init() {
+            await checkApiHealth();
+            await loadDomains();
+            await startAutoRefresh();
+        }
+
+        init();
     </script>
 </body>
 </html>
