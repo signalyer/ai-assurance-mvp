@@ -60,7 +60,7 @@ def check_env():
                             keys_found.append('LANGFUSE_BASE_URL')
 
                 if keys_found:
-                    print(f"✓ Loaded {', '.join(keys_found)} from local.env")
+                    print(f"Loaded {', '.join(keys_found)} from local.env")
 
             env_file.write_text(env_content)
 
