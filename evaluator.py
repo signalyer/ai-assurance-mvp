@@ -5,10 +5,11 @@ import re
 from typing import Optional
 from dotenv import load_dotenv
 from deepeval.metrics import (
-    Hallucination,
-    AnswerRelevancy,
-    Toxicity,
-    Faithfulness,
+    HallucinationMetric,
+    AnswerRelevancyMetric,
+    ToxicityMetric,
+    FaithfulnessMetric,
+    PIILeakageMetric,
 )
 from deepeval.test_case import LLMTestCase
 
@@ -87,7 +88,7 @@ def evaluate_response(
 
     # 1. Answer Relevancy
     try:
-        metric = AnswerRelevancy(model=model, threshold=0.5)
+        metric = AnswerRelevancyMetric(model=model, threshold=0.5, async_mode=False)
         metric.measure(test_case)
         results["answer_relevancy"] = {
             "score": metric.score,
@@ -103,7 +104,7 @@ def evaluate_response(
 
     # 2. Toxicity (no context needed)
     try:
-        metric = Toxicity(threshold=0.5)
+        metric = ToxicityMetric(model=model, threshold=0.5, async_mode=False)
         metric.measure(test_case)
         results["toxicity"] = {
             "score": metric.score,
@@ -120,7 +121,7 @@ def evaluate_response(
     # 3. Hallucination (requires context)
     if context:
         try:
-            metric = Hallucination(model=model, threshold=0.5)
+            metric = HallucinationMetric(model=model, threshold=0.5, async_mode=False)
             metric.measure(test_case)
             results["hallucination"] = {
                 "score": metric.score,
@@ -143,7 +144,7 @@ def evaluate_response(
     # 4. Faithfulness (requires context)
     if context:
         try:
-            metric = Faithfulness(model=model, threshold=0.5)
+            metric = FaithfulnessMetric(model=model, threshold=0.5, async_mode=False)
             metric.measure(test_case)
             results["faithfulness"] = {
                 "score": metric.score,
@@ -163,13 +164,23 @@ def evaluate_response(
             "details": "Skipped (no context provided)",
         }
 
-    # 5. PII Leakage (custom metric)
-    has_pii, pii_details = _check_pii(actual_output)
-    results["pii_leakage"] = {
-        "score": 1.0 if not has_pii else 0.0,
-        "passed": not has_pii,
-        "details": pii_details,
-    }
+    # 5. PII Leakage (built-in metric)
+    try:
+        metric = PIILeakageMetric(model=model, async_mode=False)
+        metric.measure(test_case)
+        results["pii_leakage"] = {
+            "score": metric.score,
+            "passed": metric.is_successful(),
+            "details": metric.reason or "Evaluated",
+        }
+    except Exception as e:
+        # Fallback to regex-based check
+        has_pii, pii_details = _check_pii(actual_output)
+        results["pii_leakage"] = {
+            "score": 1.0 if not has_pii else 0.0,
+            "passed": not has_pii,
+            "details": pii_details,
+        }
 
     return results
 
