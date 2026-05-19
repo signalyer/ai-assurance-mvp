@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Runtime — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .rt-event {
+            display: grid;
+            grid-template-columns: 110px 90px 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+        .rt-event:hover { background: var(--bg-card-hover); cursor: pointer; }
+        .rt-event:last-child { border-bottom: none; }
+        .rt-event.critical { border-left: 3px solid var(--critical); }
+        .rt-event.high { border-left: 3px solid var(--high); }
+        .rt-event.medium { border-left: 3px solid var(--medium); }
+        .rt-event.info { border-left: 3px solid var(--info); }
+
+        .rt-time {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        .rt-event-type {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .rt-event-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .rt-event-system {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 4px;
+        }
+
+        .approval-card {
+            padding: 1rem;
+            background: var(--bg-input);
+            border: 1px solid var(--medium-border);
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+        }
+
+        .kill-switch {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            margin-bottom: 0.5rem;
+            background: var(--bg-input);
+        }
+
+        .kill-switch-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--pass);
+            box-shadow: 0 0 8px var(--pass);
+        }
+
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--pass);
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--pass);
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div id="sidebar"></div>
+    <div class="main">
+        <div id="topbar"></div>
+        <div class="page">
+
+            <div class="page-header">
+                <div>
+                    <div class="page-title">Runtime Operations</div>
+                    <div class="page-subtitle">Live AI policy enforcement, incident response, and human approval queue</div>
+                </div>
+                <div class="page-actions">
+                    <span class="live-indicator"><span class="live-dot"></span>Live</span>
+                    <button class="btn">Configure Alerts</button>
+                    <button class="btn btn-primary">Emergency Stop All</button>
+                </div>
+            </div>
+
+            <div class="kpi-row" id="rtKpi"></div>
+
+            <div class="grid-2col-bottom">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Live Event Stream</div>
+                            <div class="text-xs text-tertiary mt-1">Last 1 hour · auto-refreshing</div>
+                        </div>
+                        <div class="filter-bar" style="margin: 0;">
+                            <select class="filter-select" id="severityFilter" style="min-width: 120px;">
+                                <option value="">All severities</option>
+                                <option value="CRITICAL">Critical</option>
+                                <option value="HIGH">High</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="INFO">Info</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="eventStream"></div>
+                </div>
+
+                <div>
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <div class="card-title">Human Approval Queue</div>
+                            <span class="badge badge-medium">3 pending</span>
+                        </div>
+                        <div class="approval-card">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm font-bold">Payment Release</span>
+                                <span class="badge badge-medium">PENDING</span>
+                            </div>
+                            <div class="text-sm text-secondary mb-2">$87,500 transfer requires VP approval ($50K+ threshold)</div>
+                            <div class="text-xs text-tertiary">Approver: Sarah Chen · Payments Exception Review Agent</div>
+                            <div class="flex gap-2 mt-3">
+                                <button class="btn btn-sm btn-primary">Approve</button>
+                                <button class="btn btn-sm">Deny</button>
+                                <button class="btn btn-sm">Investigate</button>
+                            </div>
+                        </div>
+                        <div class="approval-card">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm font-bold">KYC Override</span>
+                                <span class="badge badge-medium">PENDING</span>
+                            </div>
+                            <div class="text-sm text-secondary mb-2">Document discrepancy detected — Senior Compliance Officer review</div>
+                            <div class="text-xs text-tertiary">Approver: Tom Mitchell · KYC Document Review Agent</div>
+                        </div>
+                        <div class="approval-card">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm font-bold">AML Investigation Close</span>
+                                <span class="badge badge-medium">PENDING</span>
+                            </div>
+                            <div class="text-sm text-secondary mb-2">High-confidence false positive close — analyst approval needed</div>
+                            <div class="text-xs text-tertiary">Approver: Priya Patel · AML Investigation Assistant</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Kill Switch Status</div>
+                            <span class="live-indicator"><span class="live-dot"></span>All systems normal</span>
+                        </div>
+                        <div id="killSwitches"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/runtime');
+
+        async function loadKPIs() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
+            document.getElementById('rtKpi').innerHTML = `
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▣</div><div class="kpi-label">Active Incidents</div></div><div class="kpi-value high">${d.runtime_incidents_24h}</div><div class="kpi-trend">${d.runtime_trend}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocked Prompt Injection</div></div><div class="kpi-value">${d.runtime_activity.prompt_injection}</div><div class="kpi-trend">last 7 days</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▦</div><div class="kpi-label">Blocked Tool Calls</div></div><div class="kpi-value">${d.runtime_activity.blocked_tool_calls}</div><div class="kpi-trend">last 7 days</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">⛔</div><div class="kpi-label">Policy Violations</div></div><div class="kpi-value">${d.policy_violations_24h}</div><div class="kpi-trend">${d.policy_violations_trend}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon accent">◈</div><div class="kpi-label">DLP Detections</div></div><div class="kpi-value">${d.runtime_activity.dlp_detections}</div><div class="kpi-trend">last 7 days</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Approval Queue</div></div><div class="kpi-value">3</div><div class="kpi-trend">3 pending</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">⟲</div><div class="kpi-label">Agent Recursions</div></div><div class="kpi-value">2</div><div class="kpi-trend">last 24 hours</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Kill Switches Active</div></div><div class="kpi-value pass">5</div><div class="kpi-trend">all systems</div></div>
+            `;
+        }
+
+        let ALL_EVENTS = [];
+
+        async function loadEvents() {
+            const r = await fetch('/api/grc/runtime/events?limit=50');
+            const d = await r.json();
+            ALL_EVENTS = d.events;
+            renderEvents();
+        }
+
+        function renderEvents() {
+            const sev = document.getElementById('severityFilter').value;
+            const events = sev ? ALL_EVENTS.filter(e => e.severity === sev) : ALL_EVENTS;
+            document.getElementById('eventStream').innerHTML = events.map(e => `
+                <div class="rt-event ${e.severity.toLowerCase()}">
+                    <div class="rt-time">${timeAgo(e.timestamp)}<br><span style="color: var(--text-tertiary); font-size: 10px;">${new Date(e.timestamp).toLocaleTimeString()}</span></div>
+                    <div>${severityBadge(e.severity)}</div>
+                    <div>
+                        <div class="rt-event-type">${e.event_type.replace(/_/g, ' ')}</div>
+                        <div class="rt-event-desc">${e.description}</div>
+                        <div class="rt-event-system">${e.system_name}</div>
+                    </div>
+                    <div class="text-xs">
+                        <div class="text-tertiary mb-1">Action</div>
+                        <div class="font-bold text-primary">${e.action_taken.split('.')[0]}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadKillSwitches() {
+            const r = await fetch('/api/grc/ai-systems');
+            const d = await r.json();
+            document.getElementById('killSwitches').innerHTML = d.systems.map(s => `
+                <div class="kill-switch">
+                    <div class="kill-switch-status"></div>
+                    <div style="flex: 1;">
+                        <div class="text-sm font-bold">${s.name}</div>
+                        <div class="text-xs text-tertiary">${s.runtime_status} · last verified 1h ago</div>
+                    </div>
+                    <button class="btn btn-sm">Test</button>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('severityFilter').addEventListener('change', renderEvents);
+
+        loadKPIs();
+        loadEvents();
+        loadKillSwitches();
+
+        setInterval(loadEvents, 15000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Policies — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .policy-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+            display: grid;
+            grid-template-columns: 80px 1fr 140px 140px;
+            gap: 1rem;
+            align-items: center;
+            cursor: pointer;
+            transition: border 0.15s, background 0.15s;
+        }
+
+        .policy-card:hover {
+            border-color: var(--accent);
+            background: var(--bg-card-hover);
+        }
+
+        .policy-id {
+            font-family: 'Monaco', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .policy-requirement {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+            line-height: 1.4;
+        }
+
+        .policy-mappings {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .policy-compliance {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .compliance-fraction {
+            font-size: 14px;
+            font-weight: 700;
+            font-feature-settings: 'tnum';
+        }
+
+        .compliance-ring {
+            width: 40px;
+            height: 40px;
+        }
+
+        .automation-badge {
+            font-size: 11px;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .auto-automated {
+            background: var(--pass-bg);
+            color: var(--pass);
+            border: 1px solid var(--pass-border);
+        }
+
+        .auto-partial {
+            background: var(--medium-bg);
+            color: var(--medium);
+            border: 1px solid var(--medium-border);
+        }
+
+        .auto-manual {
+            background: rgba(149, 159, 178, 0.08);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-strong);
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div id="sidebar"></div>
+    <div class="main">
+        <div id="topbar"></div>
+        <div class="page">
+
+            <div class="page-header">
+                <div>
+                    <div class="page-title">Policy Control Library</div>
+                    <div class="page-subtitle">AI risk control catalog — automated and manual policy enforcement across all systems</div>
+                </div>
+                <div class="page-actions">
+                    <button class="btn">Export Library</button>
+                    <button class="btn btn-primary">+ New Control</button>
+                </div>
+            </div>
+
+            <div class="kpi-row" id="pKpi" style="grid-template-columns: repeat(4, 1fr);"></div>
+
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="Search policy ID, requirement..." id="searchInput">
+                <select class="filter-select" id="severityFilter">
+                    <option value="">All severities</option>
+                    <option value="BLOCK">Block</option>
+                    <option value="WARN">Warn</option>
+                </select>
+                <select class="filter-select" id="automationFilter">
+                    <option value="">All automation</option>
+                    <option value="AUTOMATED">Automated</option>
+                    <option value="PARTIAL">Partial</option>
+                    <option value="MANUAL">Manual</option>
+                </select>
+            </div>
+
+            <div id="policiesList"></div>
+
+        </div>
+    </div>
+</div>
+
+    <!-- Drawer -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <div class="drawer-header">
+            <div class="drawer-title" id="drawerTitle">Policy</div>
+            <button class="drawer-close" onclick="closeDrawer()">×</button>
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/policies');
+        let ALL_P = [];
+
+        async function load() {
+            const r = await fetch('/api/grc/policies');
+            const d = await r.json();
+            ALL_P = d.policies;
+            renderKpis();
+            render();
+        }
+
+        function renderKpis() {
+            const total = ALL_P.length;
+            const automated = ALL_P.filter(p => p.automation_status === 'AUTOMATED').length;
+            const blockSeverity = ALL_P.filter(p => p.severity === 'BLOCK').length;
+            const totalCompliant = ALL_P.reduce((s, p) => s + p.compliant_systems, 0);
+            const totalNonCompliant = ALL_P.reduce((s, p) => s + p.non_compliant_systems, 0);
+            const complianceRate = Math.round(totalCompliant / (totalCompliant + totalNonCompliant) * 100);
+
+            document.getElementById('pKpi').innerHTML = `
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">📋</div><div class="kpi-label">Total Controls</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">${blockSeverity} blocking</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">⚡</div><div class="kpi-label">Automated</div></div><div class="kpi-value pass">${automated}</div><div class="kpi-trend">${Math.round(automated/total*100)}% of controls</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon ${complianceRate >= 80 ? 'pass' : 'high'}">✓</div><div class="kpi-label">Compliance Rate</div></div><div class="kpi-value ${complianceRate >= 80 ? 'pass' : 'high'}">${complianceRate}%</div><div class="kpi-trend">${totalCompliant}/${totalCompliant+totalNonCompliant} systems</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Non-Compliant Systems</div></div><div class="kpi-value critical">${totalNonCompliant}</div><div class="kpi-trend">across all policies</div></div>
+            `;
+        }
+
+        function render() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const sev = document.getElementById('severityFilter').value;
+            const auto = document.getElementById('automationFilter').value;
+
+            const filtered = ALL_P.filter(p =>
+                (!search || p.id.toLowerCase().includes(search) || p.requirement.toLowerCase().includes(search)) &&
+                (!sev || p.severity === sev) &&
+                (!auto || p.automation_status === auto)
+            );
+
+            document.getElementById('policiesList').innerHTML = filtered.map(p => {
+                const total = p.compliant_systems + p.non_compliant_systems;
+                const rate = total > 0 ? p.compliant_systems / total : 0;
+                const sevCls = p.severity === 'BLOCK' ? 'badge-critical' : 'badge-medium';
+                const autoCls = p.automation_status === 'AUTOMATED' ? 'auto-automated' : p.automation_status === 'PARTIAL' ? 'auto-partial' : 'auto-manual';
+                const rateColor = rate >= 0.8 ? '#10b981' : rate >= 0.5 ? '#f59e0b' : '#ef4444';
+                const circumference = 2 * Math.PI * 16;
+                const dash = rate * circumference;
+
+                return `
+                <div class="policy-card" onclick="openDrawer('${p.id}')">
+                    <div>
+                        <div class="policy-id">${p.id}</div>
+                        <div class="badge ${sevCls}" style="margin-top: 4px;">${p.severity}</div>
+                    </div>
+                    <div>
+                        <div class="policy-requirement">${p.requirement}</div>
+                        <div class="text-xs text-tertiary">Owner: ${p.owner} · Pass criteria: ${p.pass_criteria}</div>
+                        <div class="policy-mappings">
+                            ${frameworkBadges(p.framework_mappings)}
+                        </div>
+                    </div>
+                    <div class="policy-compliance">
+                        <svg class="compliance-ring" viewBox="0 0 40 40" style="transform: rotate(-90deg);">
+                            <circle cx="20" cy="20" r="16" stroke="#1d2436" stroke-width="4" fill="none"/>
+                            <circle cx="20" cy="20" r="16" stroke="${rateColor}" stroke-width="4" fill="none"
+                                stroke-dasharray="${dash} ${circumference - dash}"/>
+                        </svg>
+                        <div>
+                            <div class="compliance-fraction text-primary">${p.compliant_systems}/${total}</div>
+                            <div class="text-xs text-tertiary">compliant</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="automation-badge ${autoCls}">${p.automation_status}</div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        async function openDrawer(policyId) {
+            const r = await fetch(`/api/grc/policies/${policyId}`);
+            const p = await r.json();
+            document.getElementById('drawerTitle').textContent = p.id;
+
+            const total = p.compliant_systems + p.non_compliant_systems;
+            const autoCls = p.automation_status === 'AUTOMATED' ? 'auto-automated' : p.automation_status === 'PARTIAL' ? 'auto-partial' : 'auto-manual';
+
+            document.getElementById('drawerBody').innerHTML = `
+                <div class="drawer-section">
+                    <div class="flex gap-2 mb-3">
+                        <span class="badge ${p.severity === 'BLOCK' ? 'badge-critical' : 'badge-medium'}">${p.severity}</span>
+                        <span class="automation-badge ${autoCls}">${p.automation_status}</span>
+                    </div>
+                    <div class="text-sm font-bold mb-2">${p.requirement}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Pass Criteria</div>
+                    <div class="text-sm text-secondary">${p.pass_criteria}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Framework Mappings</div>
+                    <div>${frameworkBadges(p.framework_mappings)}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Evidence Required</div>
+                    <ul style="padding-left: 1.25rem; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+                        ${(p.evidence_required || []).map(e => `<li>${e}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Compliance Status</div>
+                    <div class="text-sm">
+                        <span class="text-pass font-bold">${p.compliant_systems}</span> compliant ·
+                        <span class="text-critical font-bold">${p.non_compliant_systems}</span> non-compliant ·
+                        <span class="text-tertiary">${total} total systems</span>
+                    </div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Owner</div>
+                    <div class="text-sm">${p.owner}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <button class="btn btn-primary btn-sm">Run Compliance Check</button>
+                    <button class="btn btn-sm">Edit Control</button>
+                </div>
+            `;
+
+            document.getElementById('drawerOverlay').classList.add('open');
+            document.getElementById('drawer').classList.add('open');
+        }
+
+        function closeDrawer() {
+            document.getElementById('drawerOverlay').classList.remove('open');
+            document.getElementById('drawer').classList.remove('open');
+        }
+
+        ['searchInput', 'severityFilter', 'automationFilter'].forEach(id => {
+            document.getElementById(id).addEventListener('input', render);
+        });
+
+        load();
+    </script>
+</body>
+</html>

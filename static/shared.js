@@ -248,24 +248,28 @@ function renderLineChart(series, options = {}) {
 }
 
 function initPage(activePath) {
-    // If the page has explicit shell containers, fill those
     const sidebarEl = document.getElementById('sidebar');
     const topbarEl = document.getElementById('topbar');
+    const appEl = document.querySelector('.app');
 
-    if (sidebarEl && topbarEl) {
+    if (appEl && sidebarEl && topbarEl) {
+        // New layout: fill in shells
         sidebarEl.outerHTML = renderSidebar(activePath);
         topbarEl.outerHTML = renderTopbar();
         return;
     }
 
-    // Otherwise wrap existing body content
-    const existingContent = document.body.innerHTML;
+    // Legacy layout: extract page content (skip orphan #sidebar/#topbar divs and stray .main wrappers)
+    // and wrap everything in proper sidebar+main structure
+    const pageDiv = document.querySelector('.page');
+    const pageHtml = pageDiv ? pageDiv.outerHTML : document.body.innerHTML;
+
     document.body.innerHTML = `
         <div class="app">
             ${renderSidebar(activePath)}
             <div class="main">
                 ${renderTopbar()}
-                ${existingContent}
+                ${pageHtml}
             </div>
         </div>
     `;

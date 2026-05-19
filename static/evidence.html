@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Evidence — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .ev-row {
+            display: grid;
+            grid-template-columns: 110px 130px 1fr auto 80px 90px;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 12.5px;
+            cursor: pointer;
+        }
+        .ev-row:hover { background: var(--bg-card-hover); }
+        .ev-row:last-child { border-bottom: none; }
+
+        .ev-type-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.2rem 0.5rem;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .ev-format {
+            padding: 0.125rem 0.4rem;
+            background: var(--bg-input);
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-tertiary);
+            font-family: 'Monaco', monospace;
+        }
+
+        .ev-section {
+            display: grid;
+            grid-template-columns: 110px 130px 1fr auto 80px 90px;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            font-size: 10.5px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-strong);
+            background: var(--bg-elevated);
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div id="sidebar"></div>
+    <div class="main">
+        <div id="topbar"></div>
+        <div class="page">
+
+            <div class="page-header">
+                <div>
+                    <div class="page-title">Evidence Repository</div>
+                    <div class="page-subtitle">Audit-ready evidence supporting AI system risk, security, and compliance posture</div>
+                </div>
+                <div class="page-actions">
+                    <button class="btn">Export Index</button>
+                    <button class="btn btn-primary">Upload Evidence</button>
+                </div>
+            </div>
+
+            <div class="kpi-row" id="evKpi" style="grid-template-columns: repeat(4, 1fr);"></div>
+
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="Search evidence ID, title, system..." id="searchInput">
+                <select class="filter-select" id="typeFilter">
+                    <option value="">All types</option>
+                </select>
+                <select class="filter-select" id="systemFilter">
+                    <option value="">All systems</option>
+                </select>
+            </div>
+
+            <div class="card" style="padding: 0; overflow: hidden;">
+                <div class="ev-section">
+                    <div>ID</div>
+                    <div>Type</div>
+                    <div>Title</div>
+                    <div>System</div>
+                    <div>Format</div>
+                    <div>Created</div>
+                </div>
+                <div id="evidenceList"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/evidence');
+        let ALL_EV = [];
+        let ALL_SYS = [];
+
+        async function load() {
+            const [er, sr] = await Promise.all([
+                fetch('/api/grc/evidence'),
+                fetch('/api/grc/ai-systems'),
+            ]);
+            const ed = await er.json();
+            const sd = await sr.json();
+            ALL_EV = ed.evidence;
+            ALL_SYS = sd.systems;
+
+            // Populate filters
+            const types = [...new Set(ALL_EV.map(e => e.type))].sort();
+            document.getElementById('typeFilter').innerHTML += types.map(t => `<option value="${t}">${t}</option>`).join('');
+            document.getElementById('systemFilter').innerHTML += ALL_SYS.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+            renderKpis();
+            render();
+        }
+
+        function renderKpis() {
+            const byType = {};
+            ALL_EV.forEach(e => { byType[e.type] = (byType[e.type] || 0) + 1; });
+            const total = ALL_EV.length;
+            const recent = ALL_EV.filter(e => {
+                const days = (new Date() - new Date(e.created)) / (1000 * 60 * 60 * 24);
+                return days <= 7;
+            }).length;
+
+            document.getElementById('evKpi').innerHTML = `
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">📁</div><div class="kpi-label">Total Evidence Items</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">${recent} added last 7 days</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon accent">📊</div><div class="kpi-label">Eval Reports</div></div><div class="kpi-value">${byType['Eval Report'] || 0}</div><div class="kpi-trend">benchmark + threshold</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">🛡</div><div class="kpi-label">Red Team / Adversarial</div></div><div class="kpi-value">${(byType['Red Team Report'] || 0) + (byType['Adversarial Test'] || 0)}</div><div class="kpi-trend">penetration tests</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Audit Coverage</div></div><div class="kpi-value pass">91%</div><div class="kpi-trend">enterprise avg</div></div>
+            `;
+        }
+
+        function render() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const type = document.getElementById('typeFilter').value;
+            const sys = document.getElementById('systemFilter').value;
+
+            const filtered = ALL_EV.filter(e =>
+                (!search || e.id.toLowerCase().includes(search) || e.title.toLowerCase().includes(search) || e.system_name.toLowerCase().includes(search)) &&
+                (!type || e.type === type) &&
+                (!sys || e.system_id === sys)
+            );
+
+            if (filtered.length === 0) {
+                document.getElementById('evidenceList').innerHTML = '<div class="empty-state">No evidence matches filters</div>';
+                return;
+            }
+
+            document.getElementById('evidenceList').innerHTML = filtered.map(e => `
+                <div class="ev-row">
+                    <div class="font-mono text-xs">${e.id}</div>
+                    <div><span class="ev-type-icon">${e.type}</span></div>
+                    <div>
+                        <div class="cell-primary">${e.title}</div>
+                        <div class="text-xs text-tertiary mt-1">${e.author}${e.linked_findings && e.linked_findings.length ? ' · Linked: ' + e.linked_findings.join(', ') : ''}</div>
+                    </div>
+                    <div class="text-secondary text-xs">${e.system_name}</div>
+                    <div><span class="ev-format">${e.format}</span></div>
+                    <div class="text-tertiary text-xs">${e.created}</div>
+                </div>
+            `).join('');
+        }
+
+        ['searchInput', 'typeFilter', 'systemFilter'].forEach(id => {
+            document.getElementById(id).addEventListener('input', render);
+        });
+
+        load();
+    </script>
+</body>
+</html>
