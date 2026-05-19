@@ -22,16 +22,45 @@ def check_env():
             if local_env.exists():
                 print("Found local.env - merging API keys...")
                 local_content = local_env.read_text()
-                # Extract ANTHROPIC_API_KEY from local.env
+
+                # Extract API keys from local.env
+                keys_found = []
                 for line in local_content.split('\n'):
-                    if line.startswith('ANTHROPIC_API_KEY='):
-                        api_key = line.split('=', 1)[1]
-                        env_content = env_content.replace(
-                            'ANTHROPIC_API_KEY=sk-ant-xxxxx',
-                            f'ANTHROPIC_API_KEY={api_key}'
-                        )
-                        print(f"✓ Loaded ANTHROPIC_API_KEY from local.env")
-                        break
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+
+                    if '=' in line:
+                        key_name, key_value = line.split('=', 1)
+
+                        # Replace in env_content
+                        if key_name == 'ANTHROPIC_API_KEY':
+                            env_content = env_content.replace(
+                                'ANTHROPIC_API_KEY=sk-ant-xxxxx',
+                                f'{line}'
+                            )
+                            keys_found.append('ANTHROPIC_API_KEY')
+                        elif key_name == 'LANGFUSE_SECRET_KEY':
+                            env_content = env_content.replace(
+                                'LANGFUSE_SECRET_KEY=sk_xxxxx',
+                                f'{line}'
+                            )
+                            keys_found.append('LANGFUSE_SECRET_KEY')
+                        elif key_name == 'LANGFUSE_PUBLIC_KEY':
+                            env_content = env_content.replace(
+                                'LANGFUSE_PUBLIC_KEY=pk_xxxxx',
+                                f'{line}'
+                            )
+                            keys_found.append('LANGFUSE_PUBLIC_KEY')
+                        elif key_name == 'LANGFUSE_BASE_URL':
+                            env_content = env_content.replace(
+                                'LANGFUSE_HOST=https://cloud.langfuse.com',
+                                f'{key_name}={key_value}'
+                            )
+                            keys_found.append('LANGFUSE_BASE_URL')
+
+                if keys_found:
+                    print(f"✓ Loaded {', '.join(keys_found)} from local.env")
 
             env_file.write_text(env_content)
 
