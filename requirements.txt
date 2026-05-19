@@ -3,4 +3,6 @@ deepeval==0.21.50
 anthropic==0.43.1
 openai==1.53.1
 python-dotenv==1.0.1
+fastapi==0.104.1
+uvicorn==0.24.0
 requests==2.32.3
