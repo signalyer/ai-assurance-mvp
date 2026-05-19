@@ -4,17 +4,15 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from tracer import get_recent_traces
 from evaluator import evaluate_response
+from api.evaluate import runs_cache, eval_cache
 
 router = APIRouter(prefix="/api", tags=["traces"])
-
-# In-memory cache for eval results
-eval_cache: dict[str, dict] = {}
 
 
 @router.get("/traces")
 async def fetch_traces():
     """
-    Fetch recent traces from Langfuse with cached eval scores.
+    Fetch recent traces from cache with eval scores.
 
     Returns:
         {
@@ -34,23 +32,13 @@ async def fetch_traces():
         }
     """
     try:
-        traces = get_recent_traces(limit=20)
-
-        # Add eval scores from cache if available
-        for trace in traces:
-            trace_id = trace["id"]
-            if trace_id in eval_cache:
-                trace["eval_scores"] = eval_cache[trace_id]
-            else:
-                trace["eval_scores"] = None
+        # Return cached runs (populated by demo endpoint)
+        traces = runs_cache[:20]  # Return up to 20 most recent
 
         return {"traces": traces, "error": None}
 
     except Exception as e:
         error_msg = str(e)
-        if "LANGFUSE" in error_msg or "api" in error_msg.lower():
-            error_msg = "Unable to connect to Langfuse — check your API keys"
-
         return {
             "traces": [],
             "error": error_msg,

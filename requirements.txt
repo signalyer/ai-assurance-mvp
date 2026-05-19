@@ -1,8 +1,42 @@
-langfuse>=4.0.0
-deepeval>=0.21.0
+# Core LLM APIs
 anthropic>=0.40.0
 openai>=1.0.0
-python-dotenv>=1.0.0
+
+# Tracing & Observability
+langfuse>=4.0.0
+
+# Evaluation (replacing DeepEval with Ragas)
+ragas>=0.1.0
+deepeval>=0.21.0
+
+# Adversarial Testing
+garak>=0.5.0
+
+# Web Framework
 fastapi>=0.100.0
 uvicorn>=0.20.0
+pydantic>=2.0.0
+
+# Database (for future multi-tenant)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.13.0
+
+# Security & Encryption
+cryptography>=41.0.0
+bcrypt>=4.1.0
+pyjwt>=2.8.0
+python-jose>=3.3.0
+
+# Configuration & Environment
+python-dotenv>=1.0.0
+pydantic-settings>=2.0.0
+
+# API & Integration
 requests>=2.30.0
+grpcio>=1.60.0
+grpcio-tools>=1.60.0
+
+# Utilities
+python-dateutil>=2.8.0
+pytz>=2023.3

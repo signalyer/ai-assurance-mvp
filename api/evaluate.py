@@ -10,6 +10,9 @@ router = APIRouter(prefix="/api", tags=["evaluate"])
 # In-memory cache for eval results (key: trace_id)
 eval_cache: dict[str, dict] = {}
 
+# In-memory cache for recent runs (populated by demo endpoint)
+runs_cache: list[dict] = []
+
 
 class EvaluateRequest(BaseModel):
     """Request to evaluate a trace."""

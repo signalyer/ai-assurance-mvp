@@ -33,7 +33,7 @@ def call_claude() -> tuple[str, int, int]:
 
     start = time.time()
     message = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         max_tokens=500,
         messages=[{"role": "user", "content": DEMO_PROMPT}],
     )
@@ -107,7 +107,7 @@ def run_demo() -> None:
     print("\n[3/4] Tracing calls to Langfuse...")
     try:
         claude_trace_id = trace_call(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             prompt=DEMO_PROMPT,
             response=claude_response,
             latency_ms=claude_latency,
@@ -155,7 +155,7 @@ def run_demo() -> None:
     print("=" * 65)
 
     print_report(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-sonnet-4-6",
         trace_id=claude_trace_id,
         eval_results=claude_evals,
         latency_ms=claude_latency,
