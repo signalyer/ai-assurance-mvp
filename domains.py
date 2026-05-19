@@ -26,7 +26,7 @@ class Domain:
 
     @classmethod
     def from_json(cls, json_path: str) -> "Domain":
-        """Load domain from JSON file."""
+        """Load domain from JSON file. Supports both v1 (prompt/context) and v2 (test_cases/regulatory_context) schemas."""
         path = Path(json_path)
         if not path.exists():
             raise FileNotFoundError(f"Domain config not found: {json_path}")
@@ -34,11 +34,24 @@ class Domain:
         with open(path) as f:
             data = json.load(f)
 
+        # v2 schema: test_cases + regulatory_context (preferred)
+        # v1 schema: prompt + context (legacy)
+        # The Domain.prompt represents the *default* test case used by single-prompt APIs.
+        if "test_cases" in data and data["test_cases"]:
+            prompt = data["test_cases"][0]["prompt"]
+        else:
+            prompt = data.get("prompt", "")
+
+        if "regulatory_context" in data:
+            context = data["regulatory_context"]
+        else:
+            context = data.get("context", [])
+
         return cls(
             name=data["name"],
             description=data["description"],
-            prompt=data["prompt"],
-            context=data["context"],
+            prompt=prompt,
+            context=context,
             eval_weights=data.get("eval_weights", {}),
             risk_rules=data.get("risk_rules", {}),
         )
