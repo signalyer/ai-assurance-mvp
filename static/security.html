@@ -48,7 +48,7 @@
 
         <!-- OWASP LLM -->
         <div id="llmTab">
-            <div class="kpi-grid" id="llmKpi"></div>
+            <div class="kpi-row" id="llmKpi"></div>
             <div class="card" style="padding: 0; overflow: hidden;">
                 <div class="card-header" style="padding: 1rem 1.25rem;">
                     <div>
@@ -70,7 +70,7 @@
 
         <!-- OWASP Agentic -->
         <div id="agenticTab" style="display: none;">
-            <div class="kpi-grid" id="agenticKpi"></div>
+            <div class="kpi-row" id="agenticKpi"></div>
             <div class="card" style="padding: 0; overflow: hidden;">
                 <div class="card-header" style="padding: 1rem 1.25rem;">
                     <div>
@@ -143,10 +143,10 @@
             const passing = d.items.filter(i => i.status === 'PASS').length;
 
             document.getElementById('llmKpi').innerHTML = `
-                <div class="kpi-card critical"><div class="kpi-label">Open Findings</div><div class="kpi-value critical">${totalFindings}</div></div>
-                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${totalCritical}</div></div>
-                <div class="kpi-card high"><div class="kpi-label">Categories at Risk</div><div class="kpi-value high">${atRisk}</div></div>
-                <div class="kpi-card pass"><div class="kpi-label">Passing</div><div class="kpi-value pass">${passing}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${totalFindings}</div><div class="kpi-trend">across 10 categories</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${totalCritical}</div><div class="kpi-trend">P0 findings</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">Categories at Risk</div></div><div class="kpi-value high">${atRisk}</div><div class="kpi-trend">of 10 categories</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">categories clean</div></div>
             `;
 
             document.getElementById('llmTable').innerHTML = d.items.map(item => `
@@ -171,10 +171,10 @@
             const passing = d.items.filter(i => i.status === 'PASS').length;
 
             document.getElementById('agenticKpi').innerHTML = `
-                <div class="kpi-card critical"><div class="kpi-label">Open Findings</div><div class="kpi-value critical">${totalFindings}</div></div>
-                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${totalCritical}</div></div>
-                <div class="kpi-card high"><div class="kpi-label">Categories at Risk</div><div class="kpi-value high">${atRisk}</div></div>
-                <div class="kpi-card pass"><div class="kpi-label">Passing</div><div class="kpi-value pass">${passing}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${totalFindings}</div><div class="kpi-trend">across 12 categories</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${totalCritical}</div><div class="kpi-trend">P0 findings</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">Categories at Risk</div></div><div class="kpi-value high">${atRisk}</div><div class="kpi-trend">of 12 categories</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">categories clean</div></div>
             `;
 
             document.getElementById('agenticTable').innerHTML = d.items.map(item => `

@@ -431,13 +431,15 @@ html, body {
 /* ============ KPI CARDS ============ */
 .kpi-row {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 0.875rem;
     margin-bottom: 1.5rem;
 }
 
-@media (max-width: 1700px) { .kpi-row { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+/* Explicit 8-col on very wide displays (so 8-card homepage spreads evenly) */
+@media (min-width: 1700px) {
+    .kpi-row.fixed-8 { grid-template-columns: repeat(8, 1fr); }
+}
 
 .kpi-card {
     background: var(--bg-card);

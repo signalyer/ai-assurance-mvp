@@ -104,7 +104,7 @@
 
         <!-- NIST AI RMF -->
         <div id="rmfTab">
-            <div class="kpi-grid" id="rmfKpi"></div>
+            <div class="kpi-row" id="rmfKpi"></div>
             <div class="grid-2" id="rmfFunctions"></div>
         </div>
 
@@ -213,22 +213,10 @@
             const failing = d.frameworks.reduce((s, f) => s + f.failing_controls, 0);
 
             document.getElementById('rmfKpi').innerHTML = `
-                <div class="kpi-card ${overall >= 80 ? 'pass' : overall >= 70 ? 'medium' : 'critical'}">
-                    <div class="kpi-label">Overall RMF Score</div>
-                    <div class="kpi-value ${overall >= 80 ? 'pass' : ''}">${overall}%</div>
-                </div>
-                <div class="kpi-card info">
-                    <div class="kpi-label">Required Controls</div>
-                    <div class="kpi-value">${totalControls}</div>
-                </div>
-                <div class="kpi-card pass">
-                    <div class="kpi-label">Passing</div>
-                    <div class="kpi-value pass">${passing}</div>
-                </div>
-                <div class="kpi-card critical">
-                    <div class="kpi-label">Failing</div>
-                    <div class="kpi-value critical">${failing}</div>
-                </div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon ${overall >= 80 ? 'pass' : overall >= 70 ? 'medium' : 'critical'}">◐</div><div class="kpi-label">Overall RMF Score</div></div><div class="kpi-value ${overall >= 80 ? 'pass' : ''}">${overall}%</div><div class="kpi-trend">enterprise posture</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Required Controls</div></div><div class="kpi-value">${totalControls}</div><div class="kpi-trend">across 4 functions</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">${Math.round(passing/totalControls*100)}% of controls</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Failing</div></div><div class="kpi-value critical">${failing}</div><div class="kpi-trend">remediation needed</div></div>
             `;
 
             document.getElementById('rmfFunctions').innerHTML = d.frameworks.map(f => {

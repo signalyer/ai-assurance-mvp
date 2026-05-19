@@ -20,7 +20,7 @@
             </div>
         </div>
 
-        <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);" id="findingsKpi"></div>
+        <div class="kpi-row" style="grid-template-columns: repeat(5, 1fr);" id="findingsKpi"></div>
 
         <div class="filter-bar">
             <input type="text" class="filter-input" placeholder="Search…" id="searchInput">
@@ -111,11 +111,11 @@
             const breached = open.filter(f => f.sla_remaining_hours < 0).length;
 
             document.getElementById('findingsKpi').innerHTML = `
-                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${counts.CRITICAL}</div></div>
-                <div class="kpi-card high"><div class="kpi-label">High</div><div class="kpi-value high">${counts.HIGH}</div></div>
-                <div class="kpi-card medium"><div class="kpi-label">Medium</div><div class="kpi-value">${counts.MEDIUM}</div></div>
-                <div class="kpi-card info"><div class="kpi-label">Low</div><div class="kpi-value">${counts.LOW}</div></div>
-                <div class="kpi-card critical"><div class="kpi-label">SLA Breached</div><div class="kpi-value critical">${breached}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${counts.CRITICAL}</div><div class="kpi-trend">P0 — immediate</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">High</div></div><div class="kpi-value high">${counts.HIGH}</div><div class="kpi-trend">P1 — 7-day SLA</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◆</div><div class="kpi-label">Medium</div></div><div class="kpi-value">${counts.MEDIUM}</div><div class="kpi-trend">30-day SLA</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">◇</div><div class="kpi-label">Low</div></div><div class="kpi-value">${counts.LOW}</div><div class="kpi-trend">90-day SLA</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⏱</div><div class="kpi-label">SLA Breached</div></div><div class="kpi-value critical">${breached}</div><div class="kpi-trend">past due</div></div>
             `;
         }
 

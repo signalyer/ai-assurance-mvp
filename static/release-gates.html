@@ -99,7 +99,7 @@
         </div>
 
         <div id="resultsTab">
-            <div class="kpi-grid" id="gatesKpi"></div>
+            <div class="kpi-row" id="gatesKpi"></div>
             <div id="gateResults"></div>
         </div>
 
@@ -131,10 +131,10 @@
             const blocked = d.results.filter(g => g.overall_status === 'FAILED').length;
 
             document.getElementById('gatesKpi').innerHTML = `
-                <div class="kpi-card info"><div class="kpi-label">Total Systems</div><div class="kpi-value">${total}</div></div>
-                <div class="kpi-card pass"><div class="kpi-label">Approved</div><div class="kpi-value pass">${passed}</div></div>
-                <div class="kpi-card medium"><div class="kpi-label">Conditional</div><div class="kpi-value">${conditional}</div></div>
-                <div class="kpi-card critical"><div class="kpi-label">Blocked / Hold</div><div class="kpi-value critical">${blocked}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▣</div><div class="kpi-label">Total Systems</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">in release pipeline</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Approved</div></div><div class="kpi-value pass">${passed}</div><div class="kpi-trend">production ready</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Conditional</div></div><div class="kpi-value">${conditional}</div><div class="kpi-trend">pilot with conditions</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocked / Hold</div></div><div class="kpi-value critical">${blocked}</div><div class="kpi-trend">remediation required</div></div>
             `;
 
             // Per-system results
