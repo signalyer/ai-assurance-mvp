@@ -18,7 +18,7 @@ app = FastAPI(title="AI Assurance Dashboard")
 # CORS for localhost only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:9007", "http://127.0.0.1:9007"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,4 +47,4 @@ if __name__ == "__main__":
     print("Open browser to: http://localhost:8000")
     print("=" * 65 + "\n")
 
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=9007, log_level="info")
