@@ -1,15 +1,18 @@
 """API route for running live demo."""
 
 import time
+import os
 from fastapi import APIRouter
 from pydantic import BaseModel
+from dotenv import load_dotenv
 from anthropic import Anthropic
 from openai import OpenAI
-import os
 
 from tracer import trace_call
 from evaluator import evaluate_response
 from api.evaluate import eval_cache, _normalize_eval_scores
+
+load_dotenv()
 
 router = APIRouter(prefix="/api", tags=["demo"])
 
