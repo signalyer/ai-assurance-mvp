@@ -1,7 +1,13 @@
 """FastAPI dashboard for AI Assurance Platform."""
 
+import sys
+import io
 import os
 from pathlib import Path
+
+# Force UTF-8 output on Windows
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Load environment variables FIRST - before any other imports
 env_path = Path(__file__).parent / ".env"
