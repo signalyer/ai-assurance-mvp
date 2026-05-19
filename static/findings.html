@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Findings — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Security & Compliance Findings</div>
+                <div class="page-subtitle">All open and remediated AI risk findings across the enterprise</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm">Export</button>
+                <button class="btn btn-sm btn-primary">+ New Finding</button>
+            </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);" id="findingsKpi"></div>
+
+        <div class="filter-bar">
+            <input type="text" class="filter-input" placeholder="Search…" id="searchInput">
+            <select class="filter-select" id="severityFilter">
+                <option value="">All severities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+            </select>
+            <select class="filter-select" id="statusFilter">
+                <option value="">All statuses</option>
+                <option value="OPEN">Open</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="RISK_ACCEPTED">Risk Accepted</option>
+                <option value="REMEDIATED">Remediated</option>
+                <option value="VERIFIED">Verified</option>
+            </select>
+            <select class="filter-select" id="systemFilter">
+                <option value="">All systems</option>
+            </select>
+        </div>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="data-table" id="findingsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Severity</th>
+                        <th>Title</th>
+                        <th>AI System</th>
+                        <th>Framework</th>
+                        <th>Owner</th>
+                        <th>SLA</th>
+                        <th>Status</th>
+                        <th>Release Impact</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <div class="drawer-header">
+            <div class="drawer-title" id="drawerTitle">Finding</div>
+            <button class="drawer-close" onclick="closeDrawer()">×</button>
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/findings');
+        let allFindings = [];
+        let allSystems = [];
+
+        async function load() {
+            const [fr, sr] = await Promise.all([
+                fetch('/api/grc/findings'),
+                fetch('/api/grc/ai-systems'),
+            ]);
+            const fd = await fr.json();
+            const sd = await sr.json();
+            allFindings = fd.findings;
+            allSystems = sd.systems;
+
+            const sel = document.getElementById('systemFilter');
+            allSystems.forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.id;
+                o.textContent = s.name;
+                sel.appendChild(o);
+            });
+
+            renderKpis();
+            render();
+
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('id')) openDrawer(params.get('id'));
+        }
+
+        function renderKpis() {
+            const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+            const open = allFindings.filter(f => f.status === 'OPEN' || f.status === 'IN_PROGRESS');
+            open.forEach(f => counts[f.severity]++);
+            const breached = open.filter(f => f.sla_remaining_hours < 0).length;
+
+            document.getElementById('findingsKpi').innerHTML = `
+                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${counts.CRITICAL}</div></div>
+                <div class="kpi-card high"><div class="kpi-label">High</div><div class="kpi-value high">${counts.HIGH}</div></div>
+                <div class="kpi-card medium"><div class="kpi-label">Medium</div><div class="kpi-value">${counts.MEDIUM}</div></div>
+                <div class="kpi-card info"><div class="kpi-label">Low</div><div class="kpi-value">${counts.LOW}</div></div>
+                <div class="kpi-card critical"><div class="kpi-label">SLA Breached</div><div class="kpi-value critical">${breached}</div></div>
+            `;
+        }
+
+        function render() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const sev = document.getElementById('severityFilter').value;
+            const status = document.getElementById('statusFilter').value;
+            const sys = document.getElementById('systemFilter').value;
+
+            const filtered = allFindings.filter(f =>
+                (!search || f.title.toLowerCase().includes(search) || f.id.toLowerCase().includes(search)) &&
+                (!sev || f.severity === sev) &&
+                (!status || f.status === status) &&
+                (!sys || f.system_id === sys)
+            );
+
+            const tbody = document.querySelector('#findingsTable tbody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No findings match filters</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(f => {
+                const impactCls = f.release_impact === 'BLOCKS_RELEASE' ? 'badge-critical' : f.release_impact === 'CONDITIONAL' ? 'badge-medium' : 'badge-neutral';
+                return `
+                <tr onclick="openDrawer('${f.id}')">
+                    <td class="font-mono">${f.id}</td>
+                    <td><span class="severity-indicator ${f.severity.toLowerCase()}"></span>${severityBadge(f.severity)}</td>
+                    <td>
+                        <div class="cell-primary">${f.title}</div>
+                        <div class="cell-secondary">${f.description.substring(0, 80)}…</div>
+                    </td>
+                    <td class="text-sm text-secondary">${f.system_name}</td>
+                    <td>${frameworkBadges(f.framework_mapping.slice(0, 2))}${f.framework_mapping.length > 2 ? `<span class="text-xs text-tertiary">+${f.framework_mapping.length - 2}</span>` : ''}</td>
+                    <td class="text-sm">${f.owner}</td>
+                    <td>${slaCell(f.sla_remaining_hours)}</td>
+                    <td>${statusBadge(f.status)}</td>
+                    <td><span class="badge ${impactCls}">${f.release_impact.replace(/_/g, ' ')}</span></td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        async function openDrawer(findingId) {
+            const r = await fetch(`/api/grc/findings/${findingId}`);
+            const f = await r.json();
+            document.getElementById('drawerTitle').textContent = f.id;
+
+            document.getElementById('drawerBody').innerHTML = `
+                <div class="drawer-section">
+                    <div class="flex gap-2 mb-3">
+                        ${severityBadge(f.severity)}
+                        ${statusBadge(f.status)}
+                    </div>
+                    <div class="text-sm font-bold mb-2">${f.title}</div>
+                    <div class="text-sm text-secondary">${f.description}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Details</div>
+                    <dl class="def-list">
+                        <dt>System</dt><dd>${f.system_name}</dd>
+                        <dt>Owner</dt><dd>${f.owner} · ${f.owner_email}</dd>
+                        <dt>Discovered</dt><dd>${f.discovered}</dd>
+                        <dt>SLA</dt><dd>${slaCell(f.sla_remaining_hours)} (${f.sla_days}-day SLA)</dd>
+                        <dt>Release Impact</dt><dd>${f.release_impact.replace(/_/g, ' ')}</dd>
+                    </dl>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Framework Mappings</div>
+                    <div>${frameworkBadges(f.framework_mapping)}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Linked Evidence</div>
+                    <div class="flex gap-1" style="flex-wrap: wrap;">
+                        ${(f.evidence_ids || []).map(e => `<a href="/evidence?id=${e}" class="framework-badge" style="cursor: pointer;">${e}</a>`).join('')}
+                    </div>
+                </div>
+
+                <div class="drawer-section">
+                    <button class="btn btn-primary btn-sm">Assign Owner</button>
+                    <button class="btn btn-sm">Mark Remediated</button>
+                    <button class="btn btn-sm">Risk Accept</button>
+                </div>
+            `;
+
+            document.getElementById('drawerOverlay').classList.add('open');
+            document.getElementById('drawer').classList.add('open');
+        }
+
+        function closeDrawer() {
+            document.getElementById('drawerOverlay').classList.remove('open');
+            document.getElementById('drawer').classList.remove('open');
+            window.history.replaceState({}, '', '/findings');
+        }
+
+        ['searchInput', 'severityFilter', 'statusFilter', 'systemFilter'].forEach(id => {
+            document.getElementById(id).addEventListener('input', render);
+        });
+
+        load();
+    </script>
+</body>
+</html>

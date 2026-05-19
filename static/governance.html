@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Governance — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .function-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .function-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+        }
+
+        .function-card.high::before { background: var(--pass); }
+        .function-card.medium::before { background: var(--medium); }
+        .function-card.low::before { background: var(--critical); }
+
+        .function-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .function-name {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .function-score {
+            font-size: 28px;
+            font-weight: 700;
+            font-feature-settings: 'tnum';
+        }
+
+        .gap-list {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .gap-item {
+            font-size: 12px;
+            color: var(--text-secondary);
+            padding: 0.5rem 0;
+            display: flex;
+            gap: 0.5rem;
+            align-items: start;
+        }
+
+        .gap-item::before {
+            content: '•';
+            color: var(--critical);
+            font-weight: 700;
+        }
+
+        .risk-area-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 100px 100px;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.625rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .risk-area-row:last-child { border-bottom: none; }
+
+        .risk-area-row:hover {
+            background: var(--bg-card-hover);
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Governance</div>
+                <div class="page-subtitle">NIST AI Risk Management Framework + AI 600-1 GenAI Profile posture</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm">Export Posture</button>
+                <button class="btn btn-sm btn-primary">Run Assessment</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="rmf">NIST AI RMF</button>
+            <button class="tab" data-tab="ai600">AI 600-1 GenAI Profile</button>
+            <button class="tab" data-tab="approvals">Approvals & Workflow</button>
+        </div>
+
+        <!-- NIST AI RMF -->
+        <div id="rmfTab">
+            <div class="kpi-grid" id="rmfKpi"></div>
+            <div class="grid-2" id="rmfFunctions"></div>
+        </div>
+
+        <!-- AI 600-1 -->
+        <div id="ai600Tab" style="display: none;">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">NIST AI 600-1 — GenAI Profile</div>
+                        <div class="card-subtitle">Overall coverage across 12 risk areas specific to generative AI</div>
+                    </div>
+                    <div id="ai600Overall"></div>
+                </div>
+                <div id="ai600Areas"></div>
+            </div>
+        </div>
+
+        <!-- Approvals -->
+        <div id="approvalsTab" style="display: none;">
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Ownership Matrix</div>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Role</th><th>Owner</th><th>Systems</th></tr></thead>
+                        <tbody>
+                            <tr><td>Head of AI Governance</td><td>Sarah Mitchell</td><td>5</td></tr>
+                            <tr><td>Chief Risk Officer</td><td>Marcus Chen</td><td>5</td></tr>
+                            <tr><td>CISO</td><td>Elena Vasquez</td><td>5</td></tr>
+                            <tr><td>Model Risk Management</td><td>David Kim</td><td>5</td></tr>
+                            <tr><td>AppSec Lead</td><td>Priya Sharma</td><td>5</td></tr>
+                            <tr><td>Internal Audit Lead</td><td>Robert Lee</td><td>5</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Pending Approvals</div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; border: 1px solid var(--medium-border); background: var(--medium-bg); border-radius: 6px; margin-bottom: 0.5rem;">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="text-sm font-bold">KYC Agent — Conditional Pilot Extension</div>
+                                <div class="text-xs text-secondary mt-1">Approver: Karen Liu · Submitted 2026-05-17</div>
+                            </div>
+                            <span class="badge badge-medium">PENDING</span>
+                        </div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; border: 1px solid var(--high-border); background: var(--high-bg); border-radius: 6px; margin-bottom: 0.5rem;">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="text-sm font-bold">Payments Agent — Hold → Pilot Request</div>
+                                <div class="text-xs text-secondary mt-1">Approver: Marcus Chen (CRO) · Submitted 2026-05-15</div>
+                            </div>
+                            <span class="badge badge-high">REVIEW</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Exceptions & Waivers</div>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Waiver ID</th><th>Policy</th><th>Owner</th><th>Expires</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td class="font-mono">WV-2026-018</td>
+                                <td>AI-009 (audit logs)</td>
+                                <td>Aisha Hassan</td>
+                                <td class="text-medium">2026-06-15</td>
+                            </tr>
+                            <tr>
+                                <td class="font-mono">WV-2026-014</td>
+                                <td>AI-005 (tool allowlist)</td>
+                                <td>James Wong</td>
+                                <td class="text-medium">2026-06-22</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Policy Compliance Summary</div>
+                    </div>
+                    <div id="policyCompliance"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/governance');
+
+        async function loadRMF() {
+            const r = await fetch('/api/grc/governance/nist-ai-rmf');
+            const d = await r.json();
+
+            const overall = Math.round(d.frameworks.reduce((s, f) => s + f.score, 0) / d.frameworks.length);
+            const totalControls = d.frameworks.reduce((s, f) => s + f.required_controls, 0);
+            const passing = d.frameworks.reduce((s, f) => s + f.passing_controls, 0);
+            const failing = d.frameworks.reduce((s, f) => s + f.failing_controls, 0);
+
+            document.getElementById('rmfKpi').innerHTML = `
+                <div class="kpi-card ${overall >= 80 ? 'pass' : overall >= 70 ? 'medium' : 'critical'}">
+                    <div class="kpi-label">Overall RMF Score</div>
+                    <div class="kpi-value ${overall >= 80 ? 'pass' : ''}">${overall}%</div>
+                </div>
+                <div class="kpi-card info">
+                    <div class="kpi-label">Required Controls</div>
+                    <div class="kpi-value">${totalControls}</div>
+                </div>
+                <div class="kpi-card pass">
+                    <div class="kpi-label">Passing</div>
+                    <div class="kpi-value pass">${passing}</div>
+                </div>
+                <div class="kpi-card critical">
+                    <div class="kpi-label">Failing</div>
+                    <div class="kpi-value critical">${failing}</div>
+                </div>
+            `;
+
+            document.getElementById('rmfFunctions').innerHTML = d.frameworks.map(f => {
+                const tier = f.score >= 80 ? 'high' : f.score >= 70 ? 'medium' : 'low';
+                return `
+                    <div class="function-card ${tier}">
+                        <div class="function-header">
+                            <div>
+                                <div class="function-name">${f.function}</div>
+                                <div class="text-xs text-secondary mt-1">${f.passing_controls}/${f.required_controls} controls passing</div>
+                            </div>
+                            <div class="function-score ${tier === 'high' ? 'text-pass' : tier === 'low' ? 'text-critical' : 'text-medium'}">${f.score}%</div>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-fill ${tier === 'high' ? '' : tier === 'low' ? 'fail' : 'warn'}" style="width: ${f.score}%"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-xs text-secondary">
+                            <span>Evidence: ${(f.evidence_completeness*100).toFixed(0)}%</span>
+                            <span class="text-critical">${f.failing_controls} failing</span>
+                        </div>
+                        ${f.key_gaps && f.key_gaps.length > 0 ? `
+                            <div class="gap-list">
+                                <div class="text-xs text-secondary mb-2" style="text-transform: uppercase; font-weight: 600;">Key Gaps</div>
+                                ${f.key_gaps.map(g => `<div class="gap-item">${g}</div>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadAI600() {
+            const r = await fetch('/api/grc/governance/ai-600-1');
+            const d = await r.json();
+
+            document.getElementById('ai600Overall').innerHTML = `
+                <div class="text-2xl font-bold ${d.overall_coverage >= 0.8 ? 'text-pass' : 'text-medium'}">${(d.overall_coverage*100).toFixed(0)}%</div>
+            `;
+
+            document.getElementById('ai600Areas').innerHTML = d.risk_areas.map(r => {
+                const cls = r.status === 'PASS' ? 'badge-pass' : r.status === 'PARTIAL' ? 'badge-medium' : 'badge-critical';
+                const barCls = r.status === 'PASS' ? '' : r.status === 'PARTIAL' ? 'warn' : 'fail';
+                return `
+                    <div class="risk-area-row">
+                        <span class="font-mono text-xs text-tertiary">${r.id}</span>
+                        <div>
+                            <div class="text-sm">${r.name}</div>
+                            <div class="progress mt-1"><div class="progress-fill ${barCls}" style="width: ${r.coverage*100}%"></div></div>
+                        </div>
+                        <span class="text-sm font-bold">${(r.coverage*100).toFixed(0)}%</span>
+                        <span class="badge ${cls}">${r.status}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadPolicyCompliance() {
+            const r = await fetch('/api/grc/policies');
+            const d = await r.json();
+            document.getElementById('policyCompliance').innerHTML = d.policies.slice(0, 5).map(p => {
+                const total = p.compliant_systems + p.non_compliant_systems;
+                const rate = total > 0 ? (p.compliant_systems / total * 100) : 0;
+                return `
+                    <div class="flex justify-between items-center mb-2">
+                        <div>
+                            <span class="font-mono text-xs">${p.id}</span>
+                            <span class="text-sm ml-2">${p.requirement.substring(0, 50)}…</span>
+                        </div>
+                        <span class="text-sm ${rate >= 80 ? 'text-pass' : 'text-critical'}">${p.compliant_systems}/${total}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                ['rmfTab', 'ai600Tab', 'approvalsTab'].forEach(id => {
+                    document.getElementById(id).style.display = 'none';
+                });
+                document.getElementById(t.dataset.tab + 'Tab').style.display = 'block';
+            });
+        });
+
+        loadRMF();
+        loadAI600();
+        loadPolicyCompliance();
+    </script>
+</body>
+</html>

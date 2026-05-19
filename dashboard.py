@@ -33,6 +33,7 @@ from api.analytics import router as analytics_router
 from api.security import router as security_router
 from api.domains_api import router as domains_api_router
 from api.batch import router as batch_router
+from api.grc import router as grc_router
 
 load_dotenv()
 
@@ -112,6 +113,7 @@ app.include_router(analytics_router)
 app.include_router(security_router)
 app.include_router(domains_api_router)
 app.include_router(batch_router)
+app.include_router(grc_router)
 
 
 @app.get("/api/health")
@@ -155,39 +157,78 @@ async def get_compliance_report(
     return HTMLResponse(content=html)
 
 
-@app.get("/analytics")
-async def serve_analytics() -> FileResponse:
-    """Serve the analytics page."""
-    static_dir = Path(__file__).parent / "static"
-    return FileResponse(static_dir / "analytics.html", media_type="text/html")
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _page(filename: str) -> FileResponse:
+    return FileResponse(STATIC_DIR / filename, media_type="text/html")
+
+
+# === Primary navigation pages ===
+@app.get("/")
+async def page_overview():
+    return _page("index.html")
+
+
+@app.get("/ai-systems")
+async def page_ai_systems():
+    return _page("ai-systems.html")
+
+
+@app.get("/governance")
+async def page_governance():
+    return _page("governance.html")
 
 
 @app.get("/security")
-async def serve_security() -> FileResponse:
-    """Serve the security testing page."""
-    static_dir = Path(__file__).parent / "static"
-    return FileResponse(static_dir / "security.html", media_type="text/html")
+async def page_security():
+    return _page("security.html")
+
+
+@app.get("/runtime")
+async def page_runtime():
+    return _page("runtime.html")
+
+
+@app.get("/evals")
+async def page_evals():
+    return _page("evals.html")
+
+
+@app.get("/findings")
+async def page_findings():
+    return _page("findings.html")
+
+
+@app.get("/release-gates")
+async def page_release_gates():
+    return _page("release-gates.html")
+
+
+@app.get("/evidence")
+async def page_evidence():
+    return _page("evidence.html")
+
+
+@app.get("/policies")
+async def page_policies():
+    return _page("policies.html")
+
+
+# === Secondary pages ===
+@app.get("/analytics")
+async def page_analytics():
+    return _page("analytics.html")
 
 
 @app.get("/domains")
-async def serve_domains_page() -> FileResponse:
-    """Serve the domain builder page."""
-    static_dir = Path(__file__).parent / "static"
-    return FileResponse(static_dir / "domains.html", media_type="text/html")
+async def page_domains():
+    return _page("domains.html")
 
 
 @app.get("/compare")
-async def serve_compare_page() -> FileResponse:
-    """Serve the model comparison page."""
-    static_dir = Path(__file__).parent / "static"
-    return FileResponse(static_dir / "compare.html", media_type="text/html")
-
-
-@app.get("/")
-async def serve_dashboard() -> FileResponse:
-    """Serve the main dashboard HTML."""
-    static_dir = Path(__file__).parent / "static"
-    return FileResponse(static_dir / "index.html", media_type="text/html")
+async def page_compare():
+    return _page("compare.html")
 
 
 if __name__ == "__main__":

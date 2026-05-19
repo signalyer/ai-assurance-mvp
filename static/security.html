@@ -2,370 +2,224 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Security Testing — AI Assurance</title>
+    <title>Security — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .probe-card {
-            border: 1px solid #30363d;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 0.75rem;
-            background: #0d1117;
-        }
-
-        .probe-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .probe-name {
-            font-weight: 600;
-            color: #fff;
-        }
-
-        .probe-prompt {
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-            color: #8b949e;
-            background: #161b22;
-            padding: 0.5rem;
-            border-radius: 0.25rem;
-            margin: 0.5rem 0;
-            word-wrap: break-word;
-        }
-
-        .probe-response {
-            font-size: 0.85rem;
-            color: #c9d1d9;
-            background: #161b22;
-            padding: 0.75rem;
-            border-radius: 0.25rem;
-            max-height: 150px;
-            overflow-y: auto;
-            border-left: 3px solid #30363d;
-        }
-
-        .probe-response.resisted {
-            border-left-color: #22c55e;
-        }
-
-        .probe-response.failed {
-            border-left-color: #ef4444;
-        }
-
-        .checkbox-list {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            font-size: 0.875rem;
-        }
-
-        .checkbox-item input {
-            margin: 0;
-        }
-
-        .guardrail-test {
+        .owasp-row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1rem;
+            grid-template-columns: 80px 1fr 100px 100px 100px 110px;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.1s;
         }
+
+        .owasp-row:hover { background: var(--bg-card-hover); }
+        .owasp-row:last-child { border-bottom: none; }
+
+        .owasp-row.critical { border-left: 3px solid var(--critical); }
+        .owasp-row.high { border-left: 3px solid var(--high); }
+        .owasp-row.medium { border-left: 3px solid var(--medium); }
+        .owasp-row.pass { border-left: 3px solid var(--pass); }
     </style>
 </head>
 <body>
-    <nav class="nav">
-        <div class="nav-brand">
-            <h1>AI Assurance</h1>
-            <span class="subtitle">Security Testing</span>
-        </div>
-        <div class="nav-links">
-            <a href="/" class="nav-link">Dashboard</a>
-            <a href="/analytics" class="nav-link">Analytics</a>
-            <a href="/security" class="nav-link active">Security</a>
-            <a href="/domains" class="nav-link">Domains</a>
-            <a href="/compare" class="nav-link">Compare</a>
-        </div>
-        <div class="nav-status">
-            <span class="status-dot" id="statusDot"></span>
-            <span id="statusText">Loading...</span>
-        </div>
-    </nav>
+    <div id="topbar"></div>
 
     <div class="page">
         <div class="page-header">
-            <h2>Adversarial Testing & Guardrails</h2>
-            <div class="desc">Test model robustness against jailbreaks, prompt injection, and data exfiltration attempts</div>
+            <div>
+                <div class="page-title">Security Posture</div>
+                <div class="page-subtitle">OWASP Top 10 for LLM Applications + OWASP Agentic AI Top 10 risk posture</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm">Export Report</button>
+                <button class="btn btn-sm btn-primary">Run Red Team</button>
+            </div>
         </div>
 
-        <div class="card">
-            <h3>Run Adversarial Test Suite</h3>
-            <div class="form-group">
-                <label class="form-label">Model</label>
-                <select class="form-select" id="modelSelect">
-                    <option value="anthropic|claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                    <option value="openai|gpt-4o-mini">GPT-4o Mini</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Categories</label>
-                <div class="checkbox-list" id="categoryList">
-                    <div class="loading">Loading...</div>
-                </div>
-            </div>
-
-            <button class="btn" id="runBtn">
-                <span id="runBtnText">Run Test Suite</span>
-                <span class="spinner" id="runSpinner" style="display: none;"></span>
-            </button>
-            <span id="runStatus" style="margin-left: 1rem; color: #8b949e;"></span>
+        <div class="tabs">
+            <button class="tab active" data-tab="llm">OWASP LLM Top 10</button>
+            <button class="tab" data-tab="agentic">OWASP Agentic AI Top 10</button>
+            <button class="tab" data-tab="adversarial">Adversarial Testing</button>
         </div>
 
-        <div class="card" id="resultsCard" style="display: none;">
-            <h3>Test Results</h3>
-            <div class="stat-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Security Score</div>
-                    <div class="stat-value" id="secScore">—</div>
+        <!-- OWASP LLM -->
+        <div id="llmTab">
+            <div class="kpi-grid" id="llmKpi"></div>
+            <div class="card" style="padding: 0; overflow: hidden;">
+                <div class="card-header" style="padding: 1rem 1.25rem;">
+                    <div>
+                        <div class="card-title">OWASP Top 10 for LLM Applications (2025)</div>
+                        <div class="card-subtitle">Findings mapped to each category</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Risk Level</div>
-                    <div class="stat-value" id="riskLevel">—</div>
+                <div class="owasp-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); cursor: default; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
+                    <div>ID</div>
+                    <div>Category</div>
+                    <div>Findings</div>
+                    <div>Critical</div>
+                    <div>Systems</div>
+                    <div>Status</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Probes Resisted</div>
-                    <div class="stat-value success" id="resistedCount">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Failures</div>
-                    <div class="stat-value danger" id="failedCount">0</div>
-                </div>
+                <div id="llmTable"></div>
             </div>
-
-            <div id="probeResults"></div>
         </div>
 
-        <div class="card">
-            <h3>Guardrails Live Test</h3>
-            <p style="color: #8b949e; margin-bottom: 1rem;">Test if a prompt or response would be blocked by guardrails</p>
-            <div class="form-group">
-                <label class="form-label">Direction</label>
-                <select class="form-select" id="grDirection">
-                    <option value="input">Input (before model)</option>
-                    <option value="output">Output (after model)</option>
-                </select>
+        <!-- OWASP Agentic -->
+        <div id="agenticTab" style="display: none;">
+            <div class="kpi-grid" id="agenticKpi"></div>
+            <div class="card" style="padding: 0; overflow: hidden;">
+                <div class="card-header" style="padding: 1rem 1.25rem;">
+                    <div>
+                        <div class="card-title">OWASP Top 10 for Agentic AI</div>
+                        <div class="card-subtitle">Tool-using and autonomous agent risks</div>
+                    </div>
+                </div>
+                <div class="owasp-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); cursor: default; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
+                    <div>ID</div>
+                    <div>Category</div>
+                    <div>Findings</div>
+                    <div>Critical</div>
+                    <div>Systems</div>
+                    <div>Status</div>
+                </div>
+                <div id="agenticTable"></div>
             </div>
-            <div class="form-group">
-                <label class="form-label">Domain (optional)</label>
-                <select class="form-select" id="grDomain">
-                    <option value="">None</option>
-                    <option value="healthcare">Healthcare</option>
-                    <option value="financial_services">Financial Services</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Text to test</label>
-                <textarea class="form-textarea" id="grText" placeholder="Enter prompt or response to test..."></textarea>
-            </div>
-            <button class="btn" id="grTestBtn">Test Guardrails</button>
+        </div>
 
-            <div id="grResult" style="margin-top: 1rem;"></div>
+        <!-- Adversarial -->
+        <div id="adversarialTab" style="display: none;">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Adversarial Test Suite</div>
+                        <div class="card-subtitle">Jailbreak, prompt injection, and data exfiltration probes</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="runAdvBtn">Run Test Suite</button>
+                </div>
+                <div id="adversarialContent">
+                    <div class="grid-3" id="advCategories"></div>
+                </div>
+            </div>
         </div>
     </div>
 
+    <script src="/static/shared.js"></script>
     <script>
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
+        initPage('/security');
 
-        async function checkHealth() {
-            try {
-                const r = await fetch('/api/health');
-                const d = await r.json();
-                if (d.status === 'ready') {
-                    statusDot.classList.add('ready');
-                    statusText.textContent = 'Ready';
-                } else {
-                    statusText.textContent = 'Setup needed';
-                }
-            } catch (e) {
-                statusText.textContent = 'Error';
-            }
+        function statusBadgeOwasp(status) {
+            const map = {
+                CRITICAL: 'badge-critical',
+                HIGH_RISK: 'badge-high',
+                MEDIUM: 'badge-medium',
+                LOW: 'badge-low',
+                PASS: 'badge-pass',
+            };
+            return `<span class="badge ${map[status] || 'badge-neutral'}">${status.replace(/_/g, ' ')}</span>`;
         }
 
-        async function loadCategories() {
-            try {
-                const r = await fetch('/api/security/adversarial/categories');
-                const d = await r.json();
-
-                const list = document.getElementById('categoryList');
-                list.innerHTML = d.categories.map(c => `
-                    <label class="checkbox-item">
-                        <input type="checkbox" name="category" value="${c.name}" checked>
-                        <span>${c.name.replace(/_/g, ' ')} (${c.probe_count})</span>
-                    </label>
-                `).join('');
-            } catch (e) {
-                console.error(e);
-            }
+        function severityClass(status) {
+            const map = {
+                CRITICAL: 'critical',
+                HIGH_RISK: 'high',
+                MEDIUM: 'medium',
+                LOW: 'pass',
+                PASS: 'pass',
+            };
+            return map[status] || '';
         }
 
-        async function runTests() {
-            const btn = document.getElementById('runBtn');
-            const btnText = document.getElementById('runBtnText');
-            const spinner = document.getElementById('runSpinner');
-            const status = document.getElementById('runStatus');
+        async function loadLLM() {
+            const r = await fetch('/api/grc/security/owasp-llm');
+            const d = await r.json();
 
-            const checked = Array.from(document.querySelectorAll('input[name="category"]:checked')).map(c => c.value);
-            if (checked.length === 0) {
-                status.textContent = 'Please select at least one category';
-                status.style.color = '#ef4444';
-                return;
-            }
+            const totalFindings = d.items.reduce((s, i) => s + i.open_findings, 0);
+            const totalCritical = d.items.reduce((s, i) => s + i.critical, 0);
+            const atRisk = d.items.filter(i => i.status === 'CRITICAL' || i.status === 'HIGH_RISK').length;
+            const passing = d.items.filter(i => i.status === 'PASS').length;
 
-            const [provider, model] = document.getElementById('modelSelect').value.split('|');
+            document.getElementById('llmKpi').innerHTML = `
+                <div class="kpi-card critical"><div class="kpi-label">Open Findings</div><div class="kpi-value critical">${totalFindings}</div></div>
+                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${totalCritical}</div></div>
+                <div class="kpi-card high"><div class="kpi-label">Categories at Risk</div><div class="kpi-value high">${atRisk}</div></div>
+                <div class="kpi-card pass"><div class="kpi-label">Passing</div><div class="kpi-value pass">${passing}</div></div>
+            `;
 
-            btn.disabled = true;
-            btnText.style.display = 'none';
-            spinner.style.display = 'inline-block';
-            status.style.color = '#8b949e';
-            status.textContent = 'Running probes... (this may take a minute)';
-
-            try {
-                const url = `/api/security/adversarial/run?provider=${provider}&model=${encodeURIComponent(model)}&categories=${checked.join(',')}`;
-                const r = await fetch(url, { method: 'POST' });
-                const data = await r.json();
-
-                if (data.error) {
-                    status.textContent = 'Error: ' + data.error;
-                    status.style.color = '#ef4444';
-                } else {
-                    renderResults(data);
-                    status.textContent = `Completed: ${data.resisted_count}/${data.total_probes} resisted`;
-                    status.style.color = '#22c55e';
-                }
-            } catch (e) {
-                status.textContent = 'Error: ' + e.message;
-                status.style.color = '#ef4444';
-            } finally {
-                btn.disabled = false;
-                btnText.style.display = 'inline';
-                spinner.style.display = 'none';
-            }
+            document.getElementById('llmTable').innerHTML = d.items.map(item => `
+                <div class="owasp-row ${severityClass(item.status)}">
+                    <span class="font-mono font-bold">${item.id}</span>
+                    <div class="text-sm font-bold">${item.name}</div>
+                    <span class="text-sm">${item.open_findings}</span>
+                    <span class="text-sm ${item.critical > 0 ? 'text-critical font-bold' : 'text-tertiary'}">${item.critical}</span>
+                    <span class="text-sm text-secondary">${item.systems_affected}</span>
+                    <div>${statusBadgeOwasp(item.status)}</div>
+                </div>
+            `).join('');
         }
 
-        function renderResults(data) {
-            document.getElementById('resultsCard').style.display = 'block';
-            document.getElementById('secScore').textContent = (data.security_score * 100).toFixed(0) + '%';
-            const riskEl = document.getElementById('riskLevel');
-            riskEl.textContent = data.risk_level;
-            riskEl.className = 'stat-value ' + ({
-                LOW: 'success',
-                MEDIUM: 'warning',
-                HIGH: 'danger',
-                CRITICAL: 'danger'
-            }[data.risk_level] || '');
-            document.getElementById('resistedCount').textContent = data.resisted_count;
-            document.getElementById('failedCount').textContent = data.failed_count;
+        async function loadAgentic() {
+            const r = await fetch('/api/grc/security/owasp-agentic');
+            const d = await r.json();
 
-            const container = document.getElementById('probeResults');
-            container.innerHTML = data.results.map(r => {
-                if (r.error) {
-                    return `<div class="probe-card">
-                        <div class="probe-header">
-                            <span class="probe-name">${r.probe_name}</span>
-                            <span class="badge badge-medium">ERROR</span>
-                        </div>
-                        <div style="color: #ef4444; font-size: 0.875rem;">${r.error}</div>
-                    </div>`;
-                }
+            const totalFindings = d.items.reduce((s, i) => s + i.open_findings, 0);
+            const totalCritical = d.items.reduce((s, i) => s + i.critical, 0);
+            const atRisk = d.items.filter(i => i.status === 'CRITICAL' || i.status === 'HIGH_RISK').length;
+            const passing = d.items.filter(i => i.status === 'PASS').length;
 
-                const resistedBadge = r.resisted
-                    ? '<span class="badge badge-pass">RESISTED</span>'
-                    : '<span class="badge badge-fail">FAILED</span>';
+            document.getElementById('agenticKpi').innerHTML = `
+                <div class="kpi-card critical"><div class="kpi-label">Open Findings</div><div class="kpi-value critical">${totalFindings}</div></div>
+                <div class="kpi-card critical"><div class="kpi-label">Critical</div><div class="kpi-value critical">${totalCritical}</div></div>
+                <div class="kpi-card high"><div class="kpi-label">Categories at Risk</div><div class="kpi-value high">${atRisk}</div></div>
+                <div class="kpi-card pass"><div class="kpi-label">Passing</div><div class="kpi-value pass">${passing}</div></div>
+            `;
 
-                const sevBadge = `<span class="badge badge-${r.severity.toLowerCase()}">${r.severity}</span>`;
+            document.getElementById('agenticTable').innerHTML = d.items.map(item => `
+                <div class="owasp-row ${severityClass(item.status)}">
+                    <span class="font-mono font-bold">${item.id}</span>
+                    <div class="text-sm font-bold">${item.name}</div>
+                    <span class="text-sm">${item.open_findings}</span>
+                    <span class="text-sm ${item.critical > 0 ? 'text-critical font-bold' : 'text-tertiary'}">${item.critical}</span>
+                    <span class="text-sm text-secondary">${item.systems_affected}</span>
+                    <div>${statusBadgeOwasp(item.status)}</div>
+                </div>
+            `).join('');
+        }
 
-                return `<div class="probe-card">
-                    <div class="probe-header">
-                        <span class="probe-name">[${r.category}] ${r.probe_name}</span>
-                        <div style="display: flex; gap: 0.5rem;">
-                            ${sevBadge}
-                            ${resistedBadge}
-                        </div>
+        async function loadAdversarial() {
+            const r = await fetch('/api/security/adversarial/categories');
+            const d = await r.json();
+
+            document.getElementById('advCategories').innerHTML = d.categories.map(c => `
+                <div class="card">
+                    <div class="card-header" style="padding-bottom: 0.5rem;">
+                        <div class="card-title" style="text-transform: capitalize;">${c.name.replace(/_/g, ' ')}</div>
+                        <span class="badge badge-info">${c.probe_count} probes</span>
                     </div>
-                    <div class="probe-prompt">${r.prompt}</div>
-                    <div class="probe-response ${r.resisted ? 'resisted' : 'failed'}">${r.response || 'No response'}</div>
-                    <div style="font-size: 0.75rem; color: #8b949e; margin-top: 0.5rem;">
-                        ${r.reason} • Confidence: ${r.confidence} • Latency: ${r.latency_ms}ms
+                    <div class="text-xs text-secondary">
+                        ${c.probes.map(p => `<div style="padding: 0.25rem 0;">• ${p}</div>`).join('')}
                     </div>
-                </div>`;
-            }).join('');
+                </div>
+            `).join('');
         }
 
-        async function testGuardrails() {
-            const text = document.getElementById('grText').value.trim();
-            if (!text) return;
-
-            const direction = document.getElementById('grDirection').value;
-            const domain = document.getElementById('grDomain').value || null;
-
-            try {
-                const r = await fetch('/api/security/guardrails/check', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ text, direction, domain }),
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                ['llmTab', 'agenticTab', 'adversarialTab'].forEach(id => {
+                    document.getElementById(id).style.display = 'none';
                 });
-                const data = await r.json();
+                document.getElementById(t.dataset.tab + 'Tab').style.display = 'block';
+            });
+        });
 
-                const container = document.getElementById('grResult');
-                if (direction === 'input') {
-                    container.innerHTML = `
-                        <div class="card" style="margin: 0; background: ${data.allowed ? '#0d2818' : '#2a0f0f'}; border-color: ${data.allowed ? '#22c55e' : '#ef4444'};">
-                            <h3 style="margin-bottom: 0.5rem;">${data.allowed ? '✓ Allowed' : '✗ Blocked'}</h3>
-                            <p style="color: #c9d1d9; font-size: 0.875rem;">${data.reason}</p>
-                            ${data.violation ? `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: #8b949e;">
-                                Category: ${data.violation.category}<br>
-                                Severity: ${data.violation.severity}
-                            </div>` : ''}
-                        </div>
-                    `;
-                } else {
-                    container.innerHTML = `
-                        <div class="card" style="margin: 0; background: ${data.safe ? '#0d2818' : '#2a0f0f'}; border-color: ${data.safe ? '#22c55e' : '#ef4444'};">
-                            <h3 style="margin-bottom: 0.5rem;">${data.safe ? '✓ Safe' : '✗ ' + data.violation_count + ' violations'}</h3>
-                            ${data.redacted ? '<p style="color: #f59e0b;">⚠ PII automatically redacted</p>' : ''}
-                            <p style="color: #c9d1d9; font-size: 0.875rem; margin-top: 0.5rem;">Filtered response:</p>
-                            <pre style="background: #0d1117; padding: 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; white-space: pre-wrap; margin-top: 0.5rem;">${data.response}</pre>
-                            ${data.violations.length > 0 ? `<div style="margin-top: 0.5rem; font-size: 0.75rem;">
-                                ${data.violations.map(v => `<div>• ${v.category}: ${v.message}</div>`).join('')}
-                            </div>` : ''}
-                        </div>
-                    `;
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        document.getElementById('runBtn').addEventListener('click', runTests);
-        document.getElementById('grTestBtn').addEventListener('click', testGuardrails);
-
-        checkHealth();
-        loadCategories();
+        loadLLM();
+        loadAgentic();
+        loadAdversarial();
     </script>
 </body>
 </html>

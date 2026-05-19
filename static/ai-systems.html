@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Systems — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">AI System Inventory</div>
+                <div class="page-subtitle">Production and pre-production AI systems under governance</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm">Export Inventory</button>
+                <button class="btn btn-sm btn-primary">+ Register System</button>
+            </div>
+        </div>
+
+        <div class="filter-bar">
+            <input type="text" class="filter-input" placeholder="Search systems…" id="searchInput">
+            <select class="filter-select" id="riskFilter">
+                <option value="">All risk levels</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+            </select>
+            <select class="filter-select" id="decisionFilter">
+                <option value="">All decisions</option>
+                <option value="APPROVED">Approved</option>
+                <option value="CONDITIONAL_PILOT">Conditional Pilot</option>
+                <option value="HOLD">Hold</option>
+                <option value="REJECT">Reject</option>
+            </select>
+            <select class="filter-select" id="statusFilter">
+                <option value="">All statuses</option>
+                <option value="PRODUCTION">Production</option>
+                <option value="PILOT">Pilot</option>
+                <option value="STAGED">Staged</option>
+            </select>
+        </div>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="data-table" id="systemsTable">
+                <thead>
+                    <tr>
+                        <th>System Name</th>
+                        <th>Business Owner</th>
+                        <th>Domain</th>
+                        <th>Risk Level</th>
+                        <th>Autonomy</th>
+                        <th>Data Classes</th>
+                        <th>Runtime</th>
+                        <th>Decision</th>
+                        <th style="text-align: right;">Open Findings</th>
+                        <th>Last Assessment</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Detail Drawer -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <div class="drawer-header">
+            <div class="drawer-title" id="drawerTitle">System Details</div>
+            <button class="drawer-close" onclick="closeDrawer()">×</button>
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/ai-systems');
+        let allSystems = [];
+
+        async function load() {
+            const r = await fetch('/api/grc/ai-systems');
+            const d = await r.json();
+            allSystems = d.systems;
+            render();
+
+            // Check for ?id= param
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('id')) openDrawer(params.get('id'));
+        }
+
+        function render() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const risk = document.getElementById('riskFilter').value;
+            const decision = document.getElementById('decisionFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            const filtered = allSystems.filter(s =>
+                (!search || s.name.toLowerCase().includes(search) || s.domain.toLowerCase().includes(search)) &&
+                (!risk || s.risk_level === risk) &&
+                (!decision || s.release_decision === decision) &&
+                (!status || s.runtime_status === status)
+            );
+
+            const tbody = document.querySelector('#systemsTable tbody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No systems match filters</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(s => `
+                <tr onclick="openDrawer('${s.id}')">
+                    <td>
+                        <div class="cell-primary">${s.name}</div>
+                        <div class="cell-secondary">${s.id}</div>
+                    </td>
+                    <td class="text-sm">${s.business_owner.split(',')[0]}</td>
+                    <td class="text-sm text-secondary">${s.domain}</td>
+                    <td>${severityBadge(s.risk_level)}</td>
+                    <td class="text-sm text-secondary">${s.autonomy_level.split(' ').slice(0, 3).join(' ')}…</td>
+                    <td class="text-xs text-tertiary">${s.data_classes.slice(0, 3).join(', ')}${s.data_classes.length > 3 ? '…' : ''}</td>
+                    <td class="text-sm">${runtimeStatusDot(s.runtime_status)}</td>
+                    <td>${decisionBadge(s.release_decision)}</td>
+                    <td style="text-align: right;">
+                        <span class="font-bold">${s.open_findings}</span>
+                        ${s.critical_findings > 0 ? `<span class="text-critical text-xs"> (${s.critical_findings} P0)</span>` : ''}
+                    </td>
+                    <td class="text-sm text-secondary">${s.last_assessment}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function openDrawer(systemId) {
+            const r = await fetch(`/api/grc/ai-systems/${systemId}`);
+            const s = await r.json();
+            document.getElementById('drawerTitle').textContent = s.name;
+
+            document.getElementById('drawerBody').innerHTML = `
+                <div class="drawer-section">
+                    <div class="flex gap-2 mb-3">
+                        ${severityBadge(s.risk_level)}
+                        ${decisionBadge(s.release_decision)}
+                        <span class="badge badge-neutral">${runtimeStatusDot(s.runtime_status)}</span>
+                    </div>
+                    <div class="text-sm text-secondary">${s.description}</div>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">System Details</div>
+                    <dl class="def-list">
+                        <dt>ID</dt><dd class="font-mono">${s.id}</dd>
+                        <dt>Business Owner</dt><dd>${s.business_owner}</dd>
+                        <dt>Technical Owner</dt><dd>${s.technical_owner}</dd>
+                        <dt>Domain</dt><dd>${s.domain}</dd>
+                        <dt>Use Case</dt><dd>${s.use_case}</dd>
+                        <dt>Model</dt><dd class="font-mono">${s.model}</dd>
+                        <dt>Autonomy</dt><dd>${s.autonomy_level}</dd>
+                        <dt>HITL</dt><dd>${s.human_oversight}</dd>
+                        <dt>Deployment</dt><dd>${s.deployment_target}</dd>
+                        <dt>Data Residency</dt><dd>${s.data_residency}</dd>
+                        <dt>Trust Boundary</dt><dd>${s.trust_boundaries}</dd>
+                    </dl>
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Data Classes Handled</div>
+                    <div class="flex gap-1" style="flex-wrap: wrap;">
+                        ${s.data_classes.map(d => `<span class="framework-badge">${d}</span>`).join('')}
+                    </div>
+                </div>
+
+                ${s.release_gates ? `
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Release Gate Status</div>
+                    <div class="text-sm mb-2">
+                        <span class="font-bold">${s.release_gates.gates.filter(g=>g.passed).length}/${s.release_gates.gates.length} gates passing</span>
+                        · approved by ${s.release_gates.approver}
+                    </div>
+                    ${s.release_gates.gates.filter(g=>!g.passed).map(g => `
+                        <div class="text-xs mb-2" style="padding: 0.5rem; background: var(--critical-bg); border: 1px solid var(--critical-border); border-radius: 4px;">
+                            <span class="font-mono text-critical">${g.id}</span> ${g.note || g.actual}
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Open Findings (${s.findings.filter(f=>f.status==='OPEN'||f.status==='IN_PROGRESS').length})</div>
+                    ${s.findings.filter(f=>f.status==='OPEN'||f.status==='IN_PROGRESS').slice(0, 5).map(f => `
+                        <div style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 0.5rem;">
+                            <div class="flex justify-between items-center">
+                                <span class="font-mono text-xs">${f.id}</span>
+                                ${severityBadge(f.severity)}
+                            </div>
+                            <div class="text-sm mt-1">${f.title}</div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Last Assessment</div>
+                    <div class="text-sm">${s.last_assessment} · next ${s.next_assessment}</div>
+                </div>
+            `;
+
+            document.getElementById('drawerOverlay').classList.add('open');
+            document.getElementById('drawer').classList.add('open');
+        }
+
+        function closeDrawer() {
+            document.getElementById('drawerOverlay').classList.remove('open');
+            document.getElementById('drawer').classList.remove('open');
+            window.history.replaceState({}, '', '/ai-systems');
+        }
+
+        ['searchInput', 'riskFilter', 'decisionFilter', 'statusFilter'].forEach(id => {
+            document.getElementById(id).addEventListener('input', render);
+        });
+
+        load();
+    </script>
+</body>
+</html>

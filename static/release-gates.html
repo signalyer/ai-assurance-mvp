@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Release Gates — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .gate-system {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .gate-system-header {
+            padding: 1rem 1.25rem;
+            background: var(--bg-elevated);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .gate-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1px;
+            background: var(--border);
+        }
+
+        .gate-result {
+            background: var(--bg-card);
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .gate-result-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .gate-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .gate-actual {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .gate-icon-pass {
+            color: var(--pass);
+            font-size: 14px;
+        }
+
+        .gate-icon-fail {
+            color: var(--critical);
+            font-size: 14px;
+        }
+
+        .rule-card {
+            padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .gate-list { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Release Gates</div>
+                <div class="page-subtitle">Automated release decision engine — production blocked when gates fail</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm">Configure Gates</button>
+                <button class="btn btn-sm btn-primary">Run All Gates</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="results">Per-System Results</button>
+            <button class="tab" data-tab="rules">Gate Rule Library</button>
+        </div>
+
+        <div id="resultsTab">
+            <div class="kpi-grid" id="gatesKpi"></div>
+            <div id="gateResults"></div>
+        </div>
+
+        <div id="rulesTab" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Release Gate Rules</div>
+                        <div class="card-subtitle">10 rules — block production deployment when violated</div>
+                    </div>
+                </div>
+                <div id="rulesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/release-gates');
+
+        async function loadResults() {
+            const r = await fetch('/api/grc/release-gates/results');
+            const d = await r.json();
+
+            // KPIs
+            const total = d.results.length;
+            const passed = d.results.filter(g => g.overall_status === 'PASSED').length;
+            const conditional = d.results.filter(g => g.overall_status === 'CONDITIONAL').length;
+            const blocked = d.results.filter(g => g.overall_status === 'FAILED').length;
+
+            document.getElementById('gatesKpi').innerHTML = `
+                <div class="kpi-card info"><div class="kpi-label">Total Systems</div><div class="kpi-value">${total}</div></div>
+                <div class="kpi-card pass"><div class="kpi-label">Approved</div><div class="kpi-value pass">${passed}</div></div>
+                <div class="kpi-card medium"><div class="kpi-label">Conditional</div><div class="kpi-value">${conditional}</div></div>
+                <div class="kpi-card critical"><div class="kpi-label">Blocked / Hold</div><div class="kpi-value critical">${blocked}</div></div>
+            `;
+
+            // Per-system results
+            const container = document.getElementById('gateResults');
+            container.innerHTML = d.results.map(g => {
+                const passedCount = g.gates.filter(x => x.passed).length;
+                const total = g.gates.length;
+                const cls = g.overall_status === 'PASSED' ? 'pass' : g.overall_status === 'CONDITIONAL' ? 'warn' : 'fail';
+
+                return `
+                    <div class="gate-system">
+                        <div class="gate-system-header">
+                            <div>
+                                <div class="text-sm font-bold">${g.system_name}</div>
+                                <div class="text-xs text-secondary mt-1">
+                                    Approver: ${g.approver} · Decision: ${g.decision_date} · ${passedCount}/${total} gates passing
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div style="width: 200px;">
+                                    <div class="progress"><div class="progress-fill ${cls}" style="width: ${passedCount/total*100}%"></div></div>
+                                </div>
+                                ${decisionBadge(g.decision)}
+                            </div>
+                        </div>
+                        <div class="gate-list">
+                            ${g.gates.map(gate => `
+                                <div class="gate-result">
+                                    <div class="gate-result-info">
+                                        <div class="gate-name">
+                                            <span class="font-mono text-tertiary">${gate.id}</span> ·
+                                            ${getGateName(gate.id)}
+                                        </div>
+                                        <div class="gate-actual">${gate.actual}${gate.note ? ' — ' + gate.note : ''}</div>
+                                    </div>
+                                    <span class="${gate.passed ? 'gate-icon-pass' : 'gate-icon-fail'}">${gate.passed ? '✓' : '✗'}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        let GATE_RULES = [];
+        function getGateName(id) {
+            const r = GATE_RULES.find(x => x.id === id);
+            return r ? r.name : id;
+        }
+
+        async function loadRules() {
+            const r = await fetch('/api/grc/release-gates/rules');
+            const d = await r.json();
+            GATE_RULES = d.rules;
+
+            document.getElementById('rulesList').innerHTML = d.rules.map(rule => `
+                <div class="rule-card">
+                    <div class="flex justify-between items-center mb-2">
+                        <div>
+                            <div class="flex gap-2 items-center">
+                                <span class="font-mono text-sm font-bold">${rule.id}</span>
+                                <span class="badge ${rule.severity === 'BLOCK' ? 'badge-critical' : 'badge-medium'}">${rule.severity}</span>
+                            </div>
+                            <div class="text-sm mt-1">${rule.name}</div>
+                        </div>
+                    </div>
+                    <div class="text-xs text-secondary font-mono">${rule.rule}</div>
+                </div>
+            `).join('');
+        }
+
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                const tab = t.dataset.tab;
+                document.getElementById('resultsTab').style.display = tab === 'results' ? 'block' : 'none';
+                document.getElementById('rulesTab').style.display = tab === 'rules' ? 'block' : 'none';
+            });
+        });
+
+        loadRules().then(loadResults);
+    </script>
+</body>
+</html>

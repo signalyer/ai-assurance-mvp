@@ -2,839 +2,482 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Assurance Dashboard — by SignalLayer</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: #0f1117;
-            color: #c9d1d9;
-            line-height: 1.6;
-        }
-
-        .container {
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Header */
-        header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background-color: #161b22;
-            border-bottom: 1px solid #30363d;
-            padding: 1rem 2rem;
-            z-index: 100;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #fff;
-        }
-
-        header .subtitle {
-            font-size: 0.875rem;
-            color: #8b949e;
-            margin-left: 1rem;
-        }
-
-        header .controls {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        .api-status {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            font-size: 0.875rem;
-        }
-
-        .api-status-indicator {
-            display: inline-block;
-            width: 0.5rem;
-            height: 0.5rem;
-            border-radius: 50%;
-            background-color: #ef4444;
-        }
-
-        .api-status-indicator.ready {
-            background-color: #22c55e;
-        }
-
-        .domain-select {
-            background-color: #0d1117;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        .domain-select:hover {
-            border-color: #58a6ff;
-        }
-
-        .domain-select:focus {
-            outline: none;
-            border-color: #58a6ff;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.1);
-        }
-
-        .demo-button {
-            background-color: #6366f1;
-            color: white;
-            border: none;
-            padding: 0.625rem 1.25rem;
-            border-radius: 0.375rem;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .demo-button:hover:not(:disabled) {
-            background-color: #4f46e5;
-        }
-
-        .demo-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .spinner {
-            display: inline-block;
-            width: 1rem;
-            height: 1rem;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .demo-error {
-            color: #ef4444;
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            display: none;
-        }
-
-        /* Main layout */
-        main {
-            display: flex;
-            margin-top: 4rem;
-            gap: 1px;
-            height: calc(100vh - 4rem);
-            background-color: #0d1117;
-        }
-
-        .traces-panel {
-            flex: 0 0 40%;
-            border-right: 1px solid #30363d;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .detail-panel {
-            flex: 1;
-            overflow-y: auto;
-            padding: 2rem;
-        }
-
-        /* Trace list */
-        .traces-header {
-            padding: 1.5rem 1.5rem 1rem;
-            border-bottom: 1px solid #30363d;
-            background-color: #161b22;
-        }
-
-        .traces-header h2 {
-            font-size: 1rem;
-            font-weight: 600;
-            color: #fff;
-            margin-bottom: 0.5rem;
-        }
-
-        .traces-header .count {
-            font-size: 0.875rem;
-            color: #8b949e;
-        }
-
-        .traces-list {
-            flex: 1;
-            overflow-y: auto;
-            list-style: none;
-        }
-
-        .trace-item {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #21262d;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
-        }
-
-        .trace-item:hover {
-            background-color: #161b22;
-        }
-
-        .trace-item.selected {
-            background-color: #1c2128;
-            border-left: 3px solid #6366f1;
-            padding-left: calc(1.5rem - 3px);
-        }
-
-        .trace-item-content {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .trace-item-model {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #58a6ff;
-            margin-bottom: 0.25rem;
-        }
-
-        .trace-item-time {
-            font-size: 0.75rem;
-            color: #8b949e;
-            margin-bottom: 0.5rem;
-        }
-
-        .trace-item-preview {
-            font-size: 0.875rem;
-            color: #8b949e;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .risk-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .risk-low {
-            background-color: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-
-        .risk-medium {
-            background-color: rgba(245, 158, 11, 0.2);
-            color: #f59e0b;
-        }
-
-        .risk-high {
-            background-color: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        /* Empty state */
-        .traces-empty {
-            padding: 3rem 1.5rem;
-            text-align: center;
-            color: #8b949e;
-        }
-
-        .traces-error {
-            padding: 1.5rem;
-            background-color: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 0.375rem;
-            color: #ef4444;
-            font-size: 0.875rem;
-            margin: 1rem;
-        }
-
-        /* Detail panel */
-        .detail-placeholder {
-            text-align: center;
-            color: #8b949e;
-            padding: 4rem 2rem;
-        }
-
-        .detail-content {
-            display: none;
-        }
-
-        .detail-content.active {
-            display: block;
-        }
-
-        .detail-section {
-            margin-bottom: 2rem;
-        }
-
-        .detail-section h3 {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #fff;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #30363d;
-        }
-
-        .detail-meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .meta-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .meta-label {
-            font-size: 0.75rem;
-            color: #8b949e;
-            text-transform: uppercase;
-            margin-bottom: 0.25rem;
-        }
-
-        .meta-value {
-            font-size: 1rem;
-            color: #fff;
-            font-weight: 500;
-        }
-
-        .text-area {
-            background-color: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 0.375rem;
-            padding: 1rem;
-            color: #c9d1d9;
-            font-size: 0.875rem;
-            font-family: 'Courier New', monospace;
-            resize: none;
-            max-height: 200px;
-            overflow-y: auto;
-            width: 100%;
-        }
-
-        /* Metrics */
-        .metrics-grid {
-            display: grid;
-            gap: 1.5rem;
-        }
-
-        .metric-row {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem;
-            background-color: #161b22;
-            border-radius: 0.375rem;
-            border: 1px solid #30363d;
-        }
-
-        .metric-name {
-            flex: 0 0 150px;
-            font-weight: 500;
-            color: #c9d1d9;
-        }
-
-        .metric-score {
-            flex: 0 0 60px;
-            text-align: right;
-            font-weight: 600;
-            font-family: 'Courier New', monospace;
-        }
-
-        .metric-bar {
-            flex: 1;
-            height: 24px;
-            background-color: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 0.25rem;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .metric-bar-fill {
-            height: 100%;
-            background-color: #22c55e;
-            width: 0%;
-            transition: width 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding-right: 0.25rem;
-        }
-
-        .metric-bar-fill.fail {
-            background-color: #ef4444;
-        }
-
-        .metric-status {
-            flex: 0 0 60px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .status-pass {
-            color: #22c55e;
-        }
-
-        .status-fail {
-            color: #ef4444;
-        }
-
-        .status-skip {
-            color: #8b949e;
-        }
-
-        .metric-details {
-            font-size: 0.75rem;
-            color: #8b949e;
-            margin-top: 0.5rem;
-            padding-left: 1rem;
-            border-left: 2px solid #30363d;
-        }
-
-        /* Scrollbars */
-        .traces-list::-webkit-scrollbar,
-        .detail-panel::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .traces-list::-webkit-scrollbar-track,
-        .detail-panel::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .traces-list::-webkit-scrollbar-thumb,
-        .detail-panel::-webkit-scrollbar-thumb {
-            background: #30363d;
-            border-radius: 4px;
-        }
-
-        .traces-list::-webkit-scrollbar-thumb:hover,
-        .detail-panel::-webkit-scrollbar-thumb:hover {
-            background: #484f58;
-        }
-    </style>
+    <title>AI Assurance Command Center</title>
+    <link rel="stylesheet" href="/static/shared.css">
 </head>
 <body>
-    <header>
-        <div style="display: flex; align-items: center; gap: 2rem;">
-            <div>
-                <h1>AI Assurance Dashboard</h1>
-                <span class="subtitle">by SignalLayer</span>
-            </div>
-            <div style="display: flex; gap: 0.25rem;">
-                <a href="/" style="padding: 0.5rem 1rem; color: #fff; text-decoration: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500; background: #1f6feb;">Dashboard</a>
-                <a href="/analytics" style="padding: 0.5rem 1rem; color: #8b949e; text-decoration: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">Analytics</a>
-                <a href="/security" style="padding: 0.5rem 1rem; color: #8b949e; text-decoration: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">Security</a>
-                <a href="/domains" style="padding: 0.5rem 1rem; color: #8b949e; text-decoration: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">Domains</a>
-                <a href="/compare" style="padding: 0.5rem 1rem; color: #8b949e; text-decoration: none; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 500;">Compare</a>
-            </div>
-        </div>
-        <div class="controls">
-            <div class="api-status" id="apiStatus">
-                <span class="api-status-indicator"></span>
-                <span id="apiStatusText">Checking...</span>
-            </div>
-            <select class="domain-select" id="domainSelect">
-                <option value="">Default (Finance)</option>
-            </select>
-            <button class="demo-button" id="demoButton">
-                <span id="demoButtonText">Run Live Demo</span>
-                <span id="spinner" class="spinner" style="display: none;"></span>
-            </button>
-            <div class="demo-error" id="demoError"></div>
-        </div>
-    </header>
+    <div id="sidebar"></div>
+    <div class="main">
+        <div id="topbar"></div>
+        <div class="page">
 
-    <main>
-        <div class="traces-panel">
-            <div class="traces-header">
-                <h2>Recent Traces</h2>
-                <div class="count"><span id="traceCount">0</span> traces</div>
-            </div>
-            <ul class="traces-list" id="tracesList">
-                <li class="traces-empty" id="tracesEmpty">Loading traces...</li>
-            </ul>
-        </div>
-
-        <div class="detail-panel">
-            <div class="detail-placeholder" id="detailPlaceholder">
-                Select a trace to view details
+            <div class="page-header">
+                <div>
+                    <div class="page-title">AI Assurance Command Center</div>
+                    <div class="page-subtitle">Enterprise AI Risk Operations</div>
+                </div>
+                <div class="page-actions">
+                    <span class="page-meta">Last updated: May 19, 2026 10:45 AM</span>
+                    <button class="btn">Executive Report</button>
+                    <button class="btn btn-primary">+ Add AI System</button>
+                </div>
             </div>
 
-            <div class="detail-content" id="detailContent">
-                <div class="detail-section">
-                    <h3>Metadata</h3>
-                    <div class="detail-meta">
-                        <div class="meta-item">
-                            <span class="meta-label">Model</span>
-                            <span class="meta-value" id="detailModel">—</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Domain</span>
-                            <span class="meta-value" id="detailDomain">—</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Trace ID</span>
-                            <span class="meta-value" id="detailTraceId" style="font-size: 0.75rem;">—</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Latency</span>
-                            <span class="meta-value" id="detailLatency">—</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Tokens</span>
-                            <span class="meta-value" id="detailTokens">—</span>
-                        </div>
+            <!-- 8 KPI Cards -->
+            <div class="kpi-row" id="kpiRow"></div>
+
+            <!-- Row 2: AI System Inventory, Release Gate Status, Critical Findings -->
+            <div class="grid-3col-main">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">AI System Inventory</div>
+                        <a href="/ai-systems" class="card-link">View all ›</a>
+                    </div>
+                    <table class="data-table" id="systemsTable">
+                        <thead>
+                            <tr>
+                                <th>System Name</th>
+                                <th>Risk</th>
+                                <th>Autonomy</th>
+                                <th>Runtime</th>
+                                <th>Release</th>
+                                <th style="text-align: center;">Findings</th>
+                                <th>Last Assessment</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr><td colspan="7" class="loading">Loading…</td></tr></tbody>
+                    </table>
+                    <div class="text-xs text-tertiary mt-3" style="display: flex; gap: 1rem;">
+                        <span><span class="risk-dot high"></span>High</span>
+                        <span><span class="risk-dot medium"></span>Medium</span>
+                        <span><span class="risk-dot low"></span>Low</span>
                     </div>
                 </div>
 
-                <div class="detail-section">
-                    <h3>Prompt</h3>
-                    <textarea class="text-area" id="detailPrompt" readonly></textarea>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Release Gate Status</div>
+                        <a href="/release-gates" class="card-link">View all ›</a>
+                    </div>
+                    <div class="donut-container" id="gateChart"></div>
                 </div>
 
-                <div class="detail-section">
-                    <h3>Response</h3>
-                    <textarea class="text-area" id="detailResponse" readonly></textarea>
-                </div>
-
-                <div class="detail-section">
-                    <h3>Evaluation Scores</h3>
-                    <div class="metrics-grid" id="metricsGrid"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Critical Findings</div>
+                        <a href="/findings" class="card-link">View all ›</a>
+                    </div>
+                    <div id="criticalFindings"></div>
                 </div>
             </div>
-        </div>
-    </main>
 
+            <!-- Row 3: Framework Coverage, Runtime Threat Activity, Remediation SLA -->
+            <div class="grid-3col-bottom">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Framework Coverage</div>
+                        <a href="/governance" class="card-link">View all ›</a>
+                    </div>
+                    <div id="frameworkCoverage"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Runtime Threat Activity</div>
+                            <div class="text-xs text-tertiary mt-1">Last 7 Days</div>
+                        </div>
+                        <a href="/runtime" class="card-link">View all ›</a>
+                    </div>
+                    <div id="threatChart"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Remediation SLA Tracker</div>
+                        <a href="/findings" class="card-link">View all ›</a>
+                    </div>
+                    <div class="donut-container" id="slaChart"></div>
+                </div>
+            </div>
+
+            <!-- Row 4: Recent Runtime Events, Next Actions -->
+            <div class="grid-2col-bottom">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Recent Runtime Events</div>
+                        <a href="/runtime" class="card-link">View all ›</a>
+                    </div>
+                    <table class="data-table" id="eventsTable">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>System</th>
+                                <th>Event Type</th>
+                                <th>Severity</th>
+                                <th>Action</th>
+                                <th>Evidence</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Next Actions</div>
+                        <a href="/findings" class="card-link">View all ›</a>
+                    </div>
+                    <div id="nextActions"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
     <script>
-        // State
-        let traces = [];
-        let selectedTraceId = null;
-        let refreshInterval = null;
-        let isRefreshing = false;
-        let apiReady = false;
+        initPage('/');
 
-        // DOM elements
-        const tracesList = document.getElementById('tracesList');
-        const tracesEmpty = document.getElementById('tracesEmpty');
-        const traceCount = document.getElementById('traceCount');
-        const demoButton = document.getElementById('demoButton');
-        const demoButtonText = document.getElementById('demoButtonText');
-        const spinner = document.getElementById('spinner');
-        const demoError = document.getElementById('demoError');
-        const detailPlaceholder = document.getElementById('detailPlaceholder');
-        const detailContent = document.getElementById('detailContent');
-        const apiStatus = document.getElementById('apiStatus');
-        const apiStatusText = document.getElementById('apiStatusText');
-        const apiStatusIndicator = apiStatus.querySelector('.api-status-indicator');
-        const domainSelect = document.getElementById('domainSelect');
-
-        // Check API health
-        async function checkApiHealth() {
-            try {
-                const response = await fetch('/api/health');
-                const data = await response.json();
-
-                apiReady = data.status === 'ready';
-                const keys = data.api_keys || {};
-
-                if (apiReady) {
-                    apiStatusIndicator.classList.add('ready');
-                    apiStatusText.textContent = 'Ready';
-                } else {
-                    apiStatusIndicator.classList.remove('ready');
-                    const missing = [];
-                    if (!keys.ANTHROPIC_API_KEY) missing.push('Anthropic');
-                    if (!keys.OPENAI_API_KEY) missing.push('OpenAI');
-                    apiStatusText.textContent = `Missing: ${missing.join(', ')}`;
-                }
-
-                demoButton.disabled = !apiReady;
-            } catch (err) {
-                apiStatusIndicator.classList.remove('ready');
-                apiStatusText.textContent = 'Error';
-                demoButton.disabled = true;
-            }
+        async function loadKPIs() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
+            renderKPIs(d);
         }
 
-        // Load available domains
-        async function loadDomains() {
-            try {
-                const response = await fetch('/api/domains');
-                const data = await response.json();
+        function renderKPIs(d) {
+            const cards = [
+                {
+                    label: 'Enterprise AI Risk Score',
+                    value: d.enterprise_ai_risk_score,
+                    suffix: '',
+                    sublabel: d.risk_level,
+                    icon: '◐',
+                    iconCls: 'accent',
+                    trend: d.risk_score_trend,
+                    gauge: { score: d.enterprise_ai_risk_score, color: '#f59e0b' },
+                },
+                {
+                    label: 'AI Systems Reviewed',
+                    value: d.ai_systems_reviewed,
+                    icon: '◢',
+                    iconCls: 'info',
+                    trend: d.ai_systems_trend,
+                },
+                {
+                    label: 'Production AI Systems',
+                    value: d.production_ai_systems,
+                    icon: '▣',
+                    iconCls: 'pass',
+                    trend: d.production_trend,
+                },
+                {
+                    label: 'High-Risk Findings',
+                    value: d.high_risk_findings,
+                    valueColor: 'critical',
+                    icon: '⚠',
+                    iconCls: 'critical',
+                    trend: d.high_risk_trend,
+                },
+                {
+                    label: 'Release Holds',
+                    value: d.release_holds,
+                    valueColor: 'critical',
+                    icon: '🔒',
+                    iconCls: 'critical',
+                    trend: d.release_holds_trend,
+                },
+                {
+                    label: 'Runtime Incidents',
+                    value: d.runtime_incidents_24h,
+                    icon: '◈',
+                    iconCls: 'high',
+                    trend: d.runtime_trend,
+                },
+                {
+                    label: 'Policy Violations',
+                    value: d.policy_violations_24h,
+                    icon: '⛔',
+                    iconCls: 'medium',
+                    trend: d.policy_violations_trend,
+                },
+                {
+                    label: 'Evidence Completeness',
+                    value: d.evidence_completeness,
+                    suffix: '%',
+                    valueColor: 'pass',
+                    icon: '✓',
+                    iconCls: 'pass',
+                    trend: d.evidence_trend,
+                },
+            ];
 
-                if (data.domains && data.domains.length > 0) {
-                    // Clear existing options except first
-                    const currentValue = domainSelect.value;
-                    domainSelect.innerHTML = '<option value="">Default (Finance)</option>';
+            const html = cards.map(c => {
+                const gaugeHtml = c.gauge
+                    ? `<svg class="kpi-gauge" viewBox="0 0 60 60" style="transform: rotate(-90deg);">
+                        <circle cx="30" cy="30" r="24" stroke="#1d2436" stroke-width="6" fill="none"/>
+                        <circle cx="30" cy="30" r="24" stroke="${c.gauge.color}" stroke-width="6" fill="none"
+                          stroke-dasharray="${c.gauge.score / 100 * 150} 150"/>
+                       </svg>`
+                    : '';
 
-                    // Add other domains
-                    data.domains.forEach(domain => {
-                        const option = document.createElement('option');
-                        option.value = domain.id;
-                        option.textContent = domain.name + ' — ' + domain.description;
-                        domainSelect.appendChild(option);
-                    });
-
-                    domainSelect.value = currentValue;
-                }
-            } catch (err) {
-                console.error('Failed to load domains:', err);
-            }
-        }
-
-        // Fetch traces from API
-        async function fetchTraces() {
-            if (isRefreshing) return;
-            isRefreshing = true;
-
-            try {
-                const response = await fetch('/api/traces');
-                const data = await response.json();
-
-                if (data.error) {
-                    showTracesError(data.error);
-                    traces = [];
-                } else {
-                    traces = data.traces;
-                    renderTraces();
-                }
-            } catch (err) {
-                showTracesError('Failed to fetch traces');
-                traces = [];
-            } finally {
-                isRefreshing = false;
-            }
-        }
-
-        // Render trace list
-        function renderTraces() {
-            traceCount.textContent = traces.length;
-
-            if (traces.length === 0) {
-                tracesList.innerHTML = '<li class="traces-empty" id="tracesEmpty">No traces yet. Run the live demo to start.</li>';
-                return;
-            }
-
-            tracesList.innerHTML = '';
-            traces.forEach(trace => {
-                const item = document.createElement('li');
-                item.className = 'trace-item';
-                if (trace.id === selectedTraceId) {
-                    item.classList.add('selected');
-                }
-
-                const riskScore = calculateRiskScore(trace.eval_scores);
-                const riskBadge = getRiskBadge(riskScore);
-
-                const timestamp = new Date(trace.timestamp);
-                const timeStr = timestamp.toLocaleTimeString();
-
-                item.innerHTML = `
-                    <div class="trace-item-content">
-                        <div class="trace-item-model">${trace.model}</div>
-                        <div class="trace-item-time">${timeStr}</div>
-                        <div class="trace-item-preview">${trace.prompt_preview}</div>
+                return `
+                <div class="kpi-card ${c.gauge ? 'has-gauge' : ''}">
+                    <div>
+                        <div class="kpi-header">
+                            <div class="kpi-icon ${c.iconCls || ''}">${c.icon || ''}</div>
+                            <div class="kpi-label">${c.label}</div>
+                        </div>
+                        <div class="kpi-value-row">
+                            <div class="kpi-value ${c.valueColor || ''}">${c.value}${c.suffix || ''}</div>
+                            ${c.sublabel ? `<div class="kpi-value-suffix">${c.sublabel}</div>` : ''}
+                        </div>
+                        <div class="kpi-trend">${c.trend || ''}</div>
                     </div>
-                    <div class="risk-badge ${riskBadge.class}">${riskBadge.text}</div>
-                `;
+                    ${gaugeHtml}
+                </div>`;
+            }).join('');
 
-                item.addEventListener('click', () => selectTrace(trace));
-                tracesList.appendChild(item);
-            });
+            document.getElementById('kpiRow').innerHTML = html;
         }
 
-        // Calculate risk score (number of failed metrics)
-        function calculateRiskScore(evalScores) {
-            if (!evalScores) return 0;
-            let failCount = 0;
-            for (const metric in evalScores) {
-                const result = evalScores[metric];
-                if (result.passed === false) failCount++;
-            }
-            return failCount;
+        async function loadSystems() {
+            const r = await fetch('/api/grc/ai-systems');
+            const d = await r.json();
+
+            // Simplify autonomy display
+            const autonomyMap = {
+                "Tool-using agent with conditional autonomy": "Execute",
+                "Advisory copilot (human in loop)": "Assist",
+                "Tool-using agent with customer-facing autonomy": "Assist",
+                "Document generation with mandatory review": "Assist",
+                "Triaging agent with human review": "Execute",
+            };
+
+            const tbody = document.querySelector('#systemsTable tbody');
+            tbody.innerHTML = d.systems.map(s => `
+                <tr onclick="window.location='/ai-systems?id=${s.id}'">
+                    <td class="cell-primary">${s.name}</td>
+                    <td>${riskDot(s.risk_level)}</td>
+                    <td class="text-secondary">${autonomyMap[s.autonomy_level] || s.autonomy_level.split(' ')[0]}</td>
+                    <td>${runtimeStatusDot(s.runtime_status === 'PRODUCTION' ? 'PRODUCTION' : 'Pilot')}</td>
+                    <td>${decisionBadge(s.release_decision)}</td>
+                    <td style="text-align: center;" class="font-bold">${s.open_findings}</td>
+                    <td class="text-secondary">${formatDate(s.last_assessment)}</td>
+                </tr>
+            `).join('');
         }
 
-        // Get risk badge styling
-        function getRiskBadge(score) {
-            if (score === 0) return { text: 'LOW', class: 'risk-low' };
-            if (score <= 2) return { text: 'MEDIUM', class: 'risk-medium' };
-            return { text: 'HIGH', class: 'risk-high' };
+        function formatDate(iso) {
+            const d = new Date(iso);
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
         }
 
-        // Select a trace and load its details
-        async function selectTrace(trace) {
-            selectedTraceId = trace.id;
-            renderTraces();
+        async function loadGateChart() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
+            const g = d.release_gates;
 
-            // Load eval scores if not cached
-            if (!trace.eval_scores) {
-                try {
-                    const response = await fetch('/api/evaluate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ trace_id: trace.id }),
-                    });
-                    const data = await response.json();
-                    trace.eval_scores = data.eval_scores;
-                } catch (err) {
-                    console.error('Failed to evaluate:', err);
-                }
-            }
+            const segments = [
+                { label: 'Hold', value: g.hold, color: '#ef4444' },
+                { label: 'Conditional', value: g.conditional, color: '#f59e0b' },
+                { label: 'Approved', value: g.approved, color: '#10b981' },
+                { label: 'Reject', value: g.reject, color: '#6b7280' },
+            ];
 
-            displayTraceDetails(trace);
+            document.getElementById('gateChart').innerHTML = `
+                ${renderDonut(segments, 140, 22)}
+                <div class="donut-legend">
+                    ${segments.map(s => `
+                        <div class="donut-legend-item">
+                            <div class="donut-legend-color" style="background: ${s.color}"></div>
+                            <div class="donut-legend-row">
+                                <span style="color: var(--text-primary)">${s.label}</span>
+                                <span class="donut-legend-value">${s.value}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
 
-        // Display trace details in right panel
-        function displayTraceDetails(trace) {
-            document.getElementById('detailModel').textContent = trace.model;
-            document.getElementById('detailDomain').textContent = trace.domain || '—';
-            document.getElementById('detailTraceId').textContent = trace.id;
-            document.getElementById('detailLatency').textContent = `${trace.latency_ms}ms`;
-            document.getElementById('detailTokens').textContent = trace.tokens_used;
-            document.getElementById('detailPrompt').value = trace.prompt;
-            document.getElementById('detailResponse').value = trace.response;
+        async function loadCriticalFindings() {
+            const r = await fetch('/api/grc/homepage/critical-findings');
+            const d = await r.json();
 
-            detailPlaceholder.style.display = 'none';
-            detailContent.classList.add('active');
-
-            // Render metrics
-            const metricsGrid = document.getElementById('metricsGrid');
-            metricsGrid.innerHTML = '';
-
-            if (!trace.eval_scores) {
-                metricsGrid.innerHTML = '<p style="color: #8b949e;">Evaluating...</p>';
-                return;
-            }
-
-            for (const [metricName, result] of Object.entries(trace.eval_scores)) {
-                const score = result.score;
-                const passed = result.passed;
-                const details = result.details;
-
-                const row = document.createElement('div');
-                row.className = 'metric-row';
-
-                let statusText = '—';
-                let statusClass = 'status-skip';
-                if (passed === true) {
-                    statusText = 'PASS';
-                    statusClass = 'status-pass';
-                } else if (passed === false) {
-                    statusText = 'FAIL';
-                    statusClass = 'status-fail';
-                }
-
-                const scoreText = score !== null ? score.toFixed(2) : 'N/A';
-                const barWidth = score !== null ? Math.round(score * 100) : 0;
-                const barClass = passed === false ? 'fail' : '';
-
-                row.innerHTML = `
-                    <div class="metric-name">${metricName.replace(/_/g, ' ')}</div>
-                    <div class="metric-score">${scoreText}</div>
-                    <div class="metric-bar">
-                        <div class="metric-bar-fill ${barClass}" style="width: ${barWidth}%"></div>
+            document.getElementById('criticalFindings').innerHTML = d.findings.map(f => `
+                <div class="finding-item">
+                    <div class="finding-icon ${f.severity === 'P0' ? 'critical' : 'high'}"></div>
+                    <div>
+                        <div class="finding-title">${f.title}</div>
+                        <div class="finding-system">${f.system}</div>
                     </div>
-                    <div class="metric-status ${statusClass}">${statusText}</div>
-                    ${details ? `<div class="metric-details">${details}</div>` : ''}
+                    <div>${severityBadge(f.severity)}</div>
+                    <div class="finding-meta">${f.time_ago}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadFrameworks() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
+            const f = d.frameworks;
+
+            const items = [
+                { name: 'NIST AI RMF', score: f.nist_ai_rmf },
+                { name: 'NIST AI 600-1', score: f.nist_ai_600_1 },
+                { name: 'OWASP LLM Top 10', score: f.owasp_llm },
+                { name: 'OWASP Agentic AI Top 10', score: f.owasp_agentic },
+                { name: 'ISO/IEC 23894', score: f.iso_iec_23894 },
+            ];
+
+            document.getElementById('frameworkCoverage').innerHTML = items.map(item => {
+                const cls = item.score >= 80 ? 'pass' : item.score >= 70 ? '' : item.score >= 60 ? 'warn' : 'fail';
+                return `
+                    <div class="framework-row">
+                        <div class="framework-name">${item.name}</div>
+                        <div class="framework-progress">
+                            <div class="framework-progress-fill ${cls}" style="width: ${item.score}%"></div>
+                        </div>
+                        <div class="framework-percent">${item.score}%</div>
+                    </div>
                 `;
-
-                metricsGrid.appendChild(row);
-            }
+            }).join('');
         }
 
-        // Show error in trace list
-        function showTracesError(error) {
-            tracesList.innerHTML = `<div class="traces-error">${error}</div>`;
-        }
+        async function loadThreatChart() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
 
-        // Run live demo
-        demoButton.addEventListener('click', async () => {
-            demoButton.disabled = true;
-            demoButtonText.style.display = 'none';
-            spinner.style.display = 'inline-block';
-            demoError.style.display = 'none';
-
-            try {
-                const selectedDomain = domainSelect.value;
-                const url = selectedDomain
-                    ? `/api/demo/run?domain=${encodeURIComponent(selectedDomain)}`
-                    : '/api/demo/run';
-
-                const response = await fetch(url, { method: 'POST' });
-                const data = await response.json();
-
-                if (data.error) {
-                    demoError.textContent = data.error;
-                    demoError.style.display = 'block';
-                } else if (data.runs && data.runs.length > 0) {
-                    // Wait a moment for traces to appear in Langfuse
-                    await new Promise(r => setTimeout(r, 2000));
-                    await fetchTraces();
-                    // Optionally select first new trace
-                    if (traces.length > 0) {
-                        selectTrace(traces[0]);
-                    }
+            // Generate 7-day time series with realistic noise
+            function genSeries(target, variance) {
+                const arr = [];
+                for (let i = 0; i < 7; i++) {
+                    const t = i / 6;
+                    const base = target * (0.6 + t * 0.7);
+                    arr.push(Math.max(0, Math.round(base + (Math.random() - 0.5) * variance)));
                 }
-            } catch (err) {
-                demoError.textContent = 'Failed to run demo: ' + err.message;
-                demoError.style.display = 'block';
-            } finally {
-                demoButton.disabled = !apiReady;
-                demoButtonText.style.display = 'inline';
-                spinner.style.display = 'none';
+                arr[6] = target; // Last point is the actual count
+                return arr;
             }
-        });
 
-        // Auto-refresh every 30 seconds
-        async function startAutoRefresh() {
-            await fetchTraces();
-            refreshInterval = setInterval(fetchTraces, 30000);
+            const series = [
+                { name: 'Prompt Injection', data: genSeries(d.runtime_activity.prompt_injection, 8), color: '#ef4444' },
+                { name: 'Blocked Tool Calls', data: genSeries(d.runtime_activity.blocked_tool_calls, 6), color: '#f59e0b' },
+                { name: 'Policy Violations', data: genSeries(d.runtime_activity.policy_violations, 4), color: '#eab308' },
+                { name: 'DLP Detections', data: genSeries(d.runtime_activity.dlp_detections, 3), color: '#a855f7' },
+            ];
+
+            const xLabels = ['May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19'];
+
+            document.getElementById('threatChart').innerHTML = `
+                ${renderLineChart(series, { width: 600, height: 180, xLabels })}
+                <div class="linechart-legend">
+                    ${series.map(s => `
+                        <div class="linechart-legend-item">
+                            <div class="linechart-legend-dot" style="background: ${s.color}"></div>
+                            <span>${s.name}</span>
+                            <span class="font-bold text-primary">${s.data[s.data.length - 1]}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
 
-        // Init
-        async function init() {
-            await checkApiHealth();
-            await loadDomains();
-            await startAutoRefresh();
+        async function loadSLA() {
+            const r = await fetch('/api/grc/kpis');
+            const d = await r.json();
+            const sla = d.sla;
+
+            const segments = [
+                { label: 'Overdue', value: sla.overdue, color: '#ef4444' },
+                { label: 'Due 7d', value: sla.due_7d, color: '#f59e0b' },
+                { label: 'Due 30d', value: sla.due_30d, color: '#eab308' },
+                { label: 'Closed', value: sla.closed, color: '#10b981' },
+            ];
+
+            document.getElementById('slaChart').innerHTML = `
+                ${renderDonut(segments, 140, 22)}
+                <div class="donut-legend">
+                    ${segments.map(s => `
+                        <div class="donut-legend-item">
+                            <div class="donut-legend-color" style="background: ${s.color}"></div>
+                            <div class="donut-legend-row">
+                                <span style="color: var(--text-primary)">${s.label}</span>
+                                <span class="donut-legend-value">${s.value}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
 
-        init();
+        async function loadEvents() {
+            const r = await fetch('/api/grc/homepage/runtime-events');
+            const d = await r.json();
+
+            const tbody = document.querySelector('#eventsTable tbody');
+            tbody.innerHTML = d.events.map(e => {
+                const sevCls = e.severity === 'HIGH' ? 'badge-high' : e.severity === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+                return `
+                <tr>
+                    <td class="text-secondary text-sm">May 19, 2026 ${e.time}</td>
+                    <td class="cell-primary">${e.system}</td>
+                    <td class="text-secondary">${e.event_type}</td>
+                    <td><span class="badge ${sevCls}">${e.severity[0] + e.severity.slice(1).toLowerCase()}</span></td>
+                    <td>${actionBadge(e.action)}</td>
+                    <td><a href="#" class="card-link" style="color: var(--accent);">View</a></td>
+                </tr>
+            `;
+            }).join('');
+        }
+
+        async function loadNextActions() {
+            const r = await fetch('/api/grc/next-actions');
+            const d = await r.json();
+
+            const iconMap = {
+                HIGH_PRIORITY: { icon: '⚠', cls: 'danger' },
+                DUE_TODAY: { icon: '✓', cls: 'ok' },
+                DUE_2D: { icon: '◷', cls: 'warn' },
+                DUE_5D: { icon: '◷', cls: 'warn' },
+                DUE_7D: { icon: '◷', cls: 'warn' },
+            };
+
+            const dueMap = {
+                HIGH_PRIORITY: { cls: 'high', label: 'High Priority' },
+                DUE_TODAY: { cls: 'today', label: 'Due Today' },
+                DUE_2D: { cls: 'normal', label: 'Due in 2 days' },
+                DUE_5D: { cls: 'normal', label: 'Due in 5 days' },
+                DUE_7D: { cls: 'normal', label: 'Due in 7 days' },
+            };
+
+            document.getElementById('nextActions').innerHTML = d.actions.map(a => {
+                const ic = iconMap[a.priority] || { icon: '◷', cls: 'warn' };
+                const dueInfo = dueMap[a.priority] || { cls: 'normal', label: a.due };
+                return `
+                    <div class="list-row">
+                        <div class="list-row-icon ${ic.cls}">${ic.icon}</div>
+                        <div class="list-row-text">${a.title}</div>
+                        <span class="priority-badge ${dueInfo.cls}">${dueInfo.label}</span>
+                        <span class="list-row-arrow">›</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        Promise.all([
+            loadKPIs(),
+            loadSystems(),
+            loadGateChart(),
+            loadCriticalFindings(),
+            loadFrameworks(),
+            loadThreatChart(),
+            loadSLA(),
+            loadEvents(),
+            loadNextActions(),
+        ]).catch(e => console.error(e));
     </script>
 </body>
 </html>
