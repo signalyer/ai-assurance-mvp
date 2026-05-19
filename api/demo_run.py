@@ -2,6 +2,7 @@
 
 import time
 import os
+from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -12,7 +13,17 @@ from tracer import trace_call
 from evaluator import evaluate_response
 from api.evaluate import eval_cache, _normalize_eval_scores
 
-load_dotenv()
+# Load env vars from project root .env file
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    env_content = env_path.read_text()
+    for line in env_content.split('\n'):
+        line = line.strip()
+        if '=' in line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            os.environ[key] = value
+
+load_dotenv(dotenv_path=str(env_path))
 
 router = APIRouter(prefix="/api", tags=["demo"])
 
@@ -38,6 +49,18 @@ async def run_live_demo():
 
     Returns list of run results with trace_id and eval_scores.
     """
+    # Ensure env vars are loaded (in case module-level load didn't work)
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        env_path = Path(__file__).parent.parent / ".env"
+        if env_path.exists():
+            env_content = env_path.read_text()
+            for line in env_content.split('\n'):
+                line = line.strip()
+                if '=' in line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    if not os.getenv(key):
+                        os.environ[key] = value
+
     runs = []
     error = None
 

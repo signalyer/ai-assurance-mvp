@@ -2,21 +2,19 @@
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environment variables FIRST before anything else
-from pathlib import Path
+# Load environment variables FIRST - before any other imports
 env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=str(env_path), override=True)
-
-# Verify keys are loaded
-if not os.getenv("ANTHROPIC_API_KEY"):
-    # Fallback: manually load if dotenv fails
+if env_path.exists():
     env_content = env_path.read_text()
     for line in env_content.split('\n'):
+        line = line.strip()
         if '=' in line and not line.startswith('#'):
             key, value = line.split('=', 1)
             os.environ[key] = value
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=str(env_path), override=True)
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
