@@ -2,7 +2,21 @@
 
 A production-ready framework for tracing and evaluating LLM outputs. Make model calls, trace them, evaluate with 5 metrics, and view results in a single dashboard.
 
-## Setup
+## Quick Start (One Command)
+
+```bash
+python run.py
+```
+
+This automatically:
+1. Checks Python dependencies (installs if needed)
+2. Creates `.env` from `.env.example` if missing
+3. Opens the dashboard in your browser at http://localhost:9007
+4. Starts the server
+
+**First time:** You'll need to edit `.env` and fill in your API keys before running again.
+
+## Manual Setup
 
 ### 1. Install dependencies
 ```bash
@@ -18,7 +32,14 @@ cp .env.example .env
 # - OPENAI_API_KEY (from https://platform.openai.com)
 ```
 
-### 3. Run the demo
+### 3. Start the dashboard
+```bash
+python dashboard.py
+```
+
+Then open http://localhost:9007 in your browser.
+
+### 4. Run the CLI demo (without dashboard)
 ```bash
 python demo.py
 ```
