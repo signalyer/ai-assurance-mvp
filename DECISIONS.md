@@ -176,3 +176,50 @@ Why: Single-tenant project with no external consumers. Legacy implementation (re
 Constrains: api/security.py apply_guardrails and filter_output signatures unchanged (backward compat
      for callers). Session 03 guardrails are the new default. No feature degradation — new guardrails
      strictly more capable (LLM-based safety scoring + NeMo topic classification vs. keyword matching).
+
+## 2026-05-21 — Framework definitions: YAML for new, Python for existing (hybrid)
+Decision: New frameworks (EU AI Act, ISO 42001, SR 11-7, FFIEC, US-FinServ overlay) defined as
+         YAML files in frameworks/ directory, loaded at module load via frameworks.loader.
+         Existing NIST AI RMF, NIST AI 600-1, OWASP LLM Top 10, OWASP Agentic Top 10 stay as
+         hardcoded Python catalogs in domain/framework_coverage.py.
+Alternatives: migrate all 6 to YAML · keep all in Python · external CMS-style framework editor
+Why: Hybrid model minimizes Session 06 scope while making future framework additions data-driven.
+     YAML loader uses Pydantic v2 schema validation + path confinement (is_relative_to). Schema
+     version field gates incompatible changes. Loader returns FrameworkItem dataclass instances
+     that merge directly with Python catalogs — no engine refactor.
+Constrains: domain/framework_coverage.py uses lazy deferred import to break circular dep with
+     frameworks.loader. All new framework catalogs added as YAML files; Python catalogs frozen
+     until future migration (deferred to Phase 2 if needed).
+
+## 2026-05-21 — Framework coverage matrix: 8 user-facing slugs, not 6
+Decision: MATRIX_FRAMEWORKS surfaces 8 framework slugs in the coverage matrix UI:
+         nist-ai-rmf, nist-ai-600-1, owasp-llm, owasp-agentic, eu-ai-act, iso-42001, sr-11-7, ffiec.
+         Day 6 spec listed "6 frameworks" but NIST and OWASP each have 2 catalog dialects.
+Alternatives: collapse NIST 1 catalog + OWASP 1 catalog · keep all 13 enum slugs in matrix
+Why: NIST AI RMF and NIST AI 600-1 measure different things (functions vs risk areas); collapsing
+     them loses signal. Similarly OWASP LLM Top 10 and OWASP Agentic Top 10 are distinct. Legacy
+     enum slugs (AWS_CONTROLS, SOC2, ISO_IEC_23894, FS_OVERLAY) excluded from matrix — they're
+     leftover from earlier work and not in Day 6 spec.
+Constrains: Day 6 acceptance test #6 asserts `len(matrix.frameworks) >= 6` (passes with 8).
+     `_FRAMEWORK_SLUG_TO_CATALOG_KEY` is the single source of truth — `api/frameworks.py` imports
+     it directly (no duplicate mapping).
+
+## 2026-05-21 — Stdlib-only PDF generation (no reportlab/weasyprint)
+Decision: PDF Pack generators (NIST/OWASP/EU AI Act) use a custom stdlib-only `_PdfWriter` in
+         pdf_report.py — no reportlab, no weasyprint, no external PDF libraries.
+Alternatives: reportlab (already in existing pdf_report.py?) · weasyprint · matplotlib backend
+Why: pdf_report.py was already stdlib-only; introducing reportlab is a 10MB dependency for 3
+     PDF templates. _PdfWriter builds PDF 1.4 with explicit object IDs + xref table + zlib-
+     compressed content streams. Verified output starts with %PDF; acceptable PDF readers parse it.
+Constrains: any new PDF feature must extend _PdfWriter, not bring in reportlab. Pre-allocated
+     object IDs enforced via assertions in build() — fragile arithmetic eliminated.
+
+## 2026-05-21 — Full framework_mappings backfill across 40 controls
+Decision: Every one of 40 controls in domain/controls.py annotated with framework_mappings entries
+         for all 8 user-facing framework slugs.
+Alternatives: critical-path-only (top 5 controls) · skip backfill and use existing partial mappings
+Why: Matrix coverage % is computed live — partial mappings produce misleading 0%/100% cells. Full
+     backfill is mechanical but tedious; produces honest coverage signal. Each mapping = real clause
+     ref (e.g., Art.10 for EU AI Act data governance), not placeholder.
+Constrains: any new control added to CONTROLS must include framework_mappings for all 8 user-facing
+     frameworks at definition time. Acceptance test #11 enforces this (asserts zero gaps).
