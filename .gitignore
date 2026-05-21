@@ -46,8 +46,10 @@ htmlcov/
 *.log
 logs/
 
-# Local agent state
-.claude/
+# Local agent state — ignore by default, but track shared commands + skills
+.claude/*
+!.claude/commands/
+!.claude/skills/
 
 # User attachments
 *.pdf
