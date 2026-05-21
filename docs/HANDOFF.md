@@ -1,105 +1,90 @@
-# Handoff — Resume Prompt
+# Resume — AI Assurance Platform
 
-**Last session ended:** 2026-05-20
-**Repo state:** clean, in sync with `origin/main` at commit `4c2e152`
+**Last session ended:** 2026-05-21
+**Repo state:** clean · in sync with `origin/main` at `e7f101f`
 **GitHub:** https://github.com/signalyer/ai-assurance-mvp (private)
-**Live:** https://aigovern.sandboxhub.co
 
 ---
-
-## Paste this into the new session
-
-```
-# Resume — AI Assurance Platform + Eval Harness
 
 ## Where I am
-Platform live at aigovern.sandboxhub.co (single tenant, P1V3 + Postgres B2ms).
-Repo just pushed to signalyer/ai-assurance-mvp. Currently in planning phase
-for the target architecture — no new code written yet this cycle.
+The architecture and 12-day production sprint plan are locked, committed, and pushed. Repo is bootstrapped with the structured Chat → Code workflow (CLAUDE.md ≤150 lines, ARCHITECTURE.md, DECISIONS.md, .claude/commands/, .claude/skills/diagram.md, docs/plans/). The existing platform at `aigovern.sandboxhub.co` is live with 12+ pages and 5-role auth, but `tracer.py` leaks raw prompts to Langfuse — **this is the Day 1 Hour 1 critical fix and gates everything else**. No new code written yet this sprint; only planning and scaffolding. The user said "go" then asked for a fresh session to execute.
 
-## Decision made last session: PIVOT
-Stop building a custom eval harness. Compose Langfuse Cloud + DeepEval +
-Presidio + Azure Key Vault. The defensibility is in the layers AROUND these
-tools (Org layer, PII pipeline governance, Four-tier memory, workflow
-overlay) — not in rebuilding tracing/eval infrastructure.
+## Decisions already made (locked in DECISIONS.md — don't re-litigate)
+- **Compose, don't rebuild commodities** — wrap Langfuse + DeepEval + Presidio
+- **3-decorator chain enforced order:** `@scrub_pii` → `@trace_llm_call` → `@evaluate_response`
+- **OPA as policy engine** with 5 categories (org-mandatory · posture · risk-tier · team · system-override)
+- **Four-tier memory** — T1 in-context · T2 episodic JSONL · T3 Azure AI Search · T4 procedural
+- **JSONL events as source of truth** + Postgres materialized views (Day 9)
+- **Single tenant v1** with `org_id` plumbed for v2 multi-tenant
+- **Single app v1** with role-based views — headless engine + thin clients is v2 north star
+- **6 frameworks:** NIST AI RMF · OWASP LLM Top 10 · EU AI Act Annex IV · ISO 42001 · SR 11-7 · FFIEC + US-FinServ overlay
+- **DeepEval 6-metric:** hallucination · relevancy · faithfulness · toxicity · PII leakage · scrub score
+- **Eval pack tiers A/B/C** (org-mandatory · risk-tier-mandatory · team-discretionary)
+- **Keep AWS Analyzer demo content** — no re-theme
 
-Authoritative target architecture (more complete than the earlier inline
-diagram):
-  C:\Users\pravk\Downloads\aigovern_complete_target_architecture.svg
-Six layers: Org · Control Plane · PII Scrubbing · Four-tier memory ·
-Runtime (Langfuse + DeepEval) · LLM abstraction.
+## Key files to load (in order)
+1. `CLAUDE.md` — HOW to work (≤150 lines · auto-loaded by harness)
+2. `ARCHITECTURE.md` — current state · decorator order · build/in-progress/planned
+3. `DECISIONS.md` — 10 locked architectural decisions
+4. `docs/plans/12-DAY-PRODUCTION-SPRINT.md` — master plan (624 lines · 14 sections)
+5. `docs/plans/SESSION-01a-scrubber-vault.md` — first session plan (PII pipeline)
+6. `docs/architecture/target-architecture.html` — visual reference (open in browser)
+7. `tracer.py` — the leak that must be fixed Day 1 Hour 1
 
-## CRITICAL — fix before next demo
-tracer.py currently sends RAW prompts to Langfuse Cloud. PII is leaking.
-~1 day fix: regex-only scrubber + patch tracer.py to scrub before Langfuse
-call. Do this before any enterprise demo.
+## Outstanding questions (need user input before Day 1)
+1. **Execution mode:** A (4 calendar days × 3 parallel Claude Code accounts · ~12 person-days) or B (12 calendar days × 1 builder)?
+2. **Start time:** patch `tracer.py` tonight or wait until tomorrow AM?
+3. **Provision Postgres + Azure AI Search tonight (async) or Day 1 AM?**
+4. **Stakeholder dry-run target:** Day 12 EOD or Day 13 AM?
 
-## Planning docs already in repo (read in this order)
-- docs/ai-eval-harness-plan.md — north-star (now superseded)
-- docs/ai-eval-harness-tier1-tier2-plan.md — 14-feature spec
-- docs/ai-eval-harness-impl-plan.md — 12-week build (now superseded by pivot)
-- docs/HANDOFF.md — this file
-
-Need to write next: docs/platform-realignment-plan.md per the new SVG.
-
-## Outstanding decisions / questions
-1. Pick a build sequence:
-   (a) PII pipeline → Memory → Org layer  [recommended; regulated-buyer-safe]
-   (b) PII pipeline → Org layer → Memory  [faster governance story]
-   (c) Memory → PII pipeline → Org layer  [risky; only if memory is the demo hook]
-
-2. Memory layer sizing — ~21 days for Tier 2 (episodic JSONL) + Tier 3
-   (Azure AI Search) + agent_memory.py + rag_engine.py + governance overlay.
-   Tier 4 (procedural / domains.py) already built.
-
-3. DeepEval suite correction: drop ContextualRecall/Precision from the
-   must-have list, add Toxicity + Scrub score. Final 6: Hallucination,
-   Relevancy, Faithfulness, Toxicity, PII leakage, Scrub score.
-
-4. Whether to keep a separate evals.sandboxhub.co deployment or fold
-   everything into aigovern.sandboxhub.co (leaning fold — one codebase,
-   one auth, one deploy).
-
-## Next concrete action (pick one)
-(a) Patch tracer.py emergency scrubber — stops the live leak (1 day)
-(b) Write docs/platform-realignment-plan.md mapped to the new SVG
-(c) Sketch agent_memory.py + rag_engine.py module signatures in detail
+## Next concrete action
+**First action in new session:**
+1. Run `/arch` to confirm current state
+2. Read `docs/plans/SESSION-01a-scrubber-vault.md`
+3. Answer the 4 outstanding questions above
+4. **Patch `tracer.py` raw-prompt leak (Day 1 Hour 1)** — this is the critical fix that gates everything
 
 ## Working rules in effect
-- Global: ~/.claude/CLAUDE.md (SignalLayer standards, Azure-first,
-  /compact at 65%)
-- Project memory: C:\Users\pravk\.claude\projects\C--ai-assurance-mvp\
-  memory\MEMORY.md (batch LLM calls, App Service deploy gotchas)
-- Compose-don't-build for eval: Langfuse + DeepEval + Presidio commodity
-  layers; governance overlay is the wedge
-- One repo, one deploy until ≥3 customers pressure multi-tenant
+- Repo: `signalyer/ai-assurance-mvp` · default branch `main`
+- Azure subscription: `SignalLayerDev` · resource group `rg-aigovern-dev` · region `eastus`
+- Production URL: `aigovern.sandboxhub.co`
+- Pre-register Azure providers + set `$env:MSYS_NO_PATHCONV = "1"` at session start
+- Slash commands: `/arch` `/plan` `/verify` `/handoff` `/diagram`
+- Code standards: full files only · type hints · Pydantic v2 `ConfigDict` · `from __future__ import annotations` · JSONL via `storage._append_jsonl()` only
+- Hard security rules: `scrubber.tokenise_payload()` BEFORE `tracer.trace_call()` always · Langfuse gets scrubbed only · OPA fail-closed · no SaaS guardrails · no secrets in code
+- End-of-session: `/verify` · update ARCHITECTURE.md · append DECISIONS.md · write next SESSION plan · output opening message for next session
+
+## Recent commits (last 6)
+```
+e7f101f Docs: add diagram generation guide
+0ef921d Plan: 12-day production sprint — consolidated single source
+f1cee9a Docs: add deployment-shape section to architecture HTML
+fd18c22 Docs: full architecture + tech stack as reviewable HTML
+e5fc78d Fix: track .claude/commands/ and .claude/skills/
+cca0466 Bootstrap: structured Chat → Code workflow
 ```
 
----
+## Opening message for next session
+Paste this verbatim into the new Claude Code session:
 
-## Bonus context for the resumer (not needed in the resume prompt itself)
+```
+Read docs/HANDOFF.md first.
 
-**What's built today:**
-- 12 pages live (Command Center, AI Systems, Findings, Release Gates, Evidence, Runtime, Policies, Reports, Connectors, Assurance Providers, Framework SOP, Analytics, AWS Analyzer demo)
-- Domain layer with portfolio, framework coverage, notifications, governance guide, assurance providers, usage analytics, AWS demo flow, AI System edit + revision history
-- Demo data in JSONL stores (append-only)
-- Deploy tooling: build-zip, smoke, bind-ssl, godaddy-dns, generate-creds
-- Auth: 5 role-based demo accounts, 10-min sliding sessions
+Then /arch and read docs/plans/SESSION-01a-scrubber-vault.md in full.
 
-**What's in progress per the target SVG:**
-- scrubber.py · deid_vault.py · @scrub_pii decorator
-- api/rag.py · rag-governance.html
-- Fix tracer.py raw prompt leak ← CRITICAL
+I need to answer these before you write any code:
+1. Execution mode (A: 4 calendar days × 3 parallel accounts · B: 12 calendar days × 1 builder)
+2. Patch tracer.py leak tonight or tomorrow AM
+3. Provision Postgres + Azure AI Search tonight async or Day 1 AM
+4. Stakeholder dry-run Day 12 EOD or Day 13 AM
 
-**What's planned:**
-- Memory: agent_memory.py · compress_episode · selective_recall · Tier 2 JSONL schema · rag_engine.py Azure AI Search
-- Org layer: risk inventory · governance body · RACI · regulatory posture (ISO 42001 / EU AI Act)
+After I answer, use /plan to show your implementation approach for Day 1
+(scrubber.py + domain/deid_vault.py + @scrub_pii decorator + tracer.py patch).
+Confirm:
+- The decorator chain order
+- Files you create vs modify
+- The two critical constraints from the plan file
+- What you will NOT build in this session
 
-**Always-on:**
-- domains.py (Tier 4 procedural memory) · storage.py · middleware/auth.py · domain/models.py
-
-**5 role-based demo accounts:** see `deploy/creds.txt` (gitignored, on disk only).
-
-**Subscription:** SignalLayerDev
-**Resource group:** rg-aigovern-dev
-**App Service:** app-aigovern-dev (Linux Python 3.12)
+Wait for my approval before executing.
+```
