@@ -1,67 +1,64 @@
 # Resume — AI Assurance Platform
 
-**Last session ended:** 2026-05-21
-**Repo state:** clean · in sync with `origin/main` at `e7f101f`
+**Last session ended:** 2026-05-21 (Day 1 of 12)
+**Repo state:** clean · in sync with `origin/main` at `a35a07d`
 **GitHub:** https://github.com/signalyer/ai-assurance-mvp (private)
 
 ---
 
 ## Where I am
-The architecture and 12-day production sprint plan are locked, committed, and pushed. Repo is bootstrapped with the structured Chat → Code workflow (CLAUDE.md ≤150 lines, ARCHITECTURE.md, DECISIONS.md, .claude/commands/, .claude/skills/diagram.md, docs/plans/). The existing platform at `aigovern.sandboxhub.co` is live with 12+ pages and 5-role auth, but `tracer.py` leaks raw prompts to Langfuse — **this is the Day 1 Hour 1 critical fix and gates everything else**. No new code written yet this sprint; only planning and scaffolding. The user said "go" then asked for a fresh session to execute.
+Day 1 closed with **3 sessions worth of work delivered** (planned was 1 session). The full PII/policy enforcement stack is built, tested, and live: scrubber + Fernet vault + @scrub_pii decorator + @policy_gate decorator + 5-category policy engine + trust scorer + 4 Rego policy files. Azure infrastructure (PostgreSQL Flexible Server + Azure AI Search) is provisioned and credentials applied to `app-aigovern-dev`. All 28 acceptance tests PASS. The critical raw-prompt leak to Langfuse is sealed at 5 layers (defense in depth). Ready for **Session 03 (Guardrails — NeMo + Llama Guard 3)**, which per the master sprint plan was supposed to be Day 3.
 
 ## Decisions already made (locked in DECISIONS.md — don't re-litigate)
-- **Compose, don't rebuild commodities** — wrap Langfuse + DeepEval + Presidio
-- **3-decorator chain enforced order:** `@scrub_pii` → `@trace_llm_call` → `@evaluate_response`
-- **OPA as policy engine** with 5 categories (org-mandatory · posture · risk-tier · team · system-override)
-- **Four-tier memory** — T1 in-context · T2 episodic JSONL · T3 Azure AI Search · T4 procedural
-- **JSONL events as source of truth** + Postgres materialized views (Day 9)
-- **Single tenant v1** with `org_id` plumbed for v2 multi-tenant
-- **Single app v1** with role-based views — headless engine + thin clients is v2 north star
-- **6 frameworks:** NIST AI RMF · OWASP LLM Top 10 · EU AI Act Annex IV · ISO 42001 · SR 11-7 · FFIEC + US-FinServ overlay
-- **DeepEval 6-metric:** hallucination · relevancy · faithfulness · toxicity · PII leakage · scrub score
-- **Eval pack tiers A/B/C** (org-mandatory · risk-tier-mandatory · team-discretionary)
-- **Keep AWS Analyzer demo content** — no re-theme
+- **Mode B execution** — 12 calendar days × 1 builder (Day 1 actual: 3 sessions completed)
+- **Decorator chain order:** `@policy_gate → @scrub_pii → @trace_llm_call → @evaluate_response` (all 4 active)
+- **OPA fail-closed:** errors and ambiguity always DENY
+- **Tracer security:** `SCRUBBER_ENABLED=true` requires `vault_id` in metadata or trace is blocked
+- **Trust scoring:** time-decayed (half-life 7 days), category-weighted penalties
+- **Postgres provisioned in westus2** (eastus not available for SignalLayerDev subscription)
+- **OPA optional:** local Python evaluator is fallback when OPA sidecar unavailable
 
 ## Key files to load (in order)
-1. `CLAUDE.md` — HOW to work (≤150 lines · auto-loaded by harness)
-2. `ARCHITECTURE.md` — current state · decorator order · build/in-progress/planned
-3. `DECISIONS.md` — 10 locked architectural decisions
-4. `docs/plans/12-DAY-PRODUCTION-SPRINT.md` — master plan (624 lines · 14 sections)
-5. `docs/plans/SESSION-01a-scrubber-vault.md` — first session plan (PII pipeline)
-6. `docs/architecture/target-architecture.html` — visual reference (open in browser)
-7. `tracer.py` — the leak that must be fixed Day 1 Hour 1
+1. `CLAUDE.md` — HOW to work (auto-loaded by harness)
+2. `ARCHITECTURE.md` — current Built/InProgress/Planned state
+3. `docs/SESSION-01-COMPLETE.md` — Session 01 full summary (defense in depth at 5 layers)
+4. `docs/plans/SESSION-02-policy-engine.md` — Session 02 detailed plan + acceptance
+5. `docs/plans/12-DAY-PRODUCTION-SPRINT.md` — master plan (Sessions 03-12 outline)
+6. `middleware/scrubber.py`, `middleware/policy.py` — decorator pattern to follow for Session 03
+7. `domain/policy_engine.py`, `domain/trust_scorer.py` — policy engine reference
 
-## Outstanding questions (need user input before Day 1)
-1. **Execution mode:** A (4 calendar days × 3 parallel Claude Code accounts · ~12 person-days) or B (12 calendar days × 1 builder)?
-2. **Start time:** patch `tracer.py` tonight or wait until tomorrow AM?
-3. **Provision Postgres + Azure AI Search tonight (async) or Day 1 AM?**
-4. **Stakeholder dry-run target:** Day 12 EOD or Day 13 AM?
+## Outstanding questions (need user input)
+1. **Session 03 scope:** Build full NeMo Guardrails + Llama Guard 3 integration, or start with regex-only guardrails extension and stub the heavy adapters?
+2. **OPA sidecar deployment:** Deploy actual OPA process on App Service now (so OPA HTTP path stops being a fallback)? Or keep Python local evaluator and defer to Session 10 hardening?
+3. **Pace:** Continue ahead-of-schedule autopilot (3 sessions/day), or slow to planned 1 session/day for review cycles?
 
 ## Next concrete action
-**First action in new session:**
-1. Run `/arch` to confirm current state
-2. Read `docs/plans/SESSION-01a-scrubber-vault.md`
-3. Answer the 4 outstanding questions above
-4. **Patch `tracer.py` raw-prompt leak (Day 1 Hour 1)** — this is the critical fix that gates everything
+**Session 03 — Guardrails (per ARCHITECTURE.md "Planned"):**
+- Build `middleware/injection.py` — prompt-injection detection (regex + LLM-based)
+- Extend `guardrails.py` — add NeMo + Llama Guard 3 adapters
+- Build `guardrails/topic_rail.py` and `guardrails/financial_advisor.co`
+- Decorator chain: `@policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response`
+  (insert `@guardrails` between scrub and trace)
+- Acceptance: prompt injection blocked, off-topic prompts rejected, financial advisor topic rail enforced
 
 ## Working rules in effect
 - Repo: `signalyer/ai-assurance-mvp` · default branch `main`
-- Azure subscription: `SignalLayerDev` · resource group `rg-aigovern-dev` · region `eastus`
+- Azure subscription: `SignalLayerDev` · resource group `rg-aigovern-dev` · region `eastus` (Postgres in westus2)
 - Production URL: `aigovern.sandboxhub.co`
 - Pre-register Azure providers + set `$env:MSYS_NO_PATHCONV = "1"` at session start
 - Slash commands: `/arch` `/plan` `/verify` `/handoff` `/diagram`
 - Code standards: full files only · type hints · Pydantic v2 `ConfigDict` · `from __future__ import annotations` · JSONL via `storage._append_jsonl()` only
-- Hard security rules: `scrubber.tokenise_payload()` BEFORE `tracer.trace_call()` always · Langfuse gets scrubbed only · OPA fail-closed · no SaaS guardrails · no secrets in code
-- End-of-session: `/verify` · update ARCHITECTURE.md · append DECISIONS.md · write next SESSION plan · output opening message for next session
+- Hard security rules: scrubber BEFORE tracer (✓ enforced) · Langfuse scrubbed-only (✓ enforced) · OPA fail-closed (✓ enforced) · no SaaS guardrails · no secrets in code
+- End-of-session: `/verify` · update ARCHITECTURE.md · append DECISIONS.md · write next SESSION plan · output handoff
 
 ## Recent commits (last 6)
 ```
-e7f101f Docs: add diagram generation guide
-0ef921d Plan: 12-day production sprint — consolidated single source
-f1cee9a Docs: add deployment-shape section to architecture HTML
-fd18c22 Docs: full architecture + tech stack as reviewable HTML
-e5fc78d Fix: track .claude/commands/ and .claude/skills/
-cca0466 Bootstrap: structured Chat → Code workflow
+a35a07d Feat: Session 02 — Policy Engine (OPA + 5 categories + trust scorer)
+8a10027 Feat: Session 01b — @scrub_pii decorator + demo_run.py scrubber integration
+1b39439 Docs: Session 01 final summary — infrastructure provisioning status
+3637371 Docs: add provisioning script + tonight async work summary
+2be4e1c Fix: tracer.py — enforce scrubbed prompts, fail-closed on missing vault_id
+2ee7257 Feat: Session 01a — scrubber.py + de-ID vault with Fernet encryption and TTL
 ```
 
 ## Opening message for next session
@@ -70,21 +67,20 @@ Paste this verbatim into the new Claude Code session:
 ```
 Read docs/HANDOFF.md first.
 
-Then /arch and read docs/plans/SESSION-01a-scrubber-vault.md in full.
+Then /arch to confirm current state. Sessions 01a + 01b + 02 are complete.
+All 28 acceptance tests pass. Decorator chain is live:
+@policy_gate -> @scrub_pii -> @trace_llm_call -> @evaluate_response
 
-I need to answer these before you write any code:
-1. Execution mode (A: 4 calendar days × 3 parallel accounts · B: 12 calendar days × 1 builder)
-2. Patch tracer.py leak tonight or tomorrow AM
-3. Provision Postgres + Azure AI Search tonight async or Day 1 AM
-4. Stakeholder dry-run Day 12 EOD or Day 13 AM
+Three questions before you write code:
+1. Session 03 scope: full NeMo + Llama Guard 3 integration, or regex-only with stubs?
+2. Deploy OPA sidecar now, or defer to Session 10 hardening?
+3. Pace: continue autopilot (3 sessions/day), or planned 1 session/day?
 
-After I answer, use /plan to show your implementation approach for Day 1
-(scrubber.py + domain/deid_vault.py + @scrub_pii decorator + tracer.py patch).
-Confirm:
-- The decorator chain order
-- Files you create vs modify
-- The two critical constraints from the plan file
-- What you will NOT build in this session
+After I answer:
+- Use /plan for Session 03 (Guardrails)
+- Confirm the new decorator position (@guardrails between @scrub_pii and @trace_llm_call)
+- List files you will CREATE vs MODIFY
+- Apply 16-test acceptance pattern from Session 02
 
 Wait for my approval before executing.
 ```
