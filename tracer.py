@@ -49,19 +49,37 @@ def trace_call(
     """
     Send a model call trace to Langfuse.
 
+    CRITICAL: The prompt parameter MUST be pre-scrubbed via scrubber.tokenise_payload()
+    before calling this function. Raw prompts must NEVER reach Langfuse. If vault_id is
+    empty or missing, this function should NOT be called.
+
     Args:
         model: Model name (e.g., 'claude-sonnet-4-20250514', 'gpt-4o-mini')
-        prompt: Input prompt text
+        prompt: SCRUBBED prompt text (pre-tokenized, PII replaced with [TYPE_NNN] tokens)
         response: Model response text
         latency_ms: Latency in milliseconds
         tokens_used: Total tokens consumed
-        metadata: Optional metadata dict
+        metadata: Optional metadata dict. Should include 'vault_id' for de-ID traceability.
 
     Returns:
         Trace ID string
     """
     if metadata is None:
         metadata = {}
+
+    # Security check: if scrubber is enabled, vault_id MUST be in metadata
+    # This prevents accidental raw-prompt traces to Langfuse
+    scrubber_enabled = os.getenv("SCRUBBER_ENABLED", "false").lower() == "true"
+    if scrubber_enabled and not metadata.get("vault_id"):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "trace_call: SCRUBBER_ENABLED but vault_id missing from metadata. "
+            "Raw prompts are not allowed. Aborting trace to Langfuse."
+        )
+        # Return a trace ID but do NOT send to Langfuse
+        trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_blocked_no_vault_id"
+        return trace_id
 
     client = _get_client()
     trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
