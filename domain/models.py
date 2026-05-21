@@ -168,6 +168,10 @@ class FrameworkName(str, Enum):
     FS_OVERLAY = "FS_OVERLAY"
     ISO_IEC_23894 = "ISO_IEC_23894"
     EU_AI_ACT = "EU_AI_ACT"
+    ISO_42001 = "ISO_42001"
+    SR_11_7 = "SR_11_7"
+    FFIEC = "FFIEC"
+    US_FINSERV_OVERLAY = "US_FINSERV_OVERLAY"
     SOC2 = "SOC2"
     AWS_CONTROLS = "AWS_CONTROLS"  # IAM, CloudTrail, Security Hub, Macie, GuardDuty, KMS, VPC Endpoints, Bedrock Guardrails
 

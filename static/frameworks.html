@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Framework Coverage Matrix — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* Matrix table */
+        .matrix-wrap { overflow-x: auto; }
+
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            min-width: 900px;
+        }
+
+        .matrix-table th {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .matrix-table td {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .matrix-table tr:hover td { background: var(--bg-elevated); }
+
+        .cell-pct {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 56px;
+            height: 28px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 11px;
+            cursor: pointer;
+            transition: filter 0.15s;
+        }
+        .cell-pct:hover { filter: brightness(1.2); }
+
+        .pct-green  { background: var(--pass-bg);   color: var(--pass);   border: 1px solid var(--pass-border); }
+        .pct-amber  { background: var(--medium-bg);  color: var(--medium); border: 1px solid var(--medium-border); }
+        .pct-red    { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .pct-empty  { background: var(--bg-card); color: var(--text-tertiary); border: 1px solid var(--border); cursor: default; }
+
+        /* Filter bar */
+        .fw-filter-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: min(780px, 96vw);
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .modal-title { font-weight: 700; font-size: 14px; }
+        .modal-close {
+            background: none; border: none; color: var(--text-secondary);
+            font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1;
+        }
+        .modal-close:hover { color: var(--text); }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 1.25rem;
+        }
+
+        .modal-footer {
+            padding: 0.75rem 1.25rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Item list */
+        .item-row {
+            display: grid;
+            grid-template-columns: 1fr 80px auto;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+        .item-row:last-child { border-bottom: none; }
+        .item-row:hover { background: var(--bg-elevated); }
+
+        .item-name { font-size: 12px; font-weight: 600; }
+        .item-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* Evidence modal */
+        .ev-row {
+            font-size: 11px;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .ev-row:last-child { border-bottom: none; }
+        .ev-hash {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .copy-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-size: 9px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        /* Status badge inline */
+        .status-inline {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .s-PASS     { background: var(--pass-bg);   color: var(--pass); }
+        .s-FAIL     { background: var(--critical-bg); color: var(--critical); }
+        .s-PARTIAL  { background: var(--medium-bg); color: var(--medium); }
+        .s-NO_EVIDENCE { background: var(--high-bg); color: var(--high); }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Framework Coverage Matrix</div>
+                <div class="page-subtitle">Portfolio-wide coverage across 6 AI governance frameworks</div>
+            </div>
+        </div>
+
+        <div class="fw-filter-row">
+            <label class="text-sm text-secondary">Filter framework:</label>
+            <select class="filter-select" id="fwFilter" onchange="applyFilter()">
+                <option value="">All frameworks</option>
+            </select>
+            <span class="text-xs text-tertiary" id="loadingHint">Loading…</span>
+        </div>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <div class="matrix-wrap">
+                <table class="matrix-table" id="matrixTable">
+                    <thead id="matrixHead"><tr><th>AI System</th></tr></thead>
+                    <tbody id="matrixBody"><tr><td colspan="10" class="loading">Loading matrix…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drill-down modal (items list) -->
+    <div class="modal-overlay" id="drillModal" onclick="closeDrill(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="drillTitle">Coverage Details</div>
+                <button class="modal-close" onclick="closeDrillBtn()">×</button>
+            </div>
+            <div class="modal-body" id="drillBody">Loading…</div>
+            <div class="modal-footer" id="drillFooter"></div>
+        </div>
+    </div>
+
+    <!-- Evidence detail modal (secondary) -->
+    <div class="modal-overlay" id="evModal" onclick="closeEv(event)">
+        <div class="modal" style="max-width:620px;">
+            <div class="modal-header">
+                <div class="modal-title" id="evTitle">Evidence</div>
+                <button class="modal-close" onclick="closeEvBtn()">×</button>
+            </div>
+            <div class="modal-body" id="evBody">Loading…</div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/frameworks');
+
+        let MATRIX = null;           // {frameworks, rows}
+        let DRILL_DATA = null;       // cached drill-down for current cell
+        let CURRENT_SLUG = '';
+        let CURRENT_SYSTEM = '';
+        let FILTERED_SLUG = '';
+
+        const FRAMEWORK_SLUGS = [
+            'nist-ai-rmf', 'nist-ai-600-1', 'owasp-llm', 'owasp-agentic', 'iso-42001', 'sr-11-7'
+        ];
+
+        async function load() {
+            const r = await fetch('/api/frameworks/matrix');
+            if (!r.ok) {
+                document.getElementById('matrixBody').innerHTML =
+                    '<tr><td colspan="10" class="empty-state">Failed to load matrix.</td></tr>';
+                return;
+            }
+            MATRIX = await r.json();
+            document.getElementById('loadingHint').textContent = '';
+            buildFilterOptions();
+            renderMatrix();
+        }
+
+        function buildFilterOptions() {
+            const sel = document.getElementById('fwFilter');
+            MATRIX.frameworks.forEach(fw => {
+                const opt = document.createElement('option');
+                opt.value = fw.slug;
+                opt.textContent = fw.display_name;
+                sel.appendChild(opt);
+            });
+        }
+
+        function applyFilter() {
+            FILTERED_SLUG = document.getElementById('fwFilter').value;
+            renderMatrix();
+        }
+
+        function visibleFrameworks() {
+            if (!FILTERED_SLUG) return MATRIX.frameworks;
+            return MATRIX.frameworks.filter(fw => fw.slug === FILTERED_SLUG);
+        }
+
+        function renderMatrix() {
+            const fws = visibleFrameworks();
+            const head = document.getElementById('matrixHead');
+            const body = document.getElementById('matrixBody');
+
+            head.innerHTML = '<tr><th>AI System</th>' +
+                fws.map(fw => `<th>${fw.display_name}</th>`).join('') + '</tr>';
+
+            if (!MATRIX.rows.length) {
+                body.innerHTML = '<tr><td colspan="20" class="empty-state">No systems found.</td></tr>';
+                return;
+            }
+
+            body.innerHTML = MATRIX.rows.map(row => {
+                const cells = fws.map(fw => {
+                    const pct = row.cells[fw.slug];
+                    if (pct === undefined) {
+                        return `<td><span class="cell-pct pct-empty">—</span></td>`;
+                    }
+                    const cls = pct >= 80 ? 'pct-green' : pct >= 60 ? 'pct-amber' : 'pct-red';
+                    return `<td>
+                        <span class="cell-pct ${cls}"
+                              onclick="openDrill('${fw.slug}','${row.system_id}','${escHtml(fw.display_name)}','${escHtml(row.system_name)}')"
+                              title="Click to drill down">
+                            ${pct.toFixed(0)}%
+                        </span>
+                    </td>`;
+                }).join('');
+                return `<tr>
+                    <td>
+                        <div class="cell-primary">${escHtml(row.system_name)}</div>
+                        <div class="cell-secondary font-mono">${row.system_id}</div>
+                    </td>
+                    ${cells}
+                </tr>`;
+            }).join('');
+        }
+
+        // ---------------------------------------------------------------------------
+        // Drill-down modal
+        // ---------------------------------------------------------------------------
+
+        async function openDrill(slug, systemId, fwName, systemName) {
+            CURRENT_SLUG = slug;
+            CURRENT_SYSTEM = systemId;
+
+            document.getElementById('drillTitle').textContent =
+                `${fwName} — ${systemName}`;
+            document.getElementById('drillBody').textContent = 'Loading…';
+            document.getElementById('drillFooter').innerHTML = '';
+            document.getElementById('drillModal').classList.add('open');
+
+            const r = await fetch(`/api/frameworks/${slug}/system/${systemId}`);
+            if (!r.ok) {
+                document.getElementById('drillBody').innerHTML =
+                    `<div class="empty-state">Failed to load drill-down (${r.status}).</div>`;
+                return;
+            }
+            DRILL_DATA = await r.json();
+            renderDrillBody();
+            renderDrillFooter(slug);
+        }
+
+        function renderDrillBody() {
+            const items = DRILL_DATA.items || [];
+            if (!items.length) {
+                document.getElementById('drillBody').innerHTML =
+                    '<div class="empty-state">No items found for this framework.</div>';
+                return;
+            }
+            document.getElementById('drillBody').innerHTML = items.map(item => {
+                const cls = item.coverage_pct >= 80 ? 'pct-green' : item.coverage_pct >= 60 ? 'pct-amber' : 'pct-red';
+                const evCount = (item.evidence || []).length;
+                // Finding #5: data attribute instead of inline onclick with interpolation
+                return `<div class="item-row" data-item-id="${escHtml(item.id)}">
+                    <div>
+                        <div class="item-name">${escHtml(item.display_name)}</div>
+                        <div class="item-desc">${(item.controls || []).length} controls · ${(item.findings || []).length} findings · ${evCount} evidence</div>
+                    </div>
+                    <span class="cell-pct ${cls}" style="pointer-events:none;">${item.coverage_pct.toFixed(0)}%</span>
+                    <span class="text-xs text-tertiary">${evCount > 0 ? 'view evidence ›' : ''}</span>
+                </div>`;
+            }).join('');
+            // Finding #5: attach click listeners after render (no inline onclick interpolation)
+            document.querySelectorAll('.item-row[data-item-id]').forEach(el => {
+                el.addEventListener('click', () => openEvModal(el.dataset.itemId));
+            });
+        }
+
+        function renderDrillFooter(slug) {
+            const PACK_SLUGS = {
+                'nist-ai-rmf':   'Export NIST Pack',
+                'nist-ai-600-1': 'Export NIST Pack',
+                'owasp-llm':     'Export OWASP Pack',
+                'owasp-agentic': 'Export OWASP Pack',
+            };
+            const label = PACK_SLUGS[slug];
+            if (!label) return;
+            document.getElementById('drillFooter').innerHTML =
+                `<button class="btn btn-sm btn-primary" onclick="exportPdf('${slug}')">
+                    ${label}
+                </button>`;
+        }
+
+        async function exportPdf(slug) {
+            const btn = document.querySelector('#drillFooter .btn-primary');
+            if (btn) { btn.textContent = 'Generating…'; btn.disabled = true; }
+
+            const r = await fetch(`/api/frameworks/${slug}/export`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ system_id: CURRENT_SYSTEM }),
+            });
+
+            if (!r.ok) {
+                const j = await r.json().catch(() => ({}));
+                alert('Export failed: ' + (j.detail || r.status));
+                if (btn) { btn.textContent = 'Export NIST Pack'; btn.disabled = false; }
+                return;
+            }
+
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${slug}-pack-${CURRENT_SYSTEM}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            if (btn) { btn.textContent = 'Exported'; btn.disabled = false; }
+        }
+
+        function closeDrill(e) {
+            if (e.target === document.getElementById('drillModal')) closeDrillBtn();
+        }
+        function closeDrillBtn() {
+            document.getElementById('drillModal').classList.remove('open');
+        }
+
+        // ---------------------------------------------------------------------------
+        // Evidence secondary modal
+        // ---------------------------------------------------------------------------
+
+        function openEvModal(itemId) {
+            const item = (DRILL_DATA && DRILL_DATA.items || []).find(i => i.id === itemId);
+            if (!item) return;
+
+            document.getElementById('evTitle').textContent = item.display_name + ' — Evidence';
+            document.getElementById('evModal').classList.add('open');
+
+            const evidence = item.evidence || [];
+            if (!evidence.length) {
+                document.getElementById('evBody').innerHTML =
+                    '<div class="empty-state">No evidence linked to this item.</div>';
+                return;
+            }
+
+            document.getElementById('evBody').innerHTML = evidence.map(ev => `
+                <div class="ev-row">
+                    <div style="font-weight:600;">${escHtml(ev.source)} · ${escHtml(ev.evidence_type)}</div>
+                    <div class="text-xs text-secondary" style="margin:2px 0;">${escHtml(ev.summary)}</div>
+                    <div class="ev-hash">
+                        <span>${escHtml(ev.evidence_hash || '')}</span>
+                        <button class="copy-btn" onclick="copyHash(this,'${escHtml(ev.evidence_hash || '')}')">Copy</button>
+                    </div>
+                    <div class="text-xs text-tertiary">${escHtml(ev.collected_at || '')}</div>
+                </div>
+            `).join('');
+        }
+
+        function copyHash(btn, hash) {
+            navigator.clipboard.writeText(hash).then(() => {
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+            });
+        }
+
+        function closeEv(e) {
+            if (e.target === document.getElementById('evModal')) closeEvBtn();
+        }
+        function closeEvBtn() {
+            document.getElementById('evModal').classList.remove('open');
+        }
+
+        // ---------------------------------------------------------------------------
+        // Utilities
+        // ---------------------------------------------------------------------------
+
+        function escHtml(s) {
+            if (!s) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        load();
+    </script>
+</body>
+</html>

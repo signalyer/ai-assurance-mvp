@@ -57,6 +57,7 @@ class GateDefinition:
     mapped_frameworks: list[str]            # union of frameworks across mapped controls
     evidence_required: list[str]            # union of evidence types across mapped controls
     default_blocking: bool                  # whether failure halts release by default
+    framework_refs: list[dict] = field(default_factory=list)  # [{framework, clause}] explicit refs
 
 
 @dataclass
@@ -143,6 +144,110 @@ def _evidence_for(control_ids: list[str]) -> list[str]:
     return sorted(out)
 
 
+_GATE_FRAMEWORK_REFS: dict[str, list[dict]] = {
+    "RG-001": [
+        {"framework": "NIST_AI_RMF",        "clause": "MANAGE-2.2"},
+        {"framework": "NIST_AI_600_1",      "clause": "Data Privacy"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM02"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-03"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.10"},
+        {"framework": "ISO_42001",          "clause": "8.2"},
+        {"framework": "SR_11_7",            "clause": "Model Use"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-002": [
+        {"framework": "NIST_AI_RMF",        "clause": "MEASURE-2.6"},
+        {"framework": "NIST_AI_600_1",      "clause": "Prompt Injection"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM01"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-01"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.15"},
+        {"framework": "ISO_42001",          "clause": "9.1"},
+        {"framework": "SR_11_7",            "clause": "Model Validation"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-003": [
+        {"framework": "NIST_AI_RMF",        "clause": "MAP-2.3"},
+        {"framework": "NIST_AI_600_1",      "clause": "RAG Risks"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM04"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-03"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.10"},
+        {"framework": "ISO_42001",          "clause": "8.2"},
+        {"framework": "SR_11_7",            "clause": "Model Development"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-004": [
+        {"framework": "NIST_AI_RMF",        "clause": "MANAGE-2.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Human-AI Interaction"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM06"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-04"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.14"},
+        {"framework": "ISO_42001",          "clause": "8.2"},
+        {"framework": "SR_11_7",            "clause": "Model Use"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-005": [
+        {"framework": "NIST_AI_RMF",        "clause": "MANAGE-2.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Human-AI Interaction"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM06"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-10"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.14"},
+        {"framework": "ISO_42001",          "clause": "8.2"},
+        {"framework": "SR_11_7",            "clause": "Model Use"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-006": [
+        {"framework": "NIST_AI_RMF",        "clause": "MANAGE-1.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Accountability"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM01"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-09"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.9"},
+        {"framework": "ISO_42001",          "clause": "10.1"},
+        {"framework": "SR_11_7",            "clause": "Model Validation"},
+        {"framework": "FFIEC",              "clause": "Change Management"},
+    ],
+    "RG-007": [
+        {"framework": "NIST_AI_RMF",        "clause": "MEASURE-3.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Accountability"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM03"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-05"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.9"},
+        {"framework": "ISO_42001",          "clause": "9.1"},
+        {"framework": "SR_11_7",            "clause": "Model Validation"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+    "RG-008": [
+        {"framework": "NIST_AI_RMF",        "clause": "MEASURE-3.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Accountability"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM01"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-09"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.9"},
+        {"framework": "ISO_42001",          "clause": "9.1"},
+        {"framework": "SR_11_7",            "clause": "Model Validation"},
+        {"framework": "FFIEC",              "clause": "Monitoring"},
+    ],
+    "RG-009": [
+        {"framework": "NIST_AI_RMF",        "clause": "MANAGE-1.1"},
+        {"framework": "NIST_AI_600_1",      "clause": "Accountability"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM03"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-09"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.9"},
+        {"framework": "ISO_42001",          "clause": "9.1"},
+        {"framework": "SR_11_7",            "clause": "Governance"},
+        {"framework": "FFIEC",              "clause": "Monitoring"},
+    ],
+    "RG-010": [
+        {"framework": "NIST_AI_RMF",        "clause": "GOVERN-4.2"},
+        {"framework": "NIST_AI_600_1",      "clause": "Accountability"},
+        {"framework": "OWASP_LLM_TOP10",    "clause": "LLM02"},
+        {"framework": "OWASP_AGENTIC_TOP10","clause": "AAI-09"},
+        {"framework": "EU_AI_ACT",          "clause": "Art.12"},
+        {"framework": "ISO_42001",          "clause": "9.1"},
+        {"framework": "SR_11_7",            "clause": "Governance"},
+        {"framework": "FFIEC",              "clause": "Model Governance"},
+    ],
+}
+
+
 def define_gates() -> list[GateDefinition]:
     """Static catalog of the 10 release gates with full mapping metadata."""
     spec = [
@@ -186,6 +291,7 @@ def define_gates() -> list[GateDefinition]:
             mapped_frameworks=_frameworks_for(ctrls),
             evidence_required=_evidence_for(ctrls),
             default_blocking=blocking,
+            framework_refs=_GATE_FRAMEWORK_REFS.get(gate_id, []),
         ))
     return defs
 

@@ -9,8 +9,9 @@ Forty controls (AI-001..AI-040) spanning six domains:
   - Audit & Evidence
 
 Each control is mapped to NIST AI RMF, NIST AI 600-1, OWASP LLM Top 10,
-OWASP Agentic AI Top 10, and AWS service controls (IAM, CloudTrail,
-Security Hub, Macie, GuardDuty, KMS, VPC Endpoints, Bedrock Guardrails).
+OWASP Agentic AI Top 10, EU AI Act, ISO 42001, SR 11-7, FFIEC, and AWS
+service controls (IAM, CloudTrail, Security Hub, Macie, GuardDuty, KMS,
+VPC Endpoints, Bedrock Guardrails).
 
 The library is executable:
   - `get_controls_for_ai_system(system)` resolves applicability
@@ -114,7 +115,7 @@ AWS_PROD_OR_PILOT = Applicability(
 
 
 # ---------------------------------------------------------------------------
-# The 40 controls
+# The 40 controls — all backfilled with EU AI Act, ISO 42001, SR 11-7, FFIEC
 # ---------------------------------------------------------------------------
 
 CONTROLS: list[Control] = [
@@ -134,6 +135,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "GOVERN-1.6", "Inventory of AI systems"),
            _fm(FrameworkName.NIST_AI_RMF, "MAP-1.1"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "All AI systems must be accountable and inventoried"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Supply chain visibility requires inventory"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Agency scope requires inventory control"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.11", "Technical documentation requirement"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational planning and control of AI systems"),
+           _fm(FrameworkName.SR_11_7, "Model Development", "Model inventory is foundational to SR 11-7 governance"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Model inventory required under FFIEC model risk"),
        ]),
 
     _C("AI-012", "Business Owner Required", ControlDomain.GOVERNANCE,
@@ -147,6 +155,12 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "GOVERN-2.1", "Roles, responsibilities, accountability"),
            _fm(FrameworkName.NIST_AI_600_1, "Accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Third-party supply chain requires named ownership"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Agency requires defined business scope owner"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management system must have assigned responsibility"),
+           _fm(FrameworkName.ISO_42001, "5.1", "Leadership commitment and responsibility assignment"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Business owner accountability required under SR 11-7"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Named business ownership required"),
        ]),
 
     _C("AI-013", "Technical Owner Required", ControlDomain.GOVERNANCE,
@@ -160,6 +174,12 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "GOVERN-2.1"),
            _fm(FrameworkName.NIST_AI_600_1, "Accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Supply chain requires technical point of contact"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime control requires identifiable technical owner"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management must be assigned to responsible persons"),
+           _fm(FrameworkName.ISO_42001, "5.1", "Leadership and technical accountability"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Technical ownership required under SR 11-7"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Technical owner documented for model risk"),
        ]),
 
     _C("AI-014", "Approved Model Provider Required", ControlDomain.GOVERNANCE,
@@ -176,6 +196,11 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM05", "Supply chain"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03"),
            _fm(FrameworkName.NIST_AI_600_1, "Misuse", "Vendor controls reduce misuse vectors at the provider tier"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-07", "Provider identity verification reduces spoofing"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management covers third-party AI providers"),
+           _fm(FrameworkName.ISO_42001, "6.1", "Risk treatment for third-party AI provider selection"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Third-party model vendor assessment"),
+           _fm(FrameworkName.FFIEC, "Third-Party Risk", "Vendor due diligence for AI model providers"),
        ]),
 
     _C("AI-010", "Critical Findings Block Production Release", ControlDomain.GOVERNANCE,
@@ -189,6 +214,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-1.1"),
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.3"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Open critical findings require governance response"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM01", "Open injection findings must block release"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime failures must not proceed to production"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management must gate production releases"),
+           _fm(FrameworkName.ISO_42001, "10.1", "Nonconformity and corrective action before release"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Validation findings gate production approval"),
+           _fm(FrameworkName.FFIEC, "Change Management", "Critical defects must be remediated before production"),
        ]),
 
     _C("AI-039", "Exception / Waiver Expiration Required", ControlDomain.GOVERNANCE,
@@ -201,6 +233,13 @@ CONTROLS: list[Control] = [
        recommended_owner=ApproverRole.AI_GOVERNANCE,
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "GOVERN-4.1"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Exception tracking is accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Supply chain exceptions need time-bounded scope"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Agency scope waivers must expire"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management requires bounded exception handling"),
+           _fm(FrameworkName.ISO_42001, "6.1", "Residual risk acceptance must be time-bounded"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Temporary exceptions require expiration under SR 11-7"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Waivers must be documented and time-limited"),
        ]),
 
     _C("AI-040", "Continuous Reassessment Required", ControlDomain.GOVERNANCE,
@@ -215,6 +254,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-4.1"),
            _fm(FrameworkName.NIST_AI_RMF, "MEASURE-3.1"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Continuous reassessment sustains accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM09", "Reassessment detects emergent misinformation risks"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime controls reviewed periodically"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Ongoing risk management required for high-risk AI"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Monitoring, measurement, analysis and evaluation"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Periodic revalidation required"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Ongoing monitoring of model performance required"),
        ]),
 
     # =====================================================================
@@ -235,6 +281,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM08", "Vector and embedding weaknesses"),
            _fm(FrameworkName.NIST_AI_600_1, "RAG Risks"),
            _fm(FrameworkName.AWS_CONTROLS, "Macie"),
+           _fm(FrameworkName.NIST_AI_RMF, "MAP-2.3", "Data provenance and classification"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory poisoning via RAG ingestion"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance for training and corpus data"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational control of AI data pipelines"),
+           _fm(FrameworkName.SR_11_7, "Model Development", "Data quarantine is part of model development rigor"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Input data governance for RAG systems"),
        ]),
 
     _C("AI-015", "AWS Private Connectivity for Regulated Workloads", ControlDomain.ARCHITECTURE,
@@ -257,6 +309,13 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.AWS_CONTROLS, "VPC Endpoints"),
            _fm(FrameworkName.AWS_CONTROLS, "Bedrock"),
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2"),
+           _fm(FrameworkName.NIST_AI_600_1, "Data Privacy", "Network-level data isolation"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive data in transit protection"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-08", "Persistence attack surface via public endpoints"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Accuracy and cybersecurity measures"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational security for AI inference"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Secure implementation requirements"),
+           _fm(FrameworkName.FFIEC, "Third-Party Risk", "Network isolation for regulated AI workloads"),
        ]),
 
     _C("AI-016", "Bedrock Configuration Evidence Required", ControlDomain.ARCHITECTURE,
@@ -272,6 +331,14 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.AWS_CONTROLS, "Bedrock"),
            _fm(FrameworkName.AWS_CONTROLS, "KMS"),
            _fm(FrameworkName.AWS_CONTROLS, "CloudTrail"),
+           _fm(FrameworkName.NIST_AI_RMF, "GOVERN-4.2", "Logging and audit trail for AI operations"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Invocation logging supports accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM07", "System prompt protection via KMS"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime configuration controls"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.11", "Technical documentation of configuration"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational configuration management"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Infrastructure configuration evidence"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Configuration documentation for regulated workloads"),
        ]),
 
     _C("AI-017", "RAG Document Provenance Required", ControlDomain.ARCHITECTURE,
@@ -287,6 +354,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Training/RAG data poisoning"),
            _fm(FrameworkName.NIST_AI_600_1, "Transparency"),
            _fm(FrameworkName.NIST_AI_600_1, "Content Provenance"),
+           _fm(FrameworkName.NIST_AI_RMF, "MAP-2.3", "Data provenance and traceability"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory state provenance for agent systems"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.13", "Transparency and provision of information"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational data lineage management"),
+           _fm(FrameworkName.SR_11_7, "Model Development", "Data lineage is part of model development documentation"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Input data provenance for audit"),
        ]),
 
     _C("AI-018", "Vector Store Access Control Required", ControlDomain.ARCHITECTURE,
@@ -302,6 +375,13 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM08", "Vector and embedding weaknesses"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive information disclosure"),
            _fm(FrameworkName.AWS_CONTROLS, "IAM"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Access control for AI data stores"),
+           _fm(FrameworkName.NIST_AI_600_1, "Data Privacy", "Cross-tenant isolation"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-06", "Delegation must not bypass retrieval ACL"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance and access control"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational access control for AI data"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Data access controls in model implementation"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Access controls for model data stores"),
        ]),
 
     _C("AI-030", "Signed Tool Registry Required", ControlDomain.ARCHITECTURE,
@@ -317,6 +397,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-04", "Unsafe tool use"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-06", "Delegation abuse"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM05"),
+           _fm(FrameworkName.NIST_AI_RMF, "MAP-4.1", "Dependency and supply chain management"),
+           _fm(FrameworkName.NIST_AI_600_1, "Misuse", "Unsigned tools increase misuse attack surface"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management for agentic tool execution"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational control of AI tool pipelines"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Tool registry as implementation control"),
+           _fm(FrameworkName.FFIEC, "Change Management", "Tool changes require version control and approval"),
        ]),
 
     _C("AI-031", "SBOM Required for AI Supply Chain", ControlDomain.ARCHITECTURE,
@@ -331,6 +417,12 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM05", "Supply chain"),
            _fm(FrameworkName.NIST_AI_RMF, "MAP-4.1"),
+           _fm(FrameworkName.NIST_AI_600_1, "Content Provenance", "SBOM is provenance for AI supply chain"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-04", "Tool supply chain integrity"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.11", "Technical documentation includes component inventory"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational supply chain management"),
+           _fm(FrameworkName.SR_11_7, "Model Development", "SBOM supports model development documentation"),
+           _fm(FrameworkName.FFIEC, "Third-Party Risk", "Component inventory for third-party risk management"),
        ]),
 
     # =====================================================================
@@ -350,6 +442,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive information disclosure"),
            _fm(FrameworkName.NIST_AI_600_1, "Data Privacy"),
            _fm(FrameworkName.AWS_CONTROLS, "Macie"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Data protection controls"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Sensitive data must not enter agent memory"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance — no raw PII in model inputs"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational control of sensitive data in AI pipelines"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Data handling controls in model use"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Data governance for model inputs"),
        ]),
 
     _C("AI-002", "DLP Before Model Context Assembly", ControlDomain.SECURITY,
@@ -365,6 +463,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02"),
            _fm(FrameworkName.NIST_AI_600_1, "Data Privacy"),
            _fm(FrameworkName.AWS_CONTROLS, "Macie"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Data protection in AI context assembly"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory context DLP prevents agent data leakage"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance covering context assembly"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational DLP control"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "DLP in model use environment"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Sensitive data protection in model pipeline"),
        ]),
 
     _C("AI-003", "Prompt Injection Testing Required", ControlDomain.SECURITY,
@@ -380,6 +484,11 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM01", "Prompt injection"),
            _fm(FrameworkName.NIST_AI_600_1, "Prompt Injection"),
            _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.6"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Goal manipulation via prompt injection"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Accuracy and robustness testing"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Performance testing and monitoring"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Adversarial testing as part of validation"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Stress testing / adversarial testing for model risk"),
        ]),
 
     _C("AI-005", "Tool Allowlisting Mandatory", ControlDomain.SECURITY,
@@ -395,6 +504,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-04", "Unsafe tool use"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Excessive agency"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-1.1", "Risk response includes tool scope control"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Tool allowlist enforces human-defined boundaries"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight — tool scope enforcement"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational tool control for agentic AI"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Operational constraints on model tool use"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Scope constraints on agentic model operations"),
        ]),
 
     _C("AI-006", "Tool Authorization Mandatory", ControlDomain.SECURITY,
@@ -411,6 +526,11 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Excessive agency"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06"),
            _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.1", "Human oversight of consequential AI actions"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight of high-risk AI actions"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational authorization controls"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Per-action authorization for consequential model actions"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Authorization controls for model-driven actions"),
        ]),
 
     _C("AI-019", "Tool Output DLP Required", ControlDomain.SECURITY,
@@ -426,6 +546,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive information disclosure"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM05", "Improper output handling"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-04"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Data protection in tool response pipeline"),
+           _fm(FrameworkName.NIST_AI_600_1, "Data Privacy", "Tool output DLP protects privacy"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance in agentic pipelines"),
+           _fm(FrameworkName.ISO_42001, "8.2", "DLP as operational control on tool outputs"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Output data handling controls"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Output DLP for model risk management"),
        ]),
 
     _C("AI-020", "Prompt-Injection Resistance Threshold", ControlDomain.SECURITY,
@@ -440,6 +566,12 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM01"),
            _fm(FrameworkName.NIST_AI_600_1, "Prompt Injection"),
+           _fm(FrameworkName.NIST_AI_RMF, "MEASURE-3.1", "Ongoing measurement of injection resistance"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Goal manipulation via injection"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Robustness requirements — injection resistance threshold"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Monitoring of security performance metrics"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Ongoing validation of injection resistance"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Continuous monitoring of model security metrics"),
        ]),
 
     _C("AI-023", "Unauthorized Tool-Call Threshold", ControlDomain.SECURITY,
@@ -454,6 +586,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-04"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05"),
+           _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.6", "Security evaluation for tool authorization"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Unauthorized calls bypass human approval gates"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06", "Excessive agency via unauthorized tools"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight — zero tolerance for unauthorized actions"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Evaluation of tool authorization compliance"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Validation of authorization controls in eval"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Monitoring for unauthorized model-driven actions"),
        ]),
 
     _C("AI-027", "No Persistent Memory for Restricted Data", ControlDomain.SECURITY,
@@ -469,6 +608,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory poisoning"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-08", "Autonomous persistence"),
            _fm(FrameworkName.NIST_AI_600_1, "Data Privacy"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Data retention and memory controls"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive data in persistent memory"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance — retention minimization"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational data retention controls for AI memory"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Data retention constraints in model use"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Data minimization in model memory"),
        ]),
 
     _C("AI-028", "Agent Recursion Depth Limit", ControlDomain.SECURITY,
@@ -484,6 +629,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Excessive agency"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Goal manipulation"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM10"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-4.1", "Operational limits on AI system behavior"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Loop limits enforce human-defined boundaries"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight — limits on autonomous iteration"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational resource and scope limits for AI"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Operational constraints on recursive model use"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Scope controls on iterative AI model execution"),
        ]),
 
     _C("AI-029", "Agent Delegation Controls", ControlDomain.SECURITY,
@@ -501,6 +652,13 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-06", "Delegation abuse"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-07", "Agent identity spoofing"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Access control in agent delegation"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Delegation must stay within human-approved bounds"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06", "Excessive agency via delegation"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight of multi-agent delegation chains"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational controls on agent-to-agent delegation"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Privilege controls in multi-agent implementation"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Delegation scope in agentic model governance"),
        ]),
 
     # =====================================================================
@@ -521,6 +679,11 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.1"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-10", "Human oversight failure"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06", "Excessive agency — human gate required"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight of high-risk AI decisions"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational human-in-the-loop controls"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Human oversight for high-consequence model actions"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "HITL required for consequential model decisions"),
        ]),
 
     _C("AI-024", "Runtime Policy Monitoring Required", ControlDomain.RUNTIME_ASSURANCE,
@@ -537,6 +700,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.AWS_CONTROLS, "CloudWatch"),
            _fm(FrameworkName.AWS_CONTROLS, "Security Hub"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime control failure"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Runtime monitoring supports audit accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM01", "Runtime injection detection"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Post-market monitoring for high-risk AI"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Ongoing monitoring and measurement"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Ongoing performance monitoring"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Continuous monitoring of AI model performance"),
        ]),
 
     _C("AI-025", "Runtime Kill Switch Required", ControlDomain.RUNTIME_ASSURANCE,
@@ -552,6 +721,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.4"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-08", "Autonomous persistence"),
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Runtime control failure"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Kill switch is ultimate human override"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM10", "Unbounded consumption halted by kill switch"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight — emergency stop capability"),
+           _fm(FrameworkName.ISO_42001, "10.1", "Corrective action — incident stop capability"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Contingency controls in model use"),
+           _fm(FrameworkName.FFIEC, "Change Management", "Emergency stop controls for AI systems"),
        ]),
 
     _C("AI-026", "Memory TTL Required", ControlDomain.RUNTIME_ASSURANCE,
@@ -569,6 +744,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory poisoning"),
            _fm(FrameworkName.NIST_AI_600_1, "Data Privacy"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-4.1", "Lifecycle management of AI state"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Sensitive data in memory"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-08", "Autonomous persistence via unbounded memory"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data minimization and retention for AI memory"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational TTL controls for AI memory"),
+           _fm(FrameworkName.SR_11_7, "Model Use", "Data retention controls in model runtime"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "TTL enforcement monitored for compliance"),
        ]),
 
     # =====================================================================
@@ -587,6 +769,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.1"),
            _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.7"),
+           _fm(FrameworkName.NIST_AI_600_1, "Hallucination", "Eval pack must include hallucination testing"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM09", "Misinformation detected via eval pack"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Goal integrity tested in eval pack"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Accuracy and robustness testing before release"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Performance evaluation before deployment"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Pre-deployment validation is core SR 11-7 requirement"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Model validation before production release"),
        ]),
 
     _C("AI-021", "Groundedness Threshold Required", ControlDomain.OPERATIONS,
@@ -602,6 +791,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM09", "Misinformation"),
            _fm(FrameworkName.NIST_AI_600_1, "Hallucination"),
            _fm(FrameworkName.NIST_AI_600_1, "RAG Risks"),
+           _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.7", "Evaluation of factual accuracy"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Grounded outputs prevent goal manipulation"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Accuracy thresholds for high-risk AI"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Monitoring of RAG groundedness metrics"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Factual accuracy validation for RAG models"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Ongoing monitoring of model output quality"),
        ]),
 
     _C("AI-022", "Hallucination Threshold Required", ControlDomain.OPERATIONS,
@@ -617,6 +812,11 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.NIST_AI_600_1, "Hallucination"),
            _fm(FrameworkName.NIST_AI_RMF, "MEASURE-2.7"),
            _fm(FrameworkName.OWASP_LLM_TOP10, "LLM09", "Misinformation"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-01", "Hallucinations corrupt agent goal reasoning"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.15", "Accuracy — hallucination rate below 5%"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Monitoring of hallucination metrics"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Output accuracy validation — hallucination"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Ongoing hallucination rate monitoring"),
        ]),
 
     _C("AI-032", "CloudTrail Enabled", ControlDomain.OPERATIONS,
@@ -631,6 +831,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.AWS_CONTROLS, "CloudTrail"),
            _fm(FrameworkName.NIST_AI_RMF, "GOVERN-4.2"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Audit log underpins accountability"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Audit trail for sensitive data access"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "CloudTrail monitors runtime control events"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.12", "Logging and record keeping for high-risk AI"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Monitoring through audit logging"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Audit trail for model governance"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Audit logging for model oversight"),
        ]),
 
     _C("AI-033", "Security Hub Findings Ingested", ControlDomain.OPERATIONS,
@@ -644,6 +851,14 @@ CONTROLS: list[Control] = [
        applicable_when=AWS_PROD_OR_PILOT,
        framework_mappings=[
            _fm(FrameworkName.AWS_CONTROLS, "Security Hub"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-1.1", "Risk management includes security posture"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Security findings integrated into risk accounting"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Infrastructure security for AI supply chain"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Infrastructure security feeds runtime monitoring"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management includes infrastructure security signals"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Security hub as monitoring input"),
+           _fm(FrameworkName.SR_11_7, "Model Validation", "Infrastructure findings as validation input"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Security posture monitoring for AI workloads"),
        ]),
 
     _C("AI-034", "Macie Scan Required for S3 / RAG Sources", ControlDomain.OPERATIONS,
@@ -665,6 +880,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.AWS_CONTROLS, "Macie"),
            _fm(FrameworkName.NIST_AI_600_1, "Data Privacy"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2", "Data protection controls for AI corpora"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM04", "Data poisoning prevention"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Memory/corpus poisoning prevention"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.10", "Data governance for training and RAG data"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational data classification and scanning"),
+           _fm(FrameworkName.SR_11_7, "Model Development", "Data quality controls in model development"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Data governance for model inputs"),
        ]),
 
     _C("AI-035", "GuardDuty Findings Ingested", ControlDomain.OPERATIONS,
@@ -678,6 +900,14 @@ CONTROLS: list[Control] = [
        applicable_when=AWS_PROD_OR_PILOT,
        framework_mappings=[
            _fm(FrameworkName.AWS_CONTROLS, "GuardDuty"),
+           _fm(FrameworkName.NIST_AI_RMF, "MANAGE-1.1", "Threat detection feeds risk management"),
+           _fm(FrameworkName.NIST_AI_600_1, "Accountability", "Threat findings integrated into risk record"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Compromised accounts threaten AI supply chain"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-07", "Account compromise enables agent impersonation"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.9", "Risk management includes threat intelligence"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Threat monitoring as part of AI governance"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Threat intelligence integration for AI risk"),
+           _fm(FrameworkName.FFIEC, "Monitoring", "Threat detection monitoring for AI workloads"),
        ]),
 
     _C("AI-036", "IAM Least Privilege Validated", ControlDomain.OPERATIONS,
@@ -692,6 +922,13 @@ CONTROLS: list[Control] = [
        framework_mappings=[
            _fm(FrameworkName.AWS_CONTROLS, "IAM"),
            _fm(FrameworkName.NIST_AI_RMF, "MANAGE-2.2"),
+           _fm(FrameworkName.NIST_AI_600_1, "Human-AI Interaction", "Least-privilege constrains agent action surface"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM06", "Excessive agency via over-privileged roles"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-05", "Excessive agency enabled by over-provisioned IAM"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.14", "Human oversight — least privilege as scope control"),
+           _fm(FrameworkName.ISO_42001, "8.2", "Operational access controls for AI"),
+           _fm(FrameworkName.SR_11_7, "Model Implementation", "Least-privilege in model implementation"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Access control governance for AI workloads"),
        ]),
 
     # =====================================================================
@@ -710,6 +947,13 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.SOC2, "CC7.2"),
            _fm(FrameworkName.NIST_AI_600_1, "Accountability"),
            _fm(FrameworkName.AWS_CONTROLS, "CloudTrail"),
+           _fm(FrameworkName.NIST_AI_RMF, "GOVERN-4.2", "Audit logging underpins governance"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Audit log enables PII incident reconstruction"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Audit log is core runtime control evidence"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.12", "Logging requirements for high-risk AI"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Audit logging as monitoring mechanism"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Audit trail for model governance"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Audit logging for exam and supervisory review"),
        ]),
 
     _C("AI-037", "Evidence Immutability Required", ControlDomain.AUDIT_EVIDENCE,
@@ -724,6 +968,13 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.SOC2, "CC7.2"),
            _fm(FrameworkName.AWS_CONTROLS, "S3 Object Lock"),
            _fm(FrameworkName.NIST_AI_600_1, "Accountability"),
+           _fm(FrameworkName.NIST_AI_RMF, "GOVERN-4.2", "Immutable records support governance"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM02", "Evidence immutability for privacy incident defense"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-03", "Tamper-proof evidence prevents memory manipulation"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.12", "Record keeping — immutability requirement"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Evidence retention and integrity"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Immutable evidence for model governance"),
+           _fm(FrameworkName.FFIEC, "Model Governance", "Immutable records for exam-ready evidence"),
        ]),
 
     _C("AI-038", "Approval Lineage Required", ControlDomain.AUDIT_EVIDENCE,
@@ -740,6 +991,12 @@ CONTROLS: list[Control] = [
            _fm(FrameworkName.NIST_AI_600_1, "Accountability"),
            _fm(FrameworkName.NIST_AI_600_1, "Transparency"),
            _fm(FrameworkName.NIST_AI_600_1, "Content Provenance"),
+           _fm(FrameworkName.OWASP_LLM_TOP10, "LLM03", "Release lineage tracks supply chain decisions"),
+           _fm(FrameworkName.OWASP_AGENTIC_TOP10, "AAI-09", "Release approval is a runtime control gate"),
+           _fm(FrameworkName.EU_AI_ACT, "Art.13", "Transparency — release decision documentation"),
+           _fm(FrameworkName.ISO_42001, "9.1", "Performance evidence and release records"),
+           _fm(FrameworkName.SR_11_7, "Governance", "Release approval lineage for model governance"),
+           _fm(FrameworkName.FFIEC, "Change Management", "Approval lineage for model change management"),
        ]),
 ]
 

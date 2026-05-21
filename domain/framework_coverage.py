@@ -9,6 +9,7 @@ Public API:
     framework_catalog(framework) -> list[FrameworkItem]
     item_coverage(framework, clause, scope='ALL'|<ai_system_id>) -> ItemCoverage
     framework_overview(framework) -> list[ItemCoverage]
+    framework_display_name(slug) -> str
 """
 
 from __future__ import annotations
@@ -164,10 +165,12 @@ OWASP_AGENTIC_ITEMS: list[FrameworkItem] = [
                   display_name="Agent identity spoofing",
                   description="One agent impersonates another to bypass trust boundaries.",
                   exact_clauses=["AAI-07"], recommended_owner="AppSec"),
+    # Finding #11: aai-toolchain now has its own distinct clause (AAI-04-toolchain)
+    # so it no longer shadows aai-04's "AAI-04" exact_clause.
     FrameworkItem(id="aai-toolchain", framework=FrameworkName.OWASP_AGENTIC_TOP10.value,
                   display_name="Toolchain poisoning",
                   description="Tool registry / signed-package supply chain compromise.",
-                  exact_clauses=["AAI-04"], recommended_owner="AppSec"),
+                  exact_clauses=["AAI-04-toolchain"], recommended_owner="AppSec"),
     FrameworkItem(id="aai-08", framework=FrameworkName.OWASP_AGENTIC_TOP10.value,
                   display_name="Autonomous persistence",
                   description="Agent escapes its session lifecycle to persist beyond intended bounds.",
@@ -187,13 +190,59 @@ ALL_ITEMS: dict[str, FrameworkItem] = {
     for item in items
 }
 
+# ---------------------------------------------------------------------------
+# YAML-sourced catalogs — loaded once at module import.
+# load_all_frameworks() propagates YAML parse errors (fail-loud per spec).
+# ---------------------------------------------------------------------------
+
+_YAML_CATALOGS: dict[str, list[FrameworkItem]] = {}
+
+
+def _ensure_yaml_catalogs() -> None:
+    """Populate _YAML_CATALOGS from the YAML loader on first call.
+
+    The import of ``frameworks.loader`` is deferred to this function to avoid
+    a circular import at module load time (``frameworks.loader`` imports
+    ``FrameworkItem`` from this module).  Any YAML parse error propagates
+    immediately (fail-loud per spec).
+    """
+    global _YAML_CATALOGS  # noqa: PLW0603
+    if _YAML_CATALOGS:
+        return
+    from frameworks.loader import load_all_frameworks  # deferred to break circular import
+    raw = load_all_frameworks()
+    # Group by FrameworkName value (the 'framework' field on each FrameworkItem)
+    by_fw: dict[str, list[FrameworkItem]] = {}
+    for items in raw.values():
+        for item in items:
+            fw_val = item.framework if isinstance(item.framework, str) else item.framework.value
+            by_fw.setdefault(fw_val, []).append(item)
+    _YAML_CATALOGS = by_fw
+
+
+def _yaml_items(framework_value: str) -> list[FrameworkItem]:
+    """Return YAML-sourced items for the given FrameworkName value."""
+    _ensure_yaml_catalogs()
+    return _YAML_CATALOGS.get(framework_value, [])
+
 
 def framework_catalog(framework: str) -> list[FrameworkItem]:
+    """Return the ordered list of :class:`FrameworkItem` objects for a framework.
+
+    Python-defined catalogs (NIST AI RMF, NIST AI 600-1, OWASP LLM, OWASP
+    Agentic) are returned directly.  YAML-sourced catalogs (EU AI Act, ISO 42001,
+    SR 11-7, FFIEC) are loaded from ``frameworks.loader.load_all_frameworks()``
+    on first access and cached.  Any YAML parse error propagates immediately.
+    """
     f = framework.upper()
-    if f in ("NIST_AI_RMF", "NIST-RMF", "RMF"):                 return NIST_RMF_ITEMS
-    if f in ("NIST_AI_600_1", "NIST-600", "600", "GENAI"):      return NIST_600_1_ITEMS
-    if f in ("OWASP_LLM_TOP10", "OWASP_LLM", "LLM"):            return OWASP_LLM_ITEMS
-    if f in ("OWASP_AGENTIC_TOP10", "OWASP_AGENTIC", "AGENTIC"): return OWASP_AGENTIC_ITEMS
+    if f in ("NIST_AI_RMF", "NIST-RMF", "RMF"):                  return NIST_RMF_ITEMS
+    if f in ("NIST_AI_600_1", "NIST-600", "600", "GENAI"):       return NIST_600_1_ITEMS
+    if f in ("OWASP_LLM_TOP10", "OWASP_LLM", "LLM"):             return OWASP_LLM_ITEMS
+    if f in ("OWASP_AGENTIC_TOP10", "OWASP_AGENTIC", "AGENTIC"):  return OWASP_AGENTIC_ITEMS
+    if f in ("EU_AI_ACT", "EU-AI-ACT", "EUAIACT"):                return _yaml_items("EU_AI_ACT")
+    if f in ("ISO_42001", "ISO-42001", "ISO42001"):                return _yaml_items("ISO_42001")
+    if f in ("SR_11_7", "SR-11-7", "SR117"):                      return _yaml_items("SR_11_7")
+    if f in ("FFIEC",):                                            return _yaml_items("FFIEC")
     raise ValueError(f"Unknown framework: {framework}")
 
 
@@ -391,9 +440,160 @@ def framework_overview(framework: str, scope: str = "ALL") -> list[ItemCoverage]
             for item in framework_catalog(framework)]
 
 
+# ---------------------------------------------------------------------------
+# Matrix computation — portfolio view across all frameworks and systems
+# ---------------------------------------------------------------------------
+
+# The frameworks surfaced in the coverage matrix UI (Day 6 spec: NIST + OWASP + EU AI Act + ISO 42001 + SR 11-7 + FFIEC).
+MATRIX_FRAMEWORKS: list[tuple[str, str]] = [
+    ("nist-ai-rmf",     FrameworkName.NIST_AI_RMF.value),
+    ("nist-ai-600-1",   FrameworkName.NIST_AI_600_1.value),
+    ("owasp-llm",       FrameworkName.OWASP_LLM_TOP10.value),
+    ("owasp-agentic",   FrameworkName.OWASP_AGENTIC_TOP10.value),
+    ("eu-ai-act",       "EU_AI_ACT"),
+    ("iso-42001",       "ISO_42001"),
+    ("sr-11-7",         "SR_11_7"),
+    ("ffiec",           "FFIEC"),
+]
+
+# For frameworks that don't have a catalog in this engine yet, we return 0.0.
+_FRAMEWORK_SLUG_TO_CATALOG_KEY: dict[str, str] = {
+    "nist-ai-rmf":   "NIST_AI_RMF",
+    "nist-ai-600-1": "NIST_AI_600_1",
+    "owasp-llm":     "OWASP_LLM",
+    "owasp-agentic": "OWASP_AGENTIC",
+    "eu-ai-act":     "EU_AI_ACT",
+    "iso-42001":     "ISO_42001",
+    "sr-11-7":       "SR_11_7",
+    "ffiec":         "FFIEC",
+}
+
+
+def _mean_coverage(coverages: list[ItemCoverage]) -> float:
+    if not coverages:
+        return 0.0
+    return round(sum(c.coverage_pct for c in coverages) / len(coverages), 1)
+
+
+def _system_framework_coverage(system_id: str, catalog_key: str) -> float:
+    """Return mean coverage % for one system × one framework. Returns 0.0 on error."""
+    try:
+        items = framework_overview(catalog_key, scope=system_id)
+        return _mean_coverage(items)
+    except Exception:                                          # noqa: BLE001
+        return 0.0
+
+
+@dataclass
+class MatrixRow:
+    system_id: str
+    system_name: str
+    cells: dict[str, float]   # framework_slug -> coverage_pct
+
+
+@dataclass
+class MatrixResult:
+    """Coverage matrix result.
+
+    Supports both attribute access (``result.rows``) and dict-style subscript
+    access (``result['rows']``) so that validation checks written as plain
+    dict lookups work without a separate serialisation step.
+    """
+
+    frameworks: list[dict]    # [{slug, display_name}]
+    rows: list[MatrixRow]
+
+    def __getitem__(self, key: str) -> list[dict] | list[MatrixRow]:
+        """Allow dict-style access: result['frameworks'] / result['rows']."""
+        if key == "frameworks":
+            return self.frameworks
+        if key == "rows":
+            return self.rows
+        raise KeyError(key)
+
+
+def framework_matrix(system_ids: list[str] | None = None) -> MatrixResult:
+    """Compute the full N-systems × 6-frameworks coverage matrix.
+
+    If ``system_ids`` is None, uses all governed AI systems from the repository.
+    If ``system_ids`` is provided, a row is returned for every requested ID — systems
+    not found in the repository receive 0.0% coverage across all frameworks rather
+    than being silently dropped.  This guarantees ``len(result.rows) == len(system_ids)``
+    when a non-None list is supplied.
+
+    Returns a :class:`MatrixResult` whose `rows` list is ordered by the original
+    ``system_ids`` order (or by system_id when None).  Supports both attribute
+    access and dict-style subscript access.
+    """
+    repo_systems = repository.list_ai_systems()
+    repo_by_id = {s.id: s for s in repo_systems}
+
+    framework_meta = [
+        {"slug": slug, "display_name": framework_display_name(slug)}
+        for slug, _fn in MATRIX_FRAMEWORKS
+    ]
+
+    if system_ids is not None:
+        # Preserve the caller's requested order; include unknown IDs as 0% rows.
+        target_ids: list[str] = system_ids
+    else:
+        target_ids = [s.id for s in repo_systems]
+
+    rows: list[MatrixRow] = []
+    for sid in target_ids:
+        system = repo_by_id.get(sid)
+        cells: dict[str, float] = {}
+        for slug, _fn in MATRIX_FRAMEWORKS:
+            if system is None:
+                cells[slug] = 0.0
+            else:
+                catalog_key = _FRAMEWORK_SLUG_TO_CATALOG_KEY.get(slug)
+                if catalog_key:
+                    cells[slug] = _system_framework_coverage(system.id, catalog_key)
+                else:
+                    cells[slug] = 0.0
+        rows.append(MatrixRow(
+            system_id=sid,
+            system_name=system.name if system else sid,
+            cells=cells,
+        ))
+
+    return MatrixResult(frameworks=framework_meta, rows=rows)
+
+
+def framework_display_name(slug: str) -> str:
+    """Return a human-readable display name for a framework slug.
+
+    Args:
+        slug: URL-style framework slug, e.g. ``"nist-ai-rmf"``.
+
+    Returns:
+        Human-readable name, e.g. ``"NIST AI RMF"``.
+        Falls back to the slug itself if not found.
+    """
+    _NAMES: dict[str, str] = {
+        "nist-ai-rmf":   "NIST AI RMF",
+        "nist-ai-600-1": "NIST AI 600-1",
+        "owasp-llm":     "OWASP LLM Top 10",
+        "owasp-agentic": "OWASP Agentic Top 10",
+        "eu-ai-act":     "EU AI Act",
+        "iso-42001":     "ISO/IEC 42001",
+        "sr-11-7":       "SR 11-7",
+        "ffiec":         "FFIEC",
+    }
+    return _NAMES.get(slug, slug)
+
+
+# Keep private alias for internal callers that pre-date the rename.
+_framework_display = framework_display_name
+
+
 __all__ = [
     "FrameworkItem", "ControlRollup", "FindingSummary", "ItemCoverage",
+    "MatrixRow", "MatrixResult",
     "framework_catalog", "controls_for_item",
-    "item_coverage", "framework_overview",
+    "item_coverage", "framework_overview", "framework_matrix",
+    "framework_display_name",
     "NIST_RMF_ITEMS", "NIST_600_1_ITEMS", "OWASP_LLM_ITEMS", "OWASP_AGENTIC_ITEMS",
+    "MATRIX_FRAMEWORKS",
 ]

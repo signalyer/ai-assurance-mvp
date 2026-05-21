@@ -1,0 +1,53 @@
+schema_version: "1.0"
+framework: "us-finserv-overlay"
+display_name: "US Financial Services Posture Overlay"
+recommended_owner: "CRO"
+items:
+  - id: "usfs-customer-impact-controls"
+    display_name: "Customer-Impact AI Controls"
+    description: "AI systems with direct customer impact must implement pre-deployment customer impact assessments, real-time monitoring for adverse customer outcomes, and documented escalation paths for AI-driven decisions that harm customers."
+    exact_clauses: ["USFS-CIC", "USFS-CIC.1", "USFS-CIC.2"]
+    prefix_clauses: []
+    recommended_owner: "CRO"
+
+  - id: "usfs-fair-lending"
+    display_name: "Fair Lending and Anti-Discrimination"
+    description: "AI/ML models used in credit, pricing, or customer segmentation decisions must be tested for disparate impact under ECOA and FHA, with documented bias testing results, approved thresholds, and annual re-validation."
+    exact_clauses: ["USFS-FL", "USFS-FL.1", "USFS-FL.2", "USFS-FL.3"]
+    prefix_clauses: []
+    recommended_owner: "Compliance"
+
+  - id: "usfs-model-card-disclosure"
+    display_name: "Model Card Disclosures"
+    description: "Production AI systems must have current model cards documenting intended use, training data sources, known limitations, bias evaluation results, and the identity of the accountable business owner."
+    exact_clauses: ["USFS-MC", "USFS-MC.1", "USFS-MC.2"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "usfs-sr117-alignment"
+    display_name: "SR 11-7 Alignment Markers"
+    description: "All AI/ML models in scope of US federal banking supervision must explicitly map to SR 11-7 risk tiers (low, medium, high), with validation rigor and governance oversight commensurate with the assigned tier."
+    exact_clauses: ["USFS-SR117", "USFS-SR117.1"]
+    prefix_clauses: ["SR11-7"]
+    recommended_owner: "Model Risk"
+
+  - id: "usfs-adverse-action"
+    display_name: "Adverse Action Notice Requirements"
+    description: "When an AI system contributes to an adverse action against a consumer (credit denial, rate increase, account closure), the institution must provide a compliant adverse action notice with specific reasons that are explainable from the model's outputs."
+    exact_clauses: ["USFS-AA", "USFS-AA.1", "USFS-AA.2"]
+    prefix_clauses: []
+    recommended_owner: "Compliance"
+
+  - id: "usfs-bsa-aml-ai-controls"
+    display_name: "BSA/AML AI Controls"
+    description: "AI systems used in transaction monitoring, fraud detection, or sanctions screening must meet FinCEN BSA/AML model risk requirements, with documented tuning rationale, threshold governance, and audit trail for SAR-related decisions."
+    exact_clauses: ["USFS-BSA", "USFS-BSA.1", "USFS-BSA.2"]
+    prefix_clauses: []
+    recommended_owner: "Compliance"
+
+  - id: "usfs-consumer-data-protection"
+    display_name: "Consumer Data Protection (GLBA/CCPA)"
+    description: "AI systems processing NPI must comply with GLBA safeguard requirements for data minimization, access controls, and breach notification, with additional CCPA/CPRA consumer rights capabilities where California consumers are in scope."
+    exact_clauses: ["USFS-CDP", "USFS-CDP.1", "USFS-CDP.2"]
+    prefix_clauses: []
+    recommended_owner: "CISO"

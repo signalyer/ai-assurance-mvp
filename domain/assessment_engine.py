@@ -110,11 +110,19 @@ class ResidualRiskScore:
 
 @dataclass
 class FrameworkCoverage:
+    """Per-framework coverage rollup produced by :func:`calculate_framework_coverage`.
+
+    ``framework_refs`` lists the distinct clauses across all applicable controls
+    mapped to this framework, giving callers a quick reference to the exact
+    regulatory/standard anchors being measured.
+    """
+
     framework: str
     controls_applicable: int
     controls_passing: int
     controls_failing: int
     coverage_pct: float
+    framework_refs: list[dict] = field(default_factory=list)  # [{framework, clause}]
 
 
 @dataclass
@@ -508,33 +516,57 @@ def _fld(obj, name: str):
 def calculate_framework_coverage(
     evaluations: list[ControlEvaluation],
 ) -> list[FrameworkCoverage]:
-    """Aggregate per-control results into per-framework coverage rows."""
-    # Build map control_id -> list of frameworks
+    """Aggregate per-control results into per-framework coverage rows.
+
+    Each returned :class:`FrameworkCoverage` includes a ``framework_refs`` list
+    with the distinct ``{framework, clause}`` pairs sourced from the controls
+    mapped to that framework, giving downstream consumers direct links to the
+    regulatory/standard clauses being measured.
+    """
+    # Build map control_id -> list of (framework, clause) pairs and framework names
     cid_to_frameworks: dict[str, list[str]] = {}
+    cid_to_refs: dict[str, list[dict]] = {}
     for c in CONTROLS:
         cid_to_frameworks[c.control_id] = sorted({fm.framework.value for fm in c.framework_mappings})
+        cid_to_refs[c.control_id] = [
+            {"framework": fm.framework.value, "clause": fm.clause}
+            for fm in c.framework_mappings
+        ]
 
-    per_fw: dict[str, dict[str, int]] = {}
+    per_fw: dict[str, dict] = {}
     for ev in evaluations:
         if ev.status == ControlStatus.NOT_APPLICABLE:
             continue
         for fw in cid_to_frameworks.get(ev.control_id, []):
-            row = per_fw.setdefault(fw, {"applicable": 0, "passing": 0, "failing": 0})
+            row = per_fw.setdefault(fw, {"applicable": 0, "passing": 0, "failing": 0, "refs": []})
             row["applicable"] += 1
             if ev.status == ControlStatus.PASS:
                 row["passing"] += 1
             elif ev.status in (ControlStatus.FAIL, ControlStatus.NO_EVIDENCE):
                 row["failing"] += 1
+            # Accumulate clause refs for this framework from this control
+            for ref in cid_to_refs.get(ev.control_id, []):
+                if ref["framework"] == fw:
+                    row["refs"].append(ref)
 
     rows = []
     for fw, r in per_fw.items():
         cov = (r["passing"] / r["applicable"] * 100.0) if r["applicable"] else 0.0
+        # Deduplicate refs by clause
+        seen_clauses: set[str] = set()
+        deduped_refs: list[dict] = []
+        for ref in r["refs"]:
+            key = ref["clause"]
+            if key not in seen_clauses:
+                seen_clauses.add(key)
+                deduped_refs.append(ref)
         rows.append(FrameworkCoverage(
             framework=fw,
             controls_applicable=r["applicable"],
             controls_passing=r["passing"],
             controls_failing=r["failing"],
             coverage_pct=round(cov, 1),
+            framework_refs=deduped_refs,
         ))
     rows.sort(key=lambda r: r.framework)
     return rows

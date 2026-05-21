@@ -1,0 +1,53 @@
+schema_version: "1.0"
+framework: "iso-42001"
+display_name: "ISO/IEC 42001:2023"
+recommended_owner: "AI Governance"
+items:
+  - id: "iso42001-cl4-context"
+    display_name: "Cl.4 — Context of the Organization"
+    description: "Determine external and internal issues, interested parties and their requirements, and the scope of the AI management system relevant to the organization's purpose."
+    exact_clauses: ["ISO42001-4", "ISO42001-4.1", "ISO42001-4.2", "ISO42001-4.3"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "iso42001-cl5-leadership"
+    display_name: "Cl.5 — Leadership"
+    description: "Top management must demonstrate leadership and commitment with respect to the AIMS, establish an AI policy, and assign and communicate organizational roles, responsibilities and authorities."
+    exact_clauses: ["ISO42001-5", "ISO42001-5.1", "ISO42001-5.2", "ISO42001-5.3"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "iso42001-cl6-planning"
+    display_name: "Cl.6 — Planning"
+    description: "Address risks and opportunities affecting the AIMS, establish measurable AI objectives, and plan actions to achieve them including responsible AI impact assessments."
+    exact_clauses: ["ISO42001-6", "ISO42001-6.1", "ISO42001-6.2"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "iso42001-cl7-support"
+    display_name: "Cl.7 — Support"
+    description: "Provide the resources, competence, awareness, communication, and documented information needed to establish, implement, maintain and continually improve the AIMS."
+    exact_clauses: ["ISO42001-7", "ISO42001-7.1", "ISO42001-7.2", "ISO42001-7.3", "ISO42001-7.4", "ISO42001-7.5"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "iso42001-cl8-operation"
+    display_name: "Cl.8 — Operation"
+    description: "Plan, implement, control, review and maintain the processes needed to meet AI management system requirements and implement actions determined in planning, including AI system impact assessment."
+    exact_clauses: ["ISO42001-8", "ISO42001-8.1", "ISO42001-8.2", "ISO42001-8.3", "ISO42001-8.4"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "iso42001-cl9-performance"
+    display_name: "Cl.9 — Performance Evaluation"
+    description: "Monitor, measure, analyze and evaluate the performance and effectiveness of the AIMS, conduct internal audits at planned intervals, and ensure management review of the system."
+    exact_clauses: ["ISO42001-9", "ISO42001-9.1", "ISO42001-9.2", "ISO42001-9.3"]
+    prefix_clauses: []
+    recommended_owner: "Internal Audit"
+
+  - id: "iso42001-cl10-improvement"
+    display_name: "Cl.10 — Improvement"
+    description: "React to nonconformities, take corrective actions to control and correct them, and continually improve the suitability, adequacy and effectiveness of the AIMS."
+    exact_clauses: ["ISO42001-10", "ISO42001-10.1", "ISO42001-10.2"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"

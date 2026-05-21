@@ -1,0 +1,46 @@
+schema_version: "1.0"
+framework: "ffiec"
+display_name: "FFIEC IT Examination Handbook — AI/ML Supplements"
+recommended_owner: "AI Governance"
+items:
+  - id: "ffiec-model-governance"
+    display_name: "Model Governance"
+    description: "Financial institutions must establish a model governance framework with board-level oversight, defined model risk appetite, and clear accountability for AI/ML model development, validation, and deployment decisions."
+    exact_clauses: ["FFIEC-MG", "FFIEC-MG.1", "FFIEC-MG.2"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "ffiec-third-party-risk"
+    display_name: "Third-Party AI/ML Risk Management"
+    description: "Institutions using third-party AI models or model components must conduct due diligence on vendor model risk practices, maintain contractual rights to audit and validate, and retain ultimate accountability for model risk."
+    exact_clauses: ["FFIEC-TPR", "FFIEC-TPR.1", "FFIEC-TPR.2"]
+    prefix_clauses: []
+    recommended_owner: "CRO"
+
+  - id: "ffiec-change-management"
+    display_name: "Change Management for AI/ML Systems"
+    description: "Material changes to AI/ML models, training data, or operating environments must follow a formal change management process including impact assessment, validation, approval, and post-change monitoring."
+    exact_clauses: ["FFIEC-CM", "FFIEC-CM.1", "FFIEC-CM.2"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "ffiec-monitoring-validation"
+    display_name: "Ongoing Monitoring and Validation"
+    description: "Institutions must continuously monitor AI/ML model performance against defined thresholds, conduct periodic independent validation, and trigger remediation when performance deteriorates or operating conditions materially change."
+    exact_clauses: ["FFIEC-MV", "FFIEC-MV.1", "FFIEC-MV.2", "FFIEC-MV.3"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "ffiec-data-quality"
+    display_name: "Data Quality and Integrity"
+    description: "Training, testing and production data used in AI/ML systems must meet documented quality standards covering completeness, accuracy, timeliness, and representativeness, with controls to detect and remediate data quality failures."
+    exact_clauses: ["FFIEC-DQ", "FFIEC-DQ.1", "FFIEC-DQ.2"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "ffiec-explainability"
+    display_name: "Explainability and Interpretability"
+    description: "Institutions must be able to explain AI/ML model outputs to regulators, auditors, and adversely affected customers at a level of detail commensurate with the decision's impact and applicable adverse action requirements."
+    exact_clauses: ["FFIEC-EX", "FFIEC-EX.1"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"

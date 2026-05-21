@@ -1,0 +1,46 @@
+schema_version: "1.0"
+framework: "sr-11-7"
+display_name: "Fed SR 11-7 — Model Risk Management"
+recommended_owner: "Model Risk"
+items:
+  - id: "sr117-dev-implementation"
+    display_name: "Model Development and Implementation"
+    description: "Models must be developed with sound theoretical underpinnings, robust data, and clear documentation of design choices, assumptions, limitations, and intended use before deployment."
+    exact_clauses: ["SR11-7.Dev", "SR11-7.Dev.1", "SR11-7.Dev.2"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "sr117-model-use"
+    display_name: "Model Use"
+    description: "Model use must be limited to the purpose for which the model was developed, and business lines must maintain awareness of model limitations and operate within approved use boundaries."
+    exact_clauses: ["SR11-7.Use", "SR11-7.Use.1"]
+    prefix_clauses: []
+    recommended_owner: "CRO"
+
+  - id: "sr117-validation-effective-challenge"
+    display_name: "Model Validation — Effective Challenge"
+    description: "Validation must provide an effective challenge to model development and business use, covering conceptual soundness, ongoing monitoring, and outcomes analysis, performed by staff with appropriate incentives and authority to raise concerns."
+    exact_clauses: ["SR11-7.Val", "SR11-7.Val.1", "SR11-7.Val.2", "SR11-7.Val.3"]
+    prefix_clauses: []
+    recommended_owner: "Internal Audit"
+
+  - id: "sr117-ongoing-monitoring"
+    display_name: "Ongoing Monitoring"
+    description: "Institutions must conduct regular model performance monitoring, including periodic outcome analysis and benchmarking, and escalate material degradation promptly."
+    exact_clauses: ["SR11-7.Mon", "SR11-7.Mon.1"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"
+
+  - id: "sr117-governance-policies-controls"
+    display_name: "Governance, Policies and Controls"
+    description: "A sound model risk management framework requires board and senior management oversight, comprehensive written policies, a model inventory, and defined roles and accountability across the three lines of defense."
+    exact_clauses: ["SR11-7.Gov", "SR11-7.Gov.1", "SR11-7.Gov.2", "SR11-7.Gov.3"]
+    prefix_clauses: []
+    recommended_owner: "AI Governance"
+
+  - id: "sr117-model-inventory"
+    display_name: "Model Inventory"
+    description: "Institutions must maintain a comprehensive and current model inventory that includes model identification, purpose, ownership, validation status, and any limitations or approved exceptions."
+    exact_clauses: ["SR11-7.Inv", "SR11-7.Inv.1"]
+    prefix_clauses: []
+    recommended_owner: "Model Risk"

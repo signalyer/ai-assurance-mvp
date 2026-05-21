@@ -225,10 +225,14 @@
 
                 <div class="drawer-section" id="editFormSection" style="display:none;"></div>
 
+                <!-- Frameworks tab section -->
+                <div class="drawer-section" id="frameworksTabSection" style="display:none;"></div>
+
                 <div class="drawer-section" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <a class="btn btn-sm btn-primary" href="/assessment?system=${s.id}">Run Assessment</a>
                     <button class="btn btn-sm btn-secondary" onclick="toggleEditForm()">Edit System</button>
                     <button class="btn btn-sm btn-secondary" onclick="loadRevisions()">Revision History</button>
+                    <button class="btn btn-sm btn-secondary" data-tab="frameworks" id="frameworksTabBtn" onclick="toggleFrameworksTab()">Frameworks</button>
                 </div>
             `;
 
@@ -463,6 +467,65 @@
             msg.style.color = '#86efac';
             msg.innerHTML = `<b>${rev.approval_status === 'pending' ? 'Pending approval' : 'Applied'}:</b> ${rev.revision_id}`;
             await openDrawer(CURRENT_SYSTEM.id);
+        }
+
+        // ============ Frameworks tab =========================================
+
+        const FW_SLUGS = [
+            { slug: 'nist-ai-rmf',   name: 'NIST AI RMF' },
+            { slug: 'nist-ai-600-1', name: 'NIST AI 600-1' },
+            { slug: 'owasp-llm',     name: 'OWASP LLM Top 10' },
+            { slug: 'owasp-agentic', name: 'OWASP Agentic Top 10' },
+        ];
+
+        async function toggleFrameworksTab() {
+            const slot = document.getElementById('frameworksTabSection');
+            if (!slot) return;
+            if (slot.style.display !== 'none') {
+                slot.style.display = 'none';
+                return;
+            }
+            slot.style.display = '';
+            slot.innerHTML = `<div class="drawer-section-title">Framework Coverage</div><div class="text-xs text-secondary">Loading…</div>`;
+            slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const systemId = CURRENT_SYSTEM && CURRENT_SYSTEM.id;
+            if (!systemId) { slot.innerHTML = '<div class="text-xs text-tertiary">No system selected.</div>'; return; }
+
+            const results = await Promise.allSettled(
+                FW_SLUGS.map(fw => fetch(`/api/frameworks/${fw.slug}/system/${systemId}`).then(r => r.ok ? r.json() : null))
+            );
+
+            const cards = FW_SLUGS.map((fw, idx) => {
+                const d = results[idx].status === 'fulfilled' ? results[idx].value : null;
+                if (!d) return `<div style="padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg-deep);">
+                    <div class="text-xs font-bold">${fw.name}</div>
+                    <div class="text-xs text-tertiary">Unavailable</div>
+                </div>`;
+                const items = d.items || [];
+                const avg = items.length ? (items.reduce((s, i) => s + i.coverage_pct, 0) / items.length) : 0;
+                const cls = avg >= 80 ? '#10b981' : avg >= 60 ? '#f59e0b' : '#ef4444';
+                return `<div style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-deep); cursor:pointer;"
+                             onclick="showFwDrillModal('${fw.slug}', '${fw.name}', ${JSON.stringify(items).replace(/"/g,'&quot;')})">
+                    <div class="text-xs font-bold">${fw.name}</div>
+                    <div style="font-size:18px; font-weight:700; color:${cls}; margin:4px 0;">${avg.toFixed(0)}%</div>
+                    <div class="text-xs text-tertiary">${items.length} items · click to expand</div>
+                </div>`;
+            });
+
+            slot.innerHTML = `
+                <div class="drawer-section-title">Framework Coverage</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                    ${cards.join('')}
+                </div>
+                <div style="margin-top:8px;">
+                    <a class="btn btn-sm btn-secondary" href="/frameworks">View Full Matrix</a>
+                </div>`;
+        }
+
+        function showFwDrillModal(slug, name, items) {
+            // Open the frameworks page in a new tab with the system pre-selected — simpler than a nested modal.
+            window.open(`/frameworks`, '_blank');
         }
 
         function closeDrawer() {

@@ -51,6 +51,7 @@ from api.usage import router as usage_router
 from api.ai_system_edit import router as ai_system_edit_router
 from api.aws_demo import router as aws_demo_router
 from api.memory import router as memory_router
+from api.frameworks import router as frameworks_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 
 load_dotenv()
@@ -154,6 +155,7 @@ app.include_router(usage_router)
 app.include_router(ai_system_edit_router)
 app.include_router(aws_demo_router)
 app.include_router(memory_router)
+app.include_router(frameworks_router)
 
 
 @app.get("/api/health")
@@ -314,6 +316,11 @@ async def page_analytics_usage():
 @app.get("/demo-aws-analyzer")
 async def page_demo_aws_analyzer():
     return _page("demo-aws-analyzer.html")
+
+
+@app.get("/frameworks")
+async def page_frameworks():
+    return _page("frameworks.html")
 
 
 if __name__ == "__main__":
