@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Implementation Guide — AI Assurance Platform</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #080a0d;
+  --surface: #0e1117;
+  --surface2: #141820;
+  --surface3: #1a2030;
+  --border: #1e2535;
+  --border2: #263045;
+  --text: #8fa3c0;
+  --text-dim: #3d5070;
+  --text-bright: #e2eaf5;
+  --accent: #3b6ff5;
+  --accent2: #22d3b8;
+  --amber: #f5a623;
+  --red: #f53b5f;
+  --green: #22d37a;
+  --purple: #9b6bf5;
+
+  --step1: #3b6ff5;
+  --step2: #22d3b8;
+  --step3: #9b6bf5;
+  --step4: #f5a623;
+  --step5: #f53b5f;
+  --step6: #22d37a;
+  --step7: #e25fff;
+
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.sidebar-logo .brand {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.sidebar-logo .project {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.nav-section {
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+.nav-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  padding: 6px 8px 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.nav-item:hover { background: var(--surface2); color: var(--text-bright); }
+
+.nav-item .step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── MAIN ── */
+.main {
+  padding: 0;
+  max-width: 860px;
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 52px 52px 40px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(59,111,245,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.hero h1 {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1.2;
+  margin-bottom: 14px;
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  font-size: 14px;
+  color: var(--text);
+  max-width: 560px;
+  line-height: 1.7;
+}
+
+.flow-overview {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 32px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.flow-node {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.flow-arrow {
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+/* ── STEP SECTIONS ── */
+.step-section {
+  padding: 44px 52px;
+  border-bottom: 1px solid var(--border);
+}
+
+.step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-meta { flex: 1; }
+
+.step-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-bottom: 4px;
+}
+
+.step-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+
+.step-subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ── TASK BLOCKS ── */
+.task {
+  margin-bottom: 20px;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.task-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.task-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.task-body {
+  padding-left: 30px;
+}
+
+.task-body p {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 10px;
+  line-height: 1.7;
+}
+
+/* ── CODE BLOCKS ── */
+.code-wrap {
+  position: relative;
+  margin: 10px 0;
+}
+
+.code-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding: 5px 12px;
+  border-radius: 4px 4px 0 0;
+  display: inline-block;
+}
+
+pre {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 0 4px 4px 4px;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-x: auto;
+  color: var(--text);
+  position: relative;
+}
+
+pre.no-label { border-radius: 4px; }
+
+.kw { color: #7eb8f7; }
+.str { color: #7ee8c8; }
+.cmt { color: var(--text-dim); font-style: italic; }
+.fn  { color: #f7d07e; }
+.val { color: #c8a8f8; }
+.hl  { background: rgba(59,111,245,0.12); display: block; margin: 0 -16px; padding: 0 16px; }
+
+/* ── CALLOUTS ── */
+.callout {
+  padding: 12px 16px;
+  border-radius: 5px;
+  border-left: 3px solid;
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.callout.warn  { border-color: var(--amber); background: rgba(245,166,35,0.05); }
+.callout.info  { border-color: var(--accent); background: rgba(59,111,245,0.05); }
+.callout.ok    { border-color: var(--green); background: rgba(34,211,122,0.05); }
+.callout.crit  { border-color: var(--red); background: rgba(245,59,95,0.05); }
+
+.callout strong {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.callout.warn strong  { color: var(--amber); }
+.callout.info strong  { color: var(--accent); }
+.callout.ok strong    { color: var(--green); }
+.callout.crit strong  { color: var(--red); }
+
+/* ── FILE TREE ── */
+.file-tree {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.9;
+  margin: 10px 0;
+}
+
+.file-tree .dir  { color: var(--accent); }
+.file-tree .new  { color: var(--green); }
+.file-tree .ext  { color: var(--purple); }
+.file-tree .note { color: var(--text-dim); }
+
+/* ── TABLE ── */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 12px 0;
+}
+
+.tbl th {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border2);
+  background: var(--surface2);
+}
+
+.tbl td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.tbl td:first-child { font-family: var(--mono); color: var(--text-bright); }
+.tbl tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── CHECKLIST ── */
+.checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 10px 0;
+}
+
+.checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.checklist li::before {
+  content: '□';
+  font-family: var(--mono);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── SESSION MAP ── */
+.session-grid {
+  display: grid;
+  gap: 2px;
+  margin: 14px 0;
+}
+
+.session-row {
+  display: grid;
+  grid-template-columns: 90px 180px 1fr 80px;
+  gap: 2px;
+}
+
+.session-cell {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 11px;
+}
+
+.session-cell.header {
+  background: var(--surface3);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.session-cell .sess-id {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-bright);
+  margin-bottom: 2px;
+}
+
+.session-cell .sess-sub { font-size: 10px; color: var(--text-dim); }
+
+.badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+
+.badge.hi  { border-color: rgba(245,59,95,0.4);  background: rgba(245,59,95,0.08);  color: var(--red); }
+.badge.med { border-color: rgba(245,166,35,0.4); background: rgba(245,166,35,0.08); color: var(--amber); }
+.badge.lo  { border-color: rgba(34,211,122,0.4); background: rgba(34,211,122,0.08); color: var(--green); }
+
+/* ── INLINE CODE ── */
+code {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent2);
+}
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+/* ── PRINT ── */
+@media print {
+  .sidebar { display: none; }
+  .layout { grid-template-columns: 1fr; }
+  .step-section { padding: 28px 0; break-inside: avoid; }
+  body { background: white; color: #111; }
+  pre { border: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- SIDEBAR -->
+<!-- ═══════════════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">SignalLayer</div>
+    <div class="project">AI Assurance Platform</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Workflow</div>
+    <a class="nav-item" href="#overview">
+      <span class="step-dot" style="background:#3b6ff5"></span>Overview
+    </a>
+    <a class="nav-item" href="#step1">
+      <span class="step-dot" style="background:var(--step1)"></span>1. Repo structure
+    </a>
+    <a class="nav-item" href="#step2">
+      <span class="step-dot" style="background:var(--step2)"></span>2. CLAUDE.md
+    </a>
+    <a class="nav-item" href="#step3">
+      <span class="step-dot" style="background:var(--step3)"></span>3. ARCHITECTURE.md
+    </a>
+    <a class="nav-item" href="#step4">
+      <span class="step-dot" style="background:var(--step4)"></span>4. DECISIONS.md
+    </a>
+    <a class="nav-item" href="#step5">
+      <span class="step-dot" style="background:var(--step5)"></span>5. Slash commands
+    </a>
+    <a class="nav-item" href="#step6">
+      <span class="step-dot" style="background:var(--step6)"></span>6. Chat → plan files
+    </a>
+    <a class="nav-item" href="#step7">
+      <span class="step-dot" style="background:var(--step7)"></span>7. Claude Code sessions
+    </a>
+    <a class="nav-item" href="#step8">
+      <span class="step-dot" style="background:#3b6ff5"></span>8. Diagram generation
+    </a>
+    <a class="nav-item" href="#sessions">
+      <span class="step-dot" style="background:#22d3b8"></span>Build session map
+    </a>
+    <a class="nav-item" href="#rules">
+      <span class="step-dot" style="background:#f5a623"></span>Rules & anti-patterns
+    </a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- MAIN -->
+<!-- ═══════════════════════════════════════════════ -->
+<main class="main">
+
+<!-- HERO -->
+<section class="hero" id="overview">
+  <div class="hero-tag">Implementation Guide · aigovern.sandboxhub.co</div>
+  <h1>Chat → Architecture → Code</h1>
+  <p>Step-by-step: how to carry architecture decisions from Claude Chat through structured files into Claude Code sessions with accuracy and comprehensive coverage. Every step is a concrete action, not a principle.</p>
+
+  <div class="flow-overview">
+    <div class="flow-node" style="border-color:rgba(59,111,245,0.4);color:#7eb8f7">Claude Chat</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-node" style="border-color:rgba(34,211,184,0.4);color:#7ee8c8">ARCHITECTURE.md</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-node" style="border-color:rgba(155,107,245,0.4);color:#c8a8f8">Plan file</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-node" style="border-color:rgba(245,166,35,0.4);color:#f7d07e">/plan → execute</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-node" style="border-color:rgba(34,211,122,0.4);color:#7ef8b8">/verify → /handoff</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-node" style="border-color:rgba(226,95,255,0.4);color:#e8a8ff">Diagram update</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 1 — REPO STRUCTURE -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step1">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(59,111,245,0.12);color:var(--step1)">01</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step1)">One-time setup</div>
+      <div class="step-title">Create the repo file structure</div>
+      <div class="step-subtitle">Run once. Everything else builds on this.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">1.1</span>
+      <span class="task-title">Run these commands in your repo root</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">bash — run in ai-assurance-mvp/</div>
+        <pre><span class="cmt"># Create all directories Claude Code needs</span>
+mkdir -p .claude/commands
+mkdir -p .claude/skills
+mkdir -p docs/plans
+mkdir -p docs/diagrams
+mkdir -p docs/prompts
+mkdir -p policies
+mkdir -p guardrails
+
+<span class="cmt"># Create placeholder files so git tracks the dirs</span>
+touch docs/plans/.gitkeep
+touch docs/diagrams/.gitkeep
+touch policies/.gitkeep
+touch guardrails/.gitkeep
+
+<span class="cmt"># Verify structure</span>
+find . -not -path '*/.git/*' -not -path '*/node_modules/*' \
+  -name "*.md" -o -name "*.rego" -o -name "*.co" | sort</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">1.2</span>
+      <span class="task-title">Final repo structure (what you're building toward)</span>
+    </div>
+    <div class="task-body">
+      <div class="file-tree">
+<span class="dir">ai-assurance-mvp/</span>
+├── <span class="new">CLAUDE.md</span>              <span class="note">← Step 2. Claude Code reads first, every session</span>
+├── <span class="new">ARCHITECTURE.md</span>        <span class="note">← Step 3. Complete system state</span>
+├── <span class="new">DECISIONS.md</span>           <span class="note">← Step 4. Immutable decision log</span>
+├── <span class="dir">.claude/</span>
+│   ├── <span class="dir">commands/</span>
+│   │   ├── <span class="new">arch.md</span>        <span class="note">← /arch command (Step 5)</span>
+│   │   ├── <span class="new">plan.md</span>        <span class="note">← /plan command (Step 5)</span>
+│   │   ├── <span class="new">verify.md</span>      <span class="note">← /verify command (Step 5)</span>
+│   │   └── <span class="new">handoff.md</span>     <span class="note">← /handoff command (Step 5)</span>
+│   └── <span class="dir">skills/</span>
+│       └── <span class="new">diagram.md</span>     <span class="note">← Diagram generation skill (Step 8)</span>
+├── <span class="dir">docs/</span>
+│   ├── <span class="dir">plans/</span>
+│   │   ├── <span class="new">SESSION-01a-scrubber-vault.md</span>   <span class="note">← Step 6</span>
+│   │   ├── <span class="new">SESSION-01b-patches.md</span>
+│   │   ├── <span class="new">SESSION-02-policy-engine.md</span>
+│   │   └── <span class="note">... one per session</span>
+│   ├── <span class="dir">diagrams/</span>
+│   │   └── <span class="new">aigovern-architecture.html</span>  <span class="note">← Step 8</span>
+│   └── <span class="dir">prompts/</span>
+│       └── <span class="note">... archive of Claude Code prompts</span>
+├── <span class="dir">policies/</span>
+│   ├── <span class="new">base.rego</span>
+│   ├── <span class="new">pii.rego</span>
+│   ├── <span class="new">agent_tools.rego</span>
+│   └── <span class="new">financial_advisor.rego</span>
+└── <span class="dir">guardrails/</span>
+    ├── <span class="new">topic_rail.py</span>
+    └── <span class="new">financial_advisor.co</span>     <span class="note">← NeMo Colang</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 2 — CLAUDE.MD -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step2">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(34,211,184,0.1);color:var(--step2)">02</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step2)">One-time setup</div>
+      <div class="step-title">Create CLAUDE.md</div>
+      <div class="step-subtitle">HOW Claude Code works. ≤150 lines. Auto-loaded every session.</div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <strong>Budget constraint</strong>
+    Claude Code's system prompt consumes ~50 instruction slots. You get ~100 more. Keep this file under 150 lines or instructions start getting ignored silently. Architecture belongs in ARCHITECTURE.md, not here.
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">2.1</span>
+      <span class="task-title">Create <code>CLAUDE.md</code> in repo root — paste exactly</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">CLAUDE.md</div>
+        <pre><span class="cmt"># CLAUDE.md — AI Assurance Platform | aigovern.sandboxhub.co</span>
+
+<span class="cmt">## Before every task</span>
+Read ARCHITECTURE.md before writing any code.
+Confirm by stating the current decorator chain order and
+the three most recent "in progress" files.
+
+<span class="cmt">## Code standards</span>
+- Full updated files only — never partial functions or snippets
+- Type hints on all parameters and return values
+- Docstring on every public function
+- `from __future__ import annotations` at top of every Python file
+- Pydantic v2 for domain models — ConfigDict, not Config class
+- Read every existing file before modifying it
+- `python -c "import &lt;module&gt;"` must pass before next file
+
+<span class="cmt">## Security rules (never violate)</span>
+- scrubber.tokenise_payload() runs BEFORE tracer.trace_call()
+  Langfuse gets scrubbed_prompt — never raw_prompt
+- Policy engine errors → default DENY, never ALLOW
+- No SaaS guardrails — all self-hosted, no external prompt routing
+- No secrets in code — all config via environment variables
+
+<span class="cmt">## Storage rules</span>
+- JSONL only via storage.py _append_jsonl() and _read_jsonl()
+- No direct file writes outside storage.py pattern
+
+<span class="cmt">## File placement</span>
+- New root modules: beside tracer.py (scrubber.py, providers.py)
+- New domain: domain/&lt;name&gt;.py — follow domain/repository.py
+- New API routers: api/&lt;name&gt;.py — mount in dashboard.py
+- New UI: static/&lt;name&gt;.html — follow static/runtime.html
+- New middleware: middleware/&lt;name&gt;.py
+- Policy files: policies/&lt;name&gt;.rego
+
+<span class="cmt">## When blocked</span>
+Stop. State the blocker. Never fake output. Never work around silently.
+
+<span class="cmt">## End of every session</span>
+1. Run /verify — show all output
+2. Update ARCHITECTURE.md — move completed items
+3. Write next session plan file to docs/plans/
+4. List deviations and open issues
+
+<span class="cmt">## Compound engineering rule</span>
+Every mistake I correct → add a new rule to this file immediately.
+Label it with the date. This file grows with experience.</pre>
+      </div>
+
+      <div class="callout ok">
+        <strong>Compound engineering</strong>
+        Every time Claude Code gets something wrong during a session, add a rule: "NEVER call tracer.trace_call() with raw_prompt — add 2026-05-20". After ten sessions, CLAUDE.md encodes all hard-won lessons automatically.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 3 — ARCHITECTURE.MD -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step3">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(155,107,245,0.1);color:var(--step3)">03</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step3)">Living document</div>
+      <div class="step-title">Create ARCHITECTURE.md</div>
+      <div class="step-subtitle">WHAT exists. No line limit. Updated at end of every session.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">3.1</span>
+      <span class="task-title">Create <code>ARCHITECTURE.md</code> — paste and keep updated</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">ARCHITECTURE.md — sections to include</div>
+        <pre><span class="cmt"># AI Assurance Platform — Architecture Reference
+# aigovern.sandboxhub.co | Azure | FastAPI + vanilla HTML</span>
+
+<span class="kw">## Stack</span>
+Backend: FastAPI (dashboard.py entry point)
+Frontend: vanilla HTML + shared.js + shared.css (no framework, no build)
+Storage: JSONL flat files via storage.py
+Auth: SessionAuthMiddleware (middleware/auth.py)
+Observability: Langfuse Cloud (tracer.py)
+Eval: DeepEval 6-metric suite (evaluator.py)
+Adversarial: Garak (adversarial.py)
+
+<span class="kw">## Architectural decisions (non-negotiable)</span>
+Decorator order: @policy_gate → @scrub_pii → @trace_llm_call → @evaluate_response
+Scrubber: tokenise_payload() runs BEFORE trace_call() — hard constraint
+Langfuse: receives scrubbed_prompt only — never raw prompt
+Policy engine: OPA fail-closed — error → DENY, never ALLOW
+RAG corpus: pre-scrubbed at index time — index_document() rejects PII > 0.7
+Guardrails: self-hosted only — no SaaS tools in prompt path
+Memory tiers: T1 in-context / T2 episodic JSONL / T3 RAG / T4 procedural
+
+<span class="kw">## Files — Built ✓</span>
+<span class="cmt"># (list everything in the built state, updated after each session)</span>
+dashboard.py, storage.py, middleware/auth.py, tracer.py, evaluator.py,
+guardrails.py (regex-only), adversarial.py, audit.py, report.py,
+domain/models.py, domain/repository.py, domain/runtime_connectors.py,
+domain/assessment_engine.py, domain/release_gate_engine.py,
+domain/risk_classification.py, domain/findings_workflow.py,
+domain/evidence_repository.py, domain/framework_coverage.py,
+domain/runtime_engine.py, domain/portfolio.py,
+api/* (grc, runtime_v2, assessment, release_gates, evaluate,
+       traces, findings_v2, connectors, demo_run + 10 more),
+static/* (index, ai-systems, findings, runtime, release-gates,
+          evidence, governance, assessment, evals, policies, reports)
+
+<span class="kw">## Files — In Progress</span>
+scrubber.py, domain/deid_vault.py, api/rag.py, static/rag-governance.html
+Patches: api/demo_run.py, evaluator.py, domain/models.py, dashboard.py
+
+<span class="kw">## Files — Planned</span>
+domain/policy_engine.py, domain/trust_scorer.py, domain/agent_memory.py,
+domain/rag_engine.py, middleware/policy.py, middleware/injection.py,
+providers.py, policies/base.rego, policies/pii.rego,
+policies/agent_tools.rego, policies/financial_advisor.rego,
+guardrails/topic_rail.py, guardrails/financial_advisor.co,
+api/policies.py, static/policy-engine.html
+
+<span class="kw">## Environment variables</span>
+LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
+ANTHROPIC_API_KEY, OPENAI_API_KEY, EVAL_MODEL=gpt-4o-mini
+SESSION_SECRET   ← required for deid_vault Fernet encryption
+SCRUBBER_ENABLED=true, DEID_VAULT_TTL_SECONDS=3600
+RAG_ENABLED=false, AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_KEY
+AZURE_SEARCH_INDEX=aigovern-rag-index
+RAG_EMBEDDING_MODEL=text-embedding-3-small, RAG_TOP_K=5
+OPA_URL=http://localhost:8181
+SCRUBBER_BACKEND=presidio, TRACER_BACKEND=langfuse, EVAL_BACKEND=deepeval
+
+<span class="kw">## Demo scenario</span>
+Financial advisor adversarial: hallucination + PII leakage + compliance
+failure + injection attempt + scope violation.
+Models: Claude + GPT-4o-mini side-by-side.
+
+<span class="kw">## Verification commands</span>
+python -c "import scrubber; print('OK')"
+python -c "from domain.deid_vault import vault_stats; print('OK')"
+python -c "from domain.rag_engine import rag_stats; print('OK')"
+python -c "from domain.policy_engine import evaluate; print('OK')"
+uvicorn dashboard:app --port 8001 &amp;
+curl -s http://localhost:8001/api/rag/stats
+curl -s http://localhost:8001/api/policies/stats</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 4 — DECISIONS.MD -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step4">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(245,166,35,0.1);color:var(--step4)">04</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step4)">Append-only log</div>
+      <div class="step-title">Create DECISIONS.md</div>
+      <div class="step-subtitle">WHY every decision was made. Immutable — never edit existing entries.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">4.1</span>
+      <span class="task-title">Seed <code>DECISIONS.md</code> with decisions from this session</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">DECISIONS.md — paste this, then append new entries below</div>
+        <pre><span class="cmt"># DECISIONS.md — Immutable architectural decision log
+# Never edit existing entries. Append only.</span>
+
+<span class="kw">## 2026-05-20 — Scrubber before Langfuse</span>
+Decision: scrubber.tokenise_payload() before tracer.trace_call()
+Alternatives: post-hoc Langfuse redaction, Langfuse self-hosted only
+Why: Langfuse Cloud is SaaS — even self-hosted must never receive raw PII
+     as defence-in-depth. Constraint survives backend swap.
+Constrains: all LLM call wrappers follow scrub→trace order permanently
+
+<span class="kw">## 2026-05-20 — OPA as primary policy engine</span>
+Decision: OPA (Rego) primary, Cedar secondary
+Alternatives: Cedar-only, home-grown rules dict, NeMo for policy
+Why: OPA most mature, multi-cloud, git-backed, 9500+ tests.
+     Home-grown = unmaintainable at scale.
+Constrains: policies/ contains *.rego files, evaluated via OPA sidecar
+
+<span class="kw">## 2026-05-20 — No SaaS guardrails</span>
+Decision: all guardrails self-hosted (LLM Guard, NeMo, Llama Guard 3)
+Alternatives: Lakera Guard, Azure Content Safety
+Why: SaaS guardrails route prompts externally — direct PII contradiction
+Constrains: guardrail stack deployable on Azure ACI with no external calls
+
+<span class="kw">## 2026-05-20 — Four-tier agent memory</span>
+Decision: T1 in-context / T2 episodic JSONL / T3 RAG / T4 procedural
+Alternatives: single vector store for all memory, pure in-context
+Why: RAG and episodic memory solve different problems. Conflating them
+     creates stale retrieval and unbounded context growth.
+Constrains: agent_memory.py manages all four tiers, RAG is read-only corpus
+
+<span class="kw">## 2026-05-20 — JSONL storage for MVP</span>
+Decision: JSONL flat files via storage.py for de-id vault and episodic memory
+Alternatives: Redis, SQLite, Azure CosmosDB
+Why: SQLAlchemy already in requirements for future migration path.
+     JSONL minimises dependencies for MVP/demo. Swap backend later.
+Constrains: vault TTL enforced in application layer, not database layer
+
+<span class="cmt"># Add new entries below as decisions are made in chat sessions</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 5 — SLASH COMMANDS -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step5">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(245,59,95,0.1);color:var(--step5)">05</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step5)">One-time setup</div>
+      <div class="step-title">Create slash commands</div>
+      <div class="step-subtitle">Four commands. Create files in <code>.claude/commands/</code>.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">5.1</span>
+      <span class="task-title">Create <code>.claude/commands/arch.md</code></span>
+    </div>
+    <div class="task-body">
+      <p>Usage in Claude Code: <code>/arch</code> — shows current system state instantly.</p>
+      <div class="code-wrap">
+        <div class="code-label">.claude/commands/arch.md</div>
+        <pre>Read ARCHITECTURE.md and output:
+1. Current decorator chain order
+2. All "in progress" files with their target paths
+3. All "planned" components in build order
+4. Latest 3 entries from DECISIONS.md
+5. Any environment variables not yet set in .env</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">5.2</span>
+      <span class="task-title">Create <code>.claude/commands/verify.md</code></span>
+    </div>
+    <div class="task-body">
+      <p>Usage: <code>/verify</code> — runs all acceptance criteria. Run before ending every session.</p>
+      <div class="code-wrap">
+        <div class="code-label">.claude/commands/verify.md</div>
+        <pre>Run the verification block from ARCHITECTURE.md.
+For every command: show the exact output.
+Report: PASS or FAIL for each check.
+If any FAIL: stop, diagnose, fix before continuing.
+
+python -c "import scrubber; print('scrubber OK')"
+python -c "from domain.deid_vault import vault_stats; print('vault OK')"
+python -c "from domain.rag_engine import rag_stats; print('rag_engine OK')"
+python -c "from domain.policy_engine import evaluate; print('policy_engine OK')"
+
+python -c "
+from scrubber import tokenise_payload, restore_payload
+text = 'Client John Smith SSN 123-45-6789 email john@example.com'
+scrubbed, vault_id = tokenise_payload(text, 'verify')
+assert 'john@example.com' not in scrubbed, 'FAIL: email leaked'
+assert '123-45-6789' not in scrubbed, 'FAIL: SSN leaked'
+restored = restore_payload(scrubbed, vault_id)
+assert 'john@example.com' in restored, 'FAIL: email not restored'
+print('PASS: scrubber end-to-end')
+"</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">5.3</span>
+      <span class="task-title">Create <code>.claude/commands/handoff.md</code></span>
+    </div>
+    <div class="task-body">
+      <p>Usage: <code>/handoff</code> — run at end of every session to preserve continuity.</p>
+      <div class="code-wrap">
+        <div class="code-label">.claude/commands/handoff.md</div>
+        <pre>Session handoff sequence — run in order:
+
+1. Run /verify — show all output
+2. Update ARCHITECTURE.md:
+   - Move completed files from "In Progress" to "Built (DATE)"
+   - Remove from "Planned" anything started
+3. Append to DECISIONS.md any new decisions made this session
+4. Write docs/plans/SESSION-NN-NEXT-COMPONENT.md for next session
+   Use the plan file template from docs/plans/SESSION-01a-scrubber-vault.md
+5. Output summary:
+   - What was built
+   - What was skipped and why
+   - Any deviations from the plan
+   - Open issues for next session
+6. Output the exact opening message to paste into the next Claude Code session</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">5.4</span>
+      <span class="task-title">Create <code>.claude/commands/diagram.md</code></span>
+    </div>
+    <div class="task-body">
+      <p>Usage: <code>/diagram</code> — regenerates architecture diagram from current ARCHITECTURE.md state.</p>
+      <div class="code-wrap">
+        <div class="code-label">.claude/commands/diagram.md</div>
+        <pre>Read ARCHITECTURE.md in full.
+Generate docs/diagrams/aigovern-architecture.html.
+
+Requirements:
+- Self-contained HTML, IBM Plex Sans + Mono from Google Fonts
+- Dark background #0a0c0f
+- Six vertical layers matching ARCHITECTURE.md exactly
+- Left sidebar: layer labels (Org / System / Runtime)
+- Colour scheme:
+    Built: #5DCAA5 filled
+    In progress: #8B5CF6 border dashed, transparent fill
+    Planned: #EF4444 border dashed, transparent fill
+    Structural: #9CA3AF filled
+- Legend top-left
+- restore() dashed arrow on right side
+- Print-to-PDF ready (@media print)
+After generating: open docs/diagrams/aigovern-architecture.html
+Verify all layers render. Report any discrepancies with ARCHITECTURE.md.</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 6 — CHAT TO PLAN FILES -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step6">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(34,211,122,0.1);color:var(--step6)">06</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step6)">Recurring — after every architecture chat</div>
+      <div class="step-title">Claude Chat → Plan files</div>
+      <div class="step-subtitle">The bridge. Do this before opening Claude Code. Every time.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">6.1</span>
+      <span class="task-title">At the end of every Claude Chat architecture session — do these three things</span>
+    </div>
+    <div class="task-body">
+
+      <p><strong style="color:var(--text-bright)">Thing 1 — Update DECISIONS.md.</strong> Paste the decisions made in this chat. Format:</p>
+      <div class="code-wrap">
+        <div class="code-label">DECISIONS.md entry template</div>
+        <pre><span class="kw">## YYYY-MM-DD — Decision title</span>
+Decision: what was decided
+Alternatives: what was considered
+Why: reasoning
+Constrains: what this forecloses going forward</pre>
+      </div>
+
+      <p><strong style="color:var(--text-bright)">Thing 2 — Update ARCHITECTURE.md.</strong> Move items from planned to in-progress if starting soon. Add any new planned components.</p>
+
+      <p><strong style="color:var(--text-bright)">Thing 3 — Create the session plan file.</strong> Use this template exactly:</p>
+      <div class="code-wrap">
+        <div class="code-label">docs/plans/SESSION-NN-component-name.md — template</div>
+        <pre><span class="cmt"># SESSION-NN — Component Name
+# Date: YYYY-MM-DD
+# Context cost: LOW / MEDIUM / HIGH</span>
+
+<span class="kw">## What this session builds</span>
+&lt;ONE component. Never more. If tempted to list two — split into two sessions.&gt;
+
+<span class="kw">## Pre-conditions</span>
+- [ ] File that must exist before starting
+- [ ] Env var that must be set
+
+<span class="kw">## Files to create</span>
+1. path/to/file.py — one-line description
+2. path/to/other.py — one-line description
+
+<span class="kw">## Files to modify</span>
+1. path/to/existing.py — exactly what changes, which function
+
+<span class="kw">## Architectural constraints (copied from ARCHITECTURE.md)</span>
+- Constraint 1 (repeat the most critical ones — they survive /compact)
+- scrubber.tokenise_payload() BEFORE tracer.trace_call() — always
+- Fail-closed: policy errors → DENY
+
+<span class="kw">## What NOT to build in this session</span>
+- Explicit exclusion 1
+- Explicit exclusion 2
+
+<span class="kw">## Acceptance criteria</span>
+```bash
+python -c "import &lt;module&gt;; print('OK')"
+&lt;end-to-end test assertions&gt;
+```
+
+<span class="kw">## End of session actions</span>
+1. All acceptance criteria pass
+2. Update ARCHITECTURE.md
+3. Write SESSION-NN+1 plan file
+4. List deviations</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">6.2</span>
+      <span class="task-title">Ask Claude Chat to write the plan file for you</span>
+    </div>
+    <div class="task-body">
+      <p>At the end of any architecture chat, paste this:</p>
+      <div class="code-wrap">
+        <div class="code-label">Prompt — paste in Claude Chat to generate the plan file</div>
+        <pre>Based on the decisions we made in this session,
+write a SESSION plan file for the next Claude Code session.
+Use the plan file template exactly.
+The component is: &lt;component name&gt;
+Context cost estimate: &lt;LOW/MEDIUM/HIGH&gt;
+
+Include:
+- All files to create with one-line descriptions
+- All files to modify with the exact function/line to change
+- The two most critical architectural constraints from ARCHITECTURE.md
+- Explicit list of what NOT to build
+- Acceptance criteria with runnable bash assertions
+
+Save it as docs/plans/SESSION-NN-&lt;component&gt;.md</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 7 — CLAUDE CODE SESSIONS -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step7">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(226,95,255,0.1);color:var(--step7)">07</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step7)">Recurring — every build session</div>
+      <div class="step-title">Running Claude Code sessions</div>
+      <div class="step-subtitle">Open → read → /plan → approve → execute → /verify → /handoff.</div>
+    </div>
+  </div>
+
+  <div class="callout crit">
+    <strong>Context rot is real</strong>
+    Performance drops 50-70% as context grows past 32K tokens. Auto-compact at 83.5% retains only 20-30% of details. Run /compact manually at 50% fill — never wait for auto-compact.
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">7.1</span>
+      <span class="task-title">Opening message — paste this at the start of EVERY session</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">Opening message — copy-paste, fill in NN and component</div>
+        <pre>/arch
+
+Then read docs/plans/SESSION-&lt;NN&gt;-&lt;component&gt;.md in full.
+
+Before writing any code, use /plan to show your implementation approach.
+In the plan confirm:
+1. The decorator chain order
+2. Which files you create vs modify
+3. The two critical constraints from the plan file
+4. What you will NOT build in this session
+
+Wait for my approval before executing.</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">7.2</span>
+      <span class="task-title">During execution — context management</span>
+    </div>
+    <div class="task-body">
+      <table class="tbl">
+        <thead><tr><th>Context fill</th><th>Action</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>0–40%</td><td>Normal execution</td><td>Full quality window</td></tr>
+          <tr><td>50%</td><td>Run <code>/compact</code></td><td>Manual compact preserves more than auto</td></tr>
+          <tr><td>60%</td><td>Finish current file, then <code>/compact</code></td><td>Don't start new files past 60%</td></tr>
+          <tr><td>70%+</td><td>Run <code>/handoff</code>, start new session</td><td>Quality degrades fast past here</td></tr>
+          <tr><td>83.5%</td><td>Auto-compact fires — lossy</td><td>Retains only 20-30% of details</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">7.3</span>
+      <span class="task-title">Model selection</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">bash</div>
+        <pre><span class="cmt"># For /plan review and architectural validation</span>
+claude --model claude-opus-4-6
+
+<span class="cmt"># For execution — writing code, running tests (default)</span>
+claude
+<span class="cmt"># Defaults to Sonnet 4.6 — faster, cheaper, sufficient for execution</span></pre>
+      </div>
+      <p style="font-size:12px;color:var(--text);margin-top:8px;">Opus for planning. Sonnet for implementation. Plan quality determines implementation quality.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">7.4</span>
+      <span class="task-title">Ending every session — <code>/handoff</code></span>
+    </div>
+    <div class="task-body">
+      <p>Type <code>/handoff</code>. Claude Code will:</p>
+      <ul class="checklist">
+        <li>Run /verify and show all output</li>
+        <li>Update ARCHITECTURE.md — move completed to Built with date</li>
+        <li>Append new decisions to DECISIONS.md</li>
+        <li>Write the next session plan file to docs/plans/</li>
+        <li>Output the exact opening message for the next session</li>
+      </ul>
+      <div class="callout info">
+        <strong>Why handoff not end</strong>
+        The next session plan file is written while this session's context is hot. This is the continuity mechanism. A cold session starting from scratch re-derives everything — a session starting from a plan file starts informed.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- STEP 8 — DIAGRAM GENERATION -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="step8">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(59,111,245,0.1);color:var(--accent)">08</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--accent)">After each session</div>
+      <div class="step-title">Diagram generation</div>
+      <div class="step-subtitle">Update the architecture diagram whenever ARCHITECTURE.md changes.</div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">8.1</span>
+      <span class="task-title">Create <code>.claude/skills/diagram.md</code></span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">.claude/skills/diagram.md</div>
+        <pre><span class="cmt"># Skill: Architecture Diagram Generation</span>
+
+When asked to generate or update the architecture diagram:
+
+1. Read ARCHITECTURE.md in full — it is the source of truth
+2. Generate docs/diagrams/aigovern-architecture.html
+3. Self-contained HTML — IBM Plex Sans + Mono from Google Fonts
+4. Dark background: #0a0c0f
+
+<span class="kw">Colour scheme (mandatory):</span>
+Built:        background #5DCAA5, text white
+In progress:  transparent, border #8B5CF6 dashed 2px, text #8B5CF6
+Planned:      transparent, border #EF4444 dashed 2px, text #EF4444
+Structural:   background #9CA3AF, text white
+
+<span class="kw">Layer structure (top to bottom):</span>
+Layer 1: Organizational layer (Org label, left sidebar)
+Layer 2: Enterprise AI Control Plane (System label)
+  - Row 1: built control plane boxes (4 columns)
+  - Row 2: built services (3 columns)
+  - Row 3: PII scrubbing pipeline (dashed orange border, in-progress)
+Layer 3: Four-tier agent memory (System label continues)
+  - Row 1: 4 tier boxes
+  - Row 2: agent_memory.py wide box
+  - Row 3: rag_engine.py wide box
+Layer 4: Runtime layer (Runtime label)
+  - 3 boxes: Langfuse, DeepEval, Decorator chain
+Layer 5: LLM abstraction (amber fill)
+Right side: dashed restore() arrow from LLM abstraction back to PII layer
+Top-left: legend (Built / In progress / Planned / Structural)
+Bottom: build plan summary text
+
+<span class="kw">After generating:</span>
+Open docs/diagrams/aigovern-architecture.html in browser.
+Verify all layers match ARCHITECTURE.md state.
+Report any discrepancies.</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">8.2</span>
+      <span class="task-title">Generate diagram in Claude Code</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">Type this in Claude Code</div>
+        <pre>/diagram</pre>
+      </div>
+      <p style="font-size:12px;color:var(--text);margin-top:8px;">Then: open in Chrome → Print → Save as PDF → attach to documentation or demo deck.</p>
+    </div>
+  </div>
+
+  <div class="task">
+    <div class="task-header">
+      <span class="task-num">8.3</span>
+      <span class="task-title">Optional — draw.io MCP for editable diagrams</span>
+    </div>
+    <div class="task-body">
+      <div class="code-wrap">
+        <div class="code-label">bash — install after Session 01 is complete</div>
+        <pre>npm install -g @jgraph/drawio-mcp
+
+<span class="cmt"># Add to ~/.claude/claude_desktop_config.json</span>
+{
+  "mcpServers": {
+    "drawio": { "command": "drawio-mcp" }
+  }
+}</pre>
+      </div>
+      <p style="font-size:12px;color:var(--text);margin-top:8px;">Then use <code>/diagram</code> — Claude Code generates a draw.io XML file you can open in diagrams.net, edit, and export as PNG for presentations.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- SESSION MAP -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="sessions">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(34,211,184,0.1);color:var(--step2)">→</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--step2)">Reference</div>
+      <div class="step-title">Complete build session map</div>
+      <div class="step-subtitle">Seven sessions. Fixed order. Never reorder. Never combine two HIGH-cost sessions.</div>
+    </div>
+  </div>
+
+  <div class="session-grid">
+    <div class="session-row">
+      <div class="session-cell header">Session</div>
+      <div class="session-cell header">Plan file</div>
+      <div class="session-cell header">What it builds</div>
+      <div class="session-cell header">Cost</div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">01a</div><div class="sess-sub">Now</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-01a-scrubber-vault.md</div>
+      <div class="session-cell">scrubber.py + domain/deid_vault.py — new files only</div>
+      <div class="session-cell"><span class="badge hi">HIGH</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">01b</div><div class="sess-sub">Next</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-01b-patches.md</div>
+      <div class="session-cell">Patches: demo_run.py + evaluator.py + models.py + dashboard.py + api/rag.py</div>
+      <div class="session-cell"><span class="badge med">MED</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">02</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-02-policy-engine.md</div>
+      <div class="session-cell">domain/policy_engine.py + trust_scorer.py + middleware/policy.py + policies/*.rego</div>
+      <div class="session-cell"><span class="badge med">MED</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">03</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-03-guardrails.md</div>
+      <div class="session-cell">middleware/injection.py + guardrails.py extension + NeMo topic rail + Llama Guard 3</div>
+      <div class="session-cell"><span class="badge med">MED</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">04</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-04-agent-memory.md</div>
+      <div class="session-cell">domain/agent_memory.py + domain/rag_engine.py (Azure AI Search)</div>
+      <div class="session-cell"><span class="badge hi">HIGH</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">05</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-05-providers.md</div>
+      <div class="session-cell">providers.py adapter factory — env-var-driven backend swapping</div>
+      <div class="session-cell"><span class="badge lo">LOW</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">06</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-06-api-ui.md</div>
+      <div class="session-cell">api/policies.py + static/policy-engine.html + static/rag-governance.html</div>
+      <div class="session-cell"><span class="badge med">MED</span></div>
+    </div>
+    <div class="session-row">
+      <div class="session-cell"><div class="sess-id">07</div></div>
+      <div class="session-cell" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">SESSION-07-diagrams.md</div>
+      <div class="session-cell">docs/diagrams/*.html — final architecture diagram update + demo prep</div>
+      <div class="session-cell"><span class="badge lo">LOW</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- RULES -->
+<!-- ═══════════════════════════════════════════════ -->
+<section class="step-section" id="rules">
+  <div class="step-header">
+    <div class="step-number" style="background:rgba(245,166,35,0.1);color:var(--amber)">!</div>
+    <div class="step-meta">
+      <div class="step-tag" style="color:var(--amber)">Reference</div>
+      <div class="step-title">Rules and anti-patterns</div>
+      <div class="step-subtitle">What separates a session that works from one that derails.</div>
+    </div>
+  </div>
+
+  <table class="tbl">
+    <thead><tr><th>Rule</th><th>Do</th><th>Never do</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Interface separation</td>
+        <td>Architecture decisions in Claude Chat. Execution in Claude Code.</td>
+        <td>Ask Claude Code "what should I use?" — it will invent an answer.</td>
+      </tr>
+      <tr>
+        <td>Session scope</td>
+        <td>One component per session. Split HIGH-cost sessions into a/b.</td>
+        <td>Build policy engine + guardrails + RAG in one session.</td>
+      </tr>
+      <tr>
+        <td>Context management</td>
+        <td>/compact manually at 50%. /handoff at 70%.</td>
+        <td>Wait for auto-compact at 83.5% — it's lossy.</td>
+      </tr>
+      <tr>
+        <td>Plan first</td>
+        <td>Always use /plan and approve before execution starts.</td>
+        <td>Let Claude Code start writing code from the opening message.</td>
+      </tr>
+      <tr>
+        <td>CLAUDE.md size</td>
+        <td>Keep under 150 lines. HOW to work only.</td>
+        <td>Put architecture decisions in CLAUDE.md — they get ignored past 150 lines.</td>
+      </tr>
+      <tr>
+        <td>Compound engineering</td>
+        <td>Every mistake → new CLAUDE.md rule immediately, with date.</td>
+        <td>Correct the mistake and move on without recording it.</td>
+      </tr>
+      <tr>
+        <td>Verification</td>
+        <td>Run /verify before every session ends. Show all output.</td>
+        <td>Accept "it should work" without running the acceptance criteria.</td>
+      </tr>
+      <tr>
+        <td>Handoff</td>
+        <td>Write next session plan file while current context is hot.</td>
+        <td>Start next session cold and re-explain the architecture from scratch.</td>
+      </tr>
+      <tr>
+        <td>Diagram currency</td>
+        <td>Run /diagram after every session that changes ARCHITECTURE.md.</td>
+        <td>Let the diagram drift from the actual system state.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="divider"></div>
+
+  <div class="callout ok">
+    <strong>The one-sentence summary</strong>
+    Claude Chat is where you think. Plan files are where thinking becomes executable. ARCHITECTURE.md is the single source of truth. CLAUDE.md is the institutional memory. Claude Code sessions are short, scoped, and verified — never long, open-ended, or trusted without a passing /verify.
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>
