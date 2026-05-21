@@ -457,6 +457,7 @@ table td strong { color: var(--text-bright); font-weight: 600; }
   <div class="nav-section">
     <div class="nav-section-label">Architecture</div>
     <a class="nav-item" href="#layers"><span class="dot b"></span> Six layers</a>
+    <a class="nav-item" href="#shape"><span class="dot b"></span> Deployment shape</a>
     <a class="nav-item" href="#decorators"><span class="dot c"></span> Decorator chain</a>
     <a class="nav-item" href="#memory"><span class="dot d"></span> Four-tier memory</a>
     <a class="nav-item" href="#pii"><span class="dot e"></span> PII pipeline</a>
@@ -638,6 +639,141 @@ table td strong { color: var(--text-bright); font-weight: 600; }
         <div class="arch-box p"><div class="name">AWS Bedrock</div><div class="det">in-boundary / regulated paths</div></div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- DEPLOYMENT SHAPE -->
+<section class="block" id="shape">
+  <h2><span class="secnum">02b</span> Deployment shape — headless engine + thin clients</h2>
+  <p class="sub">The six-layer architecture is the logical model. This is the operational shape: <strong>one headless engine + three thin clients + an event-sourced data layer.</strong> All three clients consume the same OpenAPI contract. No client carries business logic. The engine is the platform; the UIs are skins.</p>
+
+  <pre>                                  CLIENTS (thin skins, ~no business logic)
+   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+   │  Team Portal    │    │  Gov Console    │    │  CLI + SDK      │
+   │  (web SPA)      │    │  (web SPA)      │    │  (Python)       │
+   │  Engineers      │    │  Governance     │    │  Engineers      │
+   └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+            │                      │                      │
+            └──────────────────────┼──────────────────────┘
+                                   ▼
+   ┌────────────────────────────────────────────────────────────────┐
+   │                       ENGINE (headless, API-only)               │
+   │  identity · governance · controls · gates · scrubber · vault   │
+   │  memory · tracing · eval · decorators · providers · policies   │
+   │  OpenAPI-described · event-sourced · single source of truth    │
+   └────────────────────────────────────────────────────────────────┘
+                                   │
+            ┌──────────────────────┼──────────────────────┐
+            ▼                      ▼                      ▼
+   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+   │  events.jsonl   │    │  Postgres       │    │  Key Vault +    │
+   │  (append-only,  │    │  (materialized  │    │  Blob Storage   │
+   │   source of     │    │   views, fast   │    │  (secrets,      │
+   │   truth)        │    │   queries)      │    │   bundles)      │
+   └─────────────────┘    └─────────────────┘    └─────────────────┘</pre>
+
+  <h3>The three rules that make this work</h3>
+  <ol>
+    <li><strong>OpenAPI is the contract.</strong> The engine emits an OpenAPI spec. SPAs and SDK are generated against it. No drift possible — contract tests in CI fail the build if the API breaks compatibility.</li>
+    <li><strong>The event log is the source of truth.</strong> Engine writes to <code>events.jsonl</code> first, then projects to Postgres. Materialized views are derived. Any view can be rebuilt by replaying the log.</li>
+    <li><strong>UIs render API responses.</strong> Zero business logic in the SPA layer. SPAs are ~3–5K lines each, share a component library, and have no local state beyond the current request.</li>
+  </ol>
+
+  <h3>What lives in each client</h3>
+  <table>
+    <thead><tr><th>Client</th><th>Audience</th><th>Mode</th><th>Default scope</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Team Portal</strong><br/><code>portal.aigovern.sandboxhub.co</code></td>
+        <td>Engineers · team leads</td>
+        <td>Self-service · write-heavy · fast cadence</td>
+        <td>Filtered to the user's team</td>
+      </tr>
+      <tr>
+        <td><strong>Governance Console</strong><br/><code>console.aigovern.sandboxhub.co</code></td>
+        <td>CISO · Risk · Audit · AI Council</td>
+        <td>Portfolio view · governance actions · slow cadence</td>
+        <td>Cross-team · all systems</td>
+      </tr>
+      <tr>
+        <td><strong>CLI + Python SDK</strong><br/><code>pip install signallayer</code> · <code>sl</code></td>
+        <td>Engineers (daily driver)</td>
+        <td>Local CLI · scripting · CI integration</td>
+        <td>Authenticated identity scope</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>What lives in the engine</h3>
+  <p>The engine is a FastAPI app on Azure App Service P1V3, plus an OPA sidecar process. 16 subsystems organized by layer:</p>
+  <div class="stack-grid">
+    <div class="label">L1 Org</div><div class="val"><code>governance/</code> — risk_inventory · body · raci · regulatory_posture</div>
+    <div class="label">L2 Control Plane</div><div class="val"><code>controls/</code> · <code>gates/</code> · <code>policies/</code> (OPA client) · <code>policy_engine.py</code></div>
+    <div class="label">L3 PII Pipeline</div><div class="val"><code>scrubber/</code> · <code>vault/</code> (Fernet · Key Vault)</div>
+    <div class="label">L4 Memory</div><div class="val"><code>memory/</code> orchestrator · <code>rag/</code> (Azure AI Search) · <code>agent_memory.py</code></div>
+    <div class="label">L5 Runtime</div><div class="val"><code>tracing/</code> (Langfuse client) · <code>eval/</code> (DeepEval runner) · <code>decorators/</code></div>
+    <div class="label">L6 LLM</div><div class="val"><code>providers/</code> — router · allowlist · audit</div>
+    <div class="label">Cross-cutting</div><div class="val"><code>identity/</code> (auth · RBAC · sessions) · <code>events/</code> (append + project + replay) · <code>storage/</code> · <code>audit/</code></div>
+    <div class="label">Multi-agent</div><div class="val"><code>agents/</code> — registry · library · binding · versioning</div>
+    <div class="label">Systems</div><div class="val"><code>systems/</code> — registry · lifecycle · intake</div>
+  </div>
+
+  <h3>What lives in the data layer</h3>
+  <table>
+    <thead><tr><th>Store</th><th>Content</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong><code>events.jsonl</code></strong><br/>(append-only)</td>
+        <td>Every state change · every policy decision · every scrub · every eval · every release · every right-to-forget</td>
+        <td><strong>Source of truth.</strong> Audit log + replay primitive. Tamper-evident via hash chain (v2).</td>
+      </tr>
+      <tr>
+        <td><strong>Postgres Flexible B2ms</strong></td>
+        <td>Materialized views: <code>ai_systems</code> · <code>eval_runs</code> · <code>findings</code> · <code>release_decisions</code> · <code>policy_evaluations</code> · <code>framework_coverage</code></td>
+        <td>Fast queries for UIs. Can be rebuilt from event log at any time.</td>
+      </tr>
+      <tr>
+        <td><strong>Key Vault</strong></td>
+        <td>Fernet vault key · HMAC secrets · session secret · DB conn · Search API key · Langfuse keys</td>
+        <td>Secrets only · referenced via App Service settings · never in code</td>
+      </tr>
+      <tr>
+        <td><strong>Blob Storage</strong></td>
+        <td>Evidence bundles (PDF + ZIP) · event log backups · static SPA hosting (v2)</td>
+        <td>Long-lived artifacts · checksummed (SHA-256)</td>
+      </tr>
+      <tr>
+        <td><strong>Azure AI Search</strong></td>
+        <td>Tier 3 RAG indexes (one per workload) · embedded chunks</td>
+        <td>Semantic memory · index-time scrubbed</td>
+      </tr>
+      <tr>
+        <td><strong>Langfuse Cloud</strong></td>
+        <td>LLM traces with scrubbed payloads only · DeepEval scores attached</td>
+        <td>L5 observability · external service · scrubbed contract enforced</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Why this shape — the cons of "two apps" are mitigated</h3>
+  <table>
+    <thead><tr><th>Concern in a naive 2-app split</th><th>How the headless-engine pattern solves it</th></tr></thead>
+    <tbody>
+      <tr><td>Two codebases = double maintenance</td><td>One engine + thin SPA clients (~3–5K lines each). Shared component library covers buttons, tables, modals, charts.</td></tr>
+      <tr><td>State synchronization between apps</td><td>No sync — there's one engine, one DB. Both UIs read the same materialized views.</td></tr>
+      <tr><td>Single source of truth ambiguity</td><td>Event log is SSOT. <code>events.jsonl</code> append-only. Materialized views derived. Replayable.</td></tr>
+      <tr><td>Cross-app identity / context-switch</td><td>One Entra app registration with multiple redirect URIs. Single session cookie scoped to <code>*.aigovern.sandboxhub.co</code>.</td></tr>
+      <tr><td>Deploy + ops cost doubles</td><td>Engine is one App Service. SPAs deploy to Azure Storage Static Websites (~$1/mo each). Total infra delta vs single-app: ~$3/mo.</td></tr>
+      <tr><td>API versioning between apps</td><td>Both UIs pinned to engine's OpenAPI spec at deploy time. SDK generated from same spec. Contract tests in CI catch breaks.</td></tr>
+      <tr><td>Incident response coordination</td><td>One audit log (the event log). One incident playbook. Incidents fire as events; both UIs render the same incident with persona-appropriate actions.</td></tr>
+      <tr><td>Onboarding cliff for team portal</td><td><strong>CLI + SDK are the primary engineer surface.</strong> Portal exists for non-engineer-friendly tasks. Bar drops dramatically.</td></tr>
+      <tr><td>Duplicate functionality drift</td><td>Single component library + design tokens. Every chart / table / modal / notification panel is imported, not reimplemented.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <strong>v1 vs v2 — what's in the MVP</strong>
+    The Team Portal / Governance Console split is <strong>deferred to v2</strong>. The MVP single app at <code>aigovern.sandboxhub.co</code> uses role-based views to surface the right pages to the right persona — same UX outcome, lower build cost. The headless engine + thin clients architecture is the v2 north star; v1 is architected to make the split a refactor, not a rewrite.
   </div>
 </section>
 
