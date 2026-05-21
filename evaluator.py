@@ -2,7 +2,15 @@
 
 deepeval pulls torch/transformers (~800MB) and is only needed at evaluate-time.
 Imports are lazy so dashboard.py can load without the eval stack installed.
+
+Architecture (Session 05):
+  evaluate_response() is now a thin proxy that delegates to the active
+  EvaluatorBackend returned by providers.get_evaluator(). The implementation
+  logic lives in _evaluate_impl() (private, called by DeepEvalEvaluator backend
+  to avoid circular imports).
 """
+
+from __future__ import annotations
 
 import os
 import re
@@ -71,19 +79,20 @@ def _check_pii(text: str) -> tuple[bool, str]:
     return has_pii, details
 
 
-def evaluate_response(
+def _evaluate_impl(
     input_prompt: str,
     actual_output: str,
-    expected_output: str = "",
     context: list[str] = None,
 ) -> dict:
-    """
-    Run all five metrics against a model response.
+    """Internal DeepEval evaluation implementation.
+
+    This private function contains the actual evaluation logic. It is called
+    by DeepEvalEvaluator backend to avoid the circular import that would occur
+    if the backend called the public evaluate_response() proxy.
 
     Args:
         input_prompt: User input/question
         actual_output: Model response to evaluate
-        expected_output: Expected/ideal response (optional)
         context: List of context strings (optional, required for hallucination/faithfulness)
 
     Returns:
@@ -103,11 +112,12 @@ def evaluate_response(
     model = _get_eval_model()
     results = {}
 
-    # Build test case
+    # Build test case — use actual_output as the expected_output stand-in since
+    # expected_output is not part of the _evaluate_impl contract.
     test_case = LLMTestCase(
         input=input_prompt,
         actual_output=actual_output,
-        expected_output=expected_output or actual_output,
+        expected_output=actual_output,
         retrieval_context=context,
     )
 
@@ -224,6 +234,42 @@ def evaluate_response(
     }
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Public API — proxy through providers.get_evaluator() backend
+# ---------------------------------------------------------------------------
+
+def evaluate_response(
+    input_prompt: str,
+    actual_output: str,
+    expected_output: str = "",
+    context: list[str] = None,
+) -> dict:
+    """
+    Run all five metrics against a model response.
+
+    Proxies through providers.get_evaluator().evaluate(). The deepeval backend
+    delegates back to _evaluate_impl() to avoid circular imports.
+
+    Args:
+        input_prompt: User input/question
+        actual_output: Model response to evaluate
+        expected_output: Expected/ideal response (optional)
+        context: List of context strings (optional, required for hallucination/faithfulness)
+
+    Returns:
+        Dict with metric_name -> {score, passed, details}
+    """
+    if context is None:
+        context = []
+    from providers import get_evaluator
+    backend = get_evaluator()
+    return backend.evaluate(
+        input_prompt=input_prompt,
+        actual_output=actual_output,
+        context=context,
+    )
 
 
 if __name__ == "__main__":

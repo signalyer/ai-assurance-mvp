@@ -134,7 +134,7 @@ if _engine is not None:
 # ---------------------------------------------------------------------------
 
 
-def write_episode(
+def _write_episode_impl(
     workload_id: str,
     prompt: str,
     response: str,
@@ -142,27 +142,15 @@ def write_episode(
     metadata: Optional[dict] = None,
     ttl_seconds: Optional[int] = None,
 ) -> str:
-    """Insert a scrubbed episode into Postgres. Returns episode_id (UUID string).
+    """Internal implementation of episode persistence — called by PostgresMemory backend.
 
-    The prompt and response MUST be already scrubbed by the caller. When
-    SCRUBBER_ENABLED=true, this function enforces that metadata contains a
-    non-empty 'vault_id' — mirroring the tracer.py hardening pattern. If the
-    check fails, ValueError is raised before any DB write.
+    Contains the actual Postgres INSERT logic without the provider proxy layer.
+    Exists to break the circular call chain that would occur if the PostgresMemory
+    backend called the public write_episode() proxy:
+      write_episode -> get_memory_backend().write -> PostgresMemory.write
+      -> write_episode -> ... (infinite recursion)
 
-    Args:
-        workload_id: AI workload identifier (e.g., 'financial_advisor').
-        prompt:      Pre-scrubbed prompt text.
-        response:    Pre-scrubbed response text.
-        outcome:     One of 'success', 'failure', 'review'.
-        metadata:    Optional dict. May include: vault_id, trace_id, eval_scores,
-                     guardrail_result. vault_id is required when SCRUBBER_ENABLED.
-        ttl_seconds: Override default TTL. Defaults to EPISODE_TTL_SECONDS env (30 days).
-
-    Returns:
-        episode_id as a UUID string.
-
-    Raises:
-        ValueError: if SCRUBBER_ENABLED=true and metadata lacks vault_id.
+    Args and returns are identical to write_episode() — see that docstring.
     """
     start = datetime.now(timezone.utc)
     logger.info(
@@ -259,6 +247,50 @@ def write_episode(
             exc_info=True,
         )
         raise
+
+
+def write_episode(
+    workload_id: str,
+    prompt: str,
+    response: str,
+    outcome: str,
+    metadata: Optional[dict] = None,
+    ttl_seconds: Optional[int] = None,
+) -> str:
+    """Insert a scrubbed episode into Postgres. Returns episode_id (UUID string).
+
+    Proxies through providers.get_memory_backend().write(). The postgres backend
+    delegates back to _write_episode_impl() to avoid circular imports.
+
+    The prompt and response MUST be already scrubbed by the caller. When
+    SCRUBBER_ENABLED=true, this function enforces that metadata contains a
+    non-empty 'vault_id' — mirroring the tracer.py hardening pattern.
+
+    Args:
+        workload_id: AI workload identifier (e.g., 'financial_advisor').
+        prompt:      Pre-scrubbed prompt text.
+        response:    Pre-scrubbed response text.
+        outcome:     One of 'success', 'failure', 'review'.
+        metadata:    Optional dict. May include: vault_id, trace_id, eval_scores,
+                     guardrail_result. vault_id is required when SCRUBBER_ENABLED.
+        ttl_seconds: Override default TTL. Defaults to EPISODE_TTL_SECONDS env (30 days).
+
+    Returns:
+        episode_id as a UUID string.
+
+    Raises:
+        ValueError: if SCRUBBER_ENABLED=true and metadata lacks vault_id.
+    """
+    from providers import get_memory_backend
+    backend = get_memory_backend()
+    return backend.write(
+        workload_id=workload_id,
+        prompt=prompt,
+        response=response,
+        outcome=outcome,
+        metadata=metadata or {},
+        ttl_seconds=ttl_seconds if ttl_seconds is not None else 0,
+    )
 
 
 def build_context(

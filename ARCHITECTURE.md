@@ -65,7 +65,7 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `domain/policy_engine.py` (OPA HTTP client + local Python fallback, 5 categories, fail-closed), `domain/trust_scorer.py` (time-decayed trust score from policy history, half-life 7 days), `middleware/policy.py` (@policy_gate decorator, raises PolicyDeniedError on DENY), `policies/base.rego` (org-mandatory), `policies/pii.rego` (posture: us-finserv, gdpr, hipaa), `policies/agent_tools.rego` (team tool authorization), `policies/financial_advisor.rego` (risk-tier critical handling)
 
 ### Session 03 (guardrails — NeMo + Llama Guard 3)
-`middleware/injection.py` (prompt injection detection via regex + heuristics), `middleware/guardrails.py` (@guardrails decorator orchestrating injection/topic/safety checks), `guardrails/nemo_adapters.py` (topic classification + topic enforcement), `guardrails/llama_guard_adapter.py` (content safety evaluation — 8 categories), `guardrails/financial_advisor_rail.py` (topic rail + guardrail rules for financial advisor), `guardrails/config/financial_advisor_rails.yaml` (NeMo topic rail YAML config). Note: old `guardrails.py` (regex-only) renamed to `legacy_guardrails.py` to avoid module/package collision.
+`middleware/injection.py` (prompt injection detection via regex + heuristics), `middleware/guardrails.py` (@guardrails decorator orchestrating injection/topic/safety checks), `guardrails/nemo_adapters.py` (topic classification + topic enforcement), `guardrails/llama_guard_adapter.py` (content safety evaluation — 8 categories), `guardrails/financial_advisor_rail.py` (topic rail + guardrail rules for financial advisor), `guardrails/config/financial_advisor_rails.yaml` (NeMo topic rail YAML config).
 
 ### Session 04 (memory + RAG — Postgres + Azure AI Search)
 `domain/agent_memory.py` (Tier 2 episodic memory backed by Postgres with database-level TTL, inline schema bootstrap, parameterized SQL, scrubber vault_id enforcement, full-text search via tsvector, six public functions: write_episode/build_context/compress_episode/selective_recall/list_episodes/memory_stats/purge_expired), `domain/rag_engine.py` (Azure AI Search hybrid retrieval — BM25 + semantic vector via text-embedding-3-small, index-time PII rejection at confidence > 0.7, auto-disables on missing creds, four public functions: index_document/search_corpus/rag_stats/delete_document), `api/memory.py` (5 endpoints: POST /episodes, GET /episodes, GET /recall, GET /stats, GET /context — all using asyncio.to_thread for sync domain calls), `static/memory.html` (memory viewer UI: stats panel auto-refresh 30s, episode browser, semantic search, context viewer)
@@ -77,33 +77,13 @@ None — Sessions 01, 02, 03, and 04 fully complete.
 - `api/rag.py` — new
 - `static/rag-governance.html` — new
 
+## Files — Built (2026-05-21, Session 05)
+### Session 05 (provider abstraction + legacy cleanup)
+`providers/__init__.py` (re-exports five factory functions), `providers/protocols.py` (five runtime_checkable Protocol interfaces: ScrubberBackend, TracerBackend, EvaluatorBackend, MemoryBackend, RagBackend), `providers/config.py` (Pydantic v2 BaseSettings with enum-validated backend choices: presidio|regex|noop for scrubber, langfuse|stdout|noop for tracer, deepeval|noop for evaluator, postgres|jsonl|noop for memory, azure_search|noop for RAG), `providers/registry.py` (five factory functions with lru_cache singleton caching), `providers/backends/__init__.py`, `providers/backends/scrubber_presidio.py` (wraps scrubber._tokenise_impl/_restore_impl), `providers/backends/scrubber_regex.py` (regex-only fallback), `providers/backends/tracer_langfuse.py` (wraps tracer._trace_call_impl), `providers/backends/memory_postgres.py` (wraps domain.agent_memory._write_episode_impl), `providers/backends/rag_azure_search.py` (wraps domain.rag_engine._index_document_impl/_search_corpus_impl/_rag_stats_impl), `providers/backends/noop.py`, `providers/backends/deepeval_evaluator.py` (wraps evaluator._evaluate_impl). Refactored `scrubber.py`, `tracer.py`, `evaluator.py`, `domain/agent_memory.py`, `domain/rag_engine.py` to proxy through providers registry. Deleted `legacy_guardrails.py`; rewrote `api/security.py`, `api/batch.py`, `api/demo_run.py` to use new guardrails package via middleware/injection and guardrails/llama_guard_adapter.
+
 ## Files — Planned
-### Session 05 — Provider Abstraction
-- `providers.py` — env-var-driven backend swap (scrubber/tracer/eval backends)
-
-### Sessions 06+ — UI, diagrams, org layer (unchanged)
+### Sessions 06+ — UI, diagrams, org layer
 - See docs/plans/12-DAY-PRODUCTION-SPRINT.md
-
-### (Original Session 04 — now Built, retained for reference)
-- `domain/agent_memory.py` — `build_context()`, `write_episode()`,
-  `compress_episode()`, `selective_recall()`
-- `domain/rag_engine.py` — Azure AI Search wrapper with index-time scrubbing
-- Tier 2 episodic store: `data/episodes_{workload_id}.jsonl`
-
-### Session 05 — Provider Abstraction
-- `providers.py` — env-var-driven backend swap (scrubber/tracer/eval backends)
-
-### Session 06 — API + UI
-- `api/policies.py`, `static/policy-engine.html`, `static/rag-governance.html`
-
-### Session 07 — Diagrams + Demo
-- `docs/diagrams/aigovern-architecture.html` (regen final)
-- Demo prep for financial advisor adversarial scenario
-
-### Sessions 08–10 — Organizational Layer (added beyond the 7-session guide)
-- `domain/risk_inventory.py`, `domain/governance_body.py`, `domain/raci.py`,
-  `domain/regulatory_posture.py`
-- Three UI pages
 
 ## Environment variables
 ### Existing (set on app-aigovern-dev)

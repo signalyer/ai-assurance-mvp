@@ -3,6 +3,12 @@
 Exposes tokenise_payload() and restore_payload() for scrubbing and reversing
 PII tokens. Scrubbing is fail-closed: if Presidio errors, returns empty vault_id
 and logs the error. Tokens like [PERSON_001], [EMAIL_002] are stable per scope.
+
+Architecture (Session 05):
+  tokenise_payload() and restore_payload() are now thin proxies that delegate to
+  the active ScrubberBackend returned by providers.get_scrubber(). The implementation
+  logic lives in _tokenise_impl() and _restore_impl() (private, called by
+  PresidioScrubber backend to avoid circular imports).
 """
 
 from __future__ import annotations
@@ -59,7 +65,14 @@ _CUSTOM_PATTERNS = {
     "US_SSN": r"\b\d{3}-\d{2}-\d{4}\b",
     "PHONE_NUMBER": r"\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
     "AWS_ARN": r"arn:[a-z\d\-]+:[a-z\d\-]+:[a-z\d\-]*:\d*:[a-z\d\-/]*",
-    "API_KEY": r"\b[a-zA-Z0-9_\-]{32,}\b",  # Generic long secrets
+    # Known-prefix secrets only — generic 32+ char strings are NOT matched to
+    # avoid false-positives on UUIDs, hashes, and base64 document IDs.
+    # Covered prefixes:
+    #   sk-           OpenAI / Anthropic API keys
+    #   AKIA          AWS access key IDs  (exactly 16 uppercase alphanumeric after prefix)
+    #   ghp_          GitHub personal access tokens
+    #   xox[baprs]-   Slack tokens (bot, app, personal, refresh, service)
+    "API_KEY": r"(?:sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9\-]{10,})",
     "UUID": r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
 }
 
@@ -80,29 +93,40 @@ _PRESIDIO_ENTITIES = {
 }
 
 
-def tokenise_payload(text: str, scope: str) -> tuple[str, str]:
-    """
-    Scrub PII from text using Presidio NER + custom regex.
+def _apply_replacements(text: str, replacements: list[tuple[int, int, str, str]]) -> str:
+    """Apply multiple text replacements in reverse order to avoid offset shifts."""
+    # Sort by start position, descending
+    replacements_sorted = sorted(replacements, key=lambda r: r[0], reverse=True)
 
-    Replaces detected entities with stable tokens like [PERSON_001], [EMAIL_002].
-    All detected entities and their locations are stored in the de-ID vault.
+    result = text
+    for start, end, token, _ in replacements_sorted:
+        result = result[:start] + token + result[end:]
+
+    return result
+
+
+def _tokenise_impl(text: str, scope: str) -> tuple[str, str]:
+    """Internal Presidio + regex PII scrubbing implementation.
+
+    This private function contains the actual scrubbing logic. It is called
+    by PresidioScrubber backend to avoid the circular import that would occur
+    if the backend imported the public tokenise_payload() proxy.
 
     Args:
         text: Raw text to scrub
-        scope: Logical scope for grouping tokens (e.g., 'api_call_123', 'session-01a')
+        scope: Logical scope for grouping tokens (e.g., 'api_call_123')
 
     Returns:
-        (scrubbed_text, vault_id) where vault_id is the lookup key for restoration.
-        On error, returns (text, "") — caller must check vault_id before trusting scrub.
+        (scrubbed_text, vault_id) — vault_id empty string on no PII found or error.
     """
     if not text:
         return text, ""
 
     try:
         # Collect all entities (positions, text, type)
-        entity_mapping = {}
-        entity_counts = {}
-        replacements = []  # List of (start, end, token, type, text)
+        entity_mapping: dict[str, str] = {}
+        entity_counts: dict[str, int] = {}
+        replacements: list[tuple[int, int, str, str]] = []
 
         # Step 1: Custom regex layer (detect patterns on original text)
         for pattern_type, pattern in _CUSTOM_PATTERNS.items():
@@ -180,57 +204,71 @@ def tokenise_payload(text: str, scope: str) -> tuple[str, str]:
         return text, ""
 
 
-def _apply_replacements(text: str, replacements: list[tuple[int, int, str, str]]) -> str:
-    """Apply multiple text replacements in reverse order to avoid offset shifts."""
-    # Sort by start position, descending
-    replacements_sorted = sorted(replacements, key=lambda r: r[0], reverse=True)
+def _restore_impl(scrubbed: str, vault_id: str) -> str:
+    """Internal vault restore implementation.
 
-    result = text
-    for start, end, token, _ in replacements_sorted:
-        result = result[:start] + token + result[end:]
+    This private function contains the actual restore logic. It is called
+    by PresidioScrubber backend to avoid circular imports.
 
-    return result
+    Args:
+        scrubbed: Scrubbed text with tokens
+        vault_id: Vault lookup key (from _tokenise_impl return)
+
+    Returns:
+        Original unscrubbed text. Raises if vault entry is missing or expired.
+    """
+    if not vault_id:
+        logger.warning("_restore_impl called with empty vault_id; returning scrubbed text as-is")
+        return scrubbed
+
+    from domain.deid_vault import lookup
+
+    mapping = lookup(vault_id)
+    if mapping is None:
+        raise ValueError(f"Vault entry {vault_id} not found or expired")
+
+    restored = scrubbed
+    for key, original_text in mapping.items():
+        token = f"[{key}]"
+        restored = restored.replace(token, original_text)
+
+    logger.info(f"Restored {len(mapping)} entities from vault {vault_id}")
+    return restored
 
 
-def _tokenise_regex_only(text: str, scope: str) -> tuple[str, str]:
-    """Fallback regex-only scrubbing when Presidio is unavailable."""
-    entity_mapping = {}
-    entity_counts = {}
-    replacements = []
+# ---------------------------------------------------------------------------
+# Public API — proxy through providers.get_scrubber() backend
+# ---------------------------------------------------------------------------
 
-    # Apply custom regex patterns
-    for pattern_type, pattern in _CUSTOM_PATTERNS.items():
-        matches = list(re.finditer(pattern, text, re.IGNORECASE))
-        for match in matches:
-            matched_text = match.group(0)
-            if pattern_type not in entity_counts:
-                entity_counts[pattern_type] = 0
-            entity_counts[pattern_type] += 1
-            count = entity_counts[pattern_type]
+def tokenise_payload(text: str, scope: str) -> tuple[str, str]:
+    """
+    Scrub PII from text using the active scrubber backend.
 
-            token = f"[{pattern_type}_{count:03d}]"
-            key = f"{pattern_type}_{count:03d}"
-            entity_mapping[key] = matched_text
-            replacements.append((match.start(), match.end(), token, pattern_type))
+    Proxies through providers.get_scrubber().tokenise(). The presidio backend
+    delegates back to the internal _tokenise_impl() to avoid circular imports.
 
-    if not entity_mapping:
-        return text, ""
+    Replaces detected entities with stable tokens like [PERSON_001], [EMAIL_002].
+    All detected entities and their locations are stored in the de-ID vault.
 
-    scrubbed = _apply_replacements(text, replacements)
+    Args:
+        text: Raw text to scrub
+        scope: Logical scope for grouping tokens (e.g., 'api_call_123', 'session-01a')
 
-    from domain.deid_vault import store
-    vault_id = f"{scope}_{hash(text) % 1000000:06d}"
-    store(vault_id, entity_mapping)
-
-    logger.info(f"Regex-only scrub: {len(entity_mapping)} entities into vault {vault_id}")
-    return scrubbed, vault_id
+    Returns:
+        (scrubbed_text, vault_id) where vault_id is the lookup key for restoration.
+        On error, returns (text, "") — caller must check vault_id before trusting scrub.
+    """
+    from providers import get_scrubber
+    backend = get_scrubber()
+    return backend.tokenise(text, scope)
 
 
 def restore_payload(scrubbed: str, vault_id: str) -> str:
     """
     Reverse PII scrubbing using vault lookup.
 
-    Restores all tokens [ENTITY_TYPE_NNN] back to original text using the vault.
+    Proxies through providers.get_scrubber().restore(). Restores all tokens
+    [ENTITY_TYPE_NNN] back to original text using the vault.
 
     Args:
         scrubbed: Scrubbed text with tokens
@@ -239,28 +277,9 @@ def restore_payload(scrubbed: str, vault_id: str) -> str:
     Returns:
         Original unscrubbed text. Raises if vault entry is missing or expired.
     """
-    if not vault_id:
-        logger.warning("restore_payload called with empty vault_id; returning scrubbed text as-is")
-        return scrubbed
-
-    try:
-        from domain.deid_vault import lookup
-
-        mapping = lookup(vault_id)
-        if mapping is None:
-            raise ValueError(f"Vault entry {vault_id} not found or expired")
-
-        restored = scrubbed
-        for key, original_text in mapping.items():
-            token = f"[{key}]"
-            restored = restored.replace(token, original_text)
-
-        logger.info(f"Restored {len(mapping)} entities from vault {vault_id}")
-        return restored
-
-    except Exception as e:
-        logger.error(f"Restore error: {e}", exc_info=True)
-        raise
+    from providers import get_scrubber
+    backend = get_scrubber()
+    return backend.restore(scrubbed, vault_id)
 
 
 if __name__ == "__main__":

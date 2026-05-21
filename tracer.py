@@ -4,14 +4,25 @@ Langfuse is imported lazily so dashboard.py can load when the langfuse SDK
 isn't installed (e.g. slim production image). If the SDK is missing or
 credentials are absent, trace_call returns a no-op trace id and get_recent_traces
 returns an empty list.
+
+Architecture (Session 05):
+  trace_call() is now a thin proxy that delegates to the active TracerBackend
+  returned by providers.get_tracer(). The implementation logic lives in
+  _trace_call_impl() (private, called by LangfuseTracer backend to avoid
+  circular imports).
 """
 
+from __future__ import annotations
+
+import logging
 import os
 from datetime import datetime
 from typing import Any, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 _client: Optional[Any] = None
 _traces_cache: dict[str, dict] = {}
@@ -38,16 +49,89 @@ def _get_client():
     return _client
 
 
+def _trace_call_impl(
+    model: str,
+    prompt: str,
+    response: str,
+    latency_ms: int,
+    tokens_used: int,
+    metadata: dict,
+) -> str:
+    """Internal Langfuse tracing implementation.
+
+    This private function contains the actual tracing logic. It is called
+    by LangfuseTracer backend to avoid the circular import that would occur
+    if the backend imported the public trace_call() proxy.
+
+    CRITICAL: The prompt parameter MUST be pre-scrubbed via scrubber.tokenise_payload()
+    before calling this function. Raw prompts must NEVER reach Langfuse. If vault_id is
+    empty or missing, this function will abort the trace to Langfuse.
+
+    Args:
+        model: Model name (e.g., 'claude-sonnet-4-20250514', 'gpt-4o-mini')
+        prompt: SCRUBBED prompt text (pre-tokenized, PII replaced with [TYPE_NNN] tokens)
+        response: Model response text
+        latency_ms: Latency in milliseconds
+        tokens_used: Total tokens consumed
+        metadata: Optional metadata dict. Should include 'vault_id' for de-ID traceability.
+
+    Returns:
+        Trace ID string
+    """
+    if metadata is None:
+        metadata = {}
+
+    # vault_id is ALWAYS required — scrubber.tokenise_payload() must run before trace_call().
+    # This is unconditional: no SCRUBBER_ENABLED gate. Every call path must scrub.
+    if not metadata.get("vault_id"):
+        raise ValueError(
+            "tracer.trace_call called without vault_id — scrubber must run first. "
+            "Call scrubber.tokenise_payload(prompt, scope) and pass the returned "
+            "vault_id in metadata before invoking trace_call()."
+        )
+
+    client = _get_client()
+    trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
+    if client is None:
+        return trace_id
+
+    try:
+        client.create_generation(
+            trace_id=trace_id,
+            name=f"model_call_{model}",
+            model=model,
+            input={"prompt": prompt},
+            output={"response": response},
+            metadata={
+                **metadata,
+                "latency_ms": latency_ms,
+                "tokens_used": tokens_used,
+            },
+        )
+        client.flush()
+    except Exception:
+        pass
+
+    return trace_id
+
+
+# ---------------------------------------------------------------------------
+# Public API — proxy through providers.get_tracer() backend
+# ---------------------------------------------------------------------------
+
 def trace_call(
     model: str,
     prompt: str,
     response: str,
     latency_ms: int,
     tokens_used: int,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
 ) -> str:
     """
-    Send a model call trace to Langfuse.
+    Send a model call trace to the active tracer backend.
+
+    Proxies through providers.get_tracer().trace_call(). The langfuse backend
+    delegates back to _trace_call_impl() to avoid circular imports.
 
     CRITICAL: The prompt parameter MUST be pre-scrubbed via scrubber.tokenise_payload()
     before calling this function. Raw prompts must NEVER reach Langfuse. If vault_id is
@@ -66,46 +150,16 @@ def trace_call(
     """
     if metadata is None:
         metadata = {}
-
-    # Security check: if scrubber is enabled, vault_id MUST be in metadata
-    # This prevents accidental raw-prompt traces to Langfuse
-    scrubber_enabled = os.getenv("SCRUBBER_ENABLED", "false").lower() == "true"
-    if scrubber_enabled and not metadata.get("vault_id"):
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(
-            "trace_call: SCRUBBER_ENABLED but vault_id missing from metadata. "
-            "Raw prompts are not allowed. Aborting trace to Langfuse."
-        )
-        # Return a trace ID but do NOT send to Langfuse
-        trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_blocked_no_vault_id"
-        return trace_id
-
-    client = _get_client()
-    trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
-    if client is None:
-        return trace_id
-
-    try:
-        # Create a generation event using the new API
-        client.create_generation(
-            trace_id=trace_id,
-            name=f"model_call_{model}",
-            model=model,
-            input={"prompt": prompt},
-            output={"response": response},
-            metadata={
-                **metadata,
-                "latency_ms": latency_ms,
-                "tokens_used": tokens_used,
-            },
-        )
-        client.flush()
-    except Exception as e:
-        # Fallback: just return the trace_id even if creation fails
-        pass
-
-    return trace_id
+    from providers import get_tracer
+    backend = get_tracer()
+    return backend.trace_call(
+        model=model,
+        prompt=prompt,
+        response=response,
+        latency_ms=latency_ms,
+        tokens_used=tokens_used,
+        metadata=metadata,
+    )
 
 
 def get_recent_traces(limit: int = 10) -> list[dict]:

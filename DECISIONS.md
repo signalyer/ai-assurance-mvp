@@ -151,3 +151,28 @@ Why: Python's import resolution picks the package over the module when both exis
 Constrains: new guardrail work goes in `guardrails/` package + `middleware/guardrails.py` decorator.
      `legacy_guardrails.py` is frozen — bug fixes only, no new features. Session 05 may evaluate
      deleting it entirely once api/security.py adversarial flow is rewritten to use Garak directly.
+
+## 2026-05-21 — Provider abstraction: typing.Protocol + Pydantic BaseSettings
+Decision: Backend interfaces defined via `typing.Protocol` (structural, zero runtime cost).
+         Backend config via Pydantic v2 `BaseSettings` (env-var-driven, validated at startup).
+         Five pluggable backends: scrubber (presidio|regex|noop), tracer (langfuse|stdout|noop),
+         evaluator (deepeval|noop), memory (postgres|jsonl|noop), RAG (azure_search|noop).
+Alternatives: inheritance-based ABC · Pydantic BaseModel for interfaces · fixed backend at build time
+Why: Protocol satisfies structural typing contracts at runtime with no inheritance boilerplate.
+     Pydantic BaseSettings auto-parses env vars and validates enums at import time (fail-closed).
+     Backends cached in registry via lru_cache(maxsize=1) — no per-call instantiation overhead.
+Constrains: every backend module implements its Protocol fully. Unknown env var values raise
+     ValidationError at module load — no silent fallbacks. Backend lifecycle: create once at module
+     load, reuse for all calls (stateful backends like Postgres engine must not leak connections).
+
+## 2026-05-21 — Delete legacy_guardrails.py; migrate api/security.py + api/batch.py
+Decision: legacy_guardrails.py deleted entirely. api/security.py, api/batch.py, api/demo_run.py
+         rewritten to use new guardrails package (Session 03): middleware/injection.detect_injection
+         for injection detection, guardrails/llama_guard_adapter.evaluate_content for safety scoring.
+Alternatives: keep legacy as stub · keep both implementations indefinitely · move legacy into guardrails/
+Why: Single-tenant project with no external consumers. Legacy implementation (regex filters + keyword
+     matching) superseded by Session 03 guardrails (NeMo + Llama Guard 3). Deleting removes dead code
+     and API surface confusion (filter_output exists in both api/batch and legacy_guardrails).
+Constrains: api/security.py apply_guardrails and filter_output signatures unchanged (backward compat
+     for callers). Session 03 guardrails are the new default. No feature degradation — new guardrails
+     strictly more capable (LLM-based safety scoring + NeMo topic classification vs. keyword matching).

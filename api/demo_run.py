@@ -5,6 +5,10 @@ Wall time is roughly max(claude_latency, openai_latency) instead of the sum.
 
 DECORATOR CHAIN (Session 03):
 @policy_gate (if wired) → @scrub_pii (if wired) → @guardrails (NEW) → @trace_llm_call (in _build_run) → @evaluate_response
+
+Session 05: guardrail integration updated. apply_guardrails and filter_output now sourced
+from api.security (which delegates to middleware.injection and
+guardrails.llama_guard_adapter respectively).
 """
 from __future__ import annotations
 
@@ -27,22 +31,14 @@ from api.evaluate import eval_cache, runs_cache, _normalize_eval_scores
 from domains import load_domain, list_domains
 from storage import save_run
 from audit import log_evaluation
-from legacy_guardrails import apply_guardrails, filter_output
+from api.security import apply_guardrails, filter_output
 from scrubber import tokenise_payload
 from middleware.guardrails import guardrails
 from domain.agent_memory import write_episode
 
-# Load env vars from project root .env file
-env_path = Path(__file__).parent.parent / ".env"
-if env_path.exists():
-    env_content = env_path.read_text()
-    for line in env_content.split('\n'):
-        line = line.strip()
-        if '=' in line and not line.startswith('#'):
-            key, value = line.split('=', 1)
-            os.environ[key] = value
-
-load_dotenv(dotenv_path=str(env_path))
+# Load env vars from project root .env file at module load — never inside request handlers.
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=str(_env_path))
 
 router = APIRouter(prefix="/api", tags=["demo"])
 
@@ -57,6 +53,7 @@ DEMO_CONTEXT = [
 
 class DemoRunResponse(BaseModel):
     """Response from demo run."""
+
     runs: list[dict]
     error: str | None = None
 
@@ -172,6 +169,7 @@ def _build_run(
 
 class DomainsResponse(BaseModel):
     """Response listing available domains."""
+
     domains: list[dict]
 
 
@@ -197,24 +195,13 @@ async def get_domains() -> DomainsResponse:
 
 @router.post("/demo/run")
 async def run_live_demo(domain: str = Query(None)):
-    """
-    Run the adversarial demo: call Claude and GPT-4o, trace both, evaluate both.
+    """Run the adversarial demo: call Claude and GPT-4o, trace both, evaluate both.
 
     Args:
         domain: Domain name to use (e.g., "finance", "healthcare"). If None, uses default.
 
     Returns list of run results with trace_id and eval_scores.
     """
-    # Ensure env vars are loaded from .env file
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        env_content = env_path.read_text()
-        for line in env_content.split('\n'):
-            line = line.strip()
-            if '=' in line and not line.startswith('#'):
-                key, value = line.split('=', 1)
-                os.environ[key] = value
-
     runs = []
     error = None
 

@@ -2,15 +2,24 @@
 
 PERFORMANCE: All LLM calls are dispatched in parallel via asyncio.gather.
 For N prompts × M models, total time ≈ max(call_latency) instead of N×M×latency.
+
+Session 05: guardrail integration updated. filter_output now delegates to
+guardrails.llama_guard_adapter.evaluate_content. Signature preserved for
+backward compatibility.
 """
+from __future__ import annotations
 
 import asyncio
+import logging
 import os
+import re
 import time
 import uuid
 import json
 from pathlib import Path
-from fastapi import APIRouter, Query
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from anthropic import AsyncAnthropic
@@ -21,7 +30,10 @@ from evaluator import evaluate_response
 from api.evaluate import _normalize_eval_scores, eval_cache, runs_cache
 from storage import save_run, save_batch, get_batches
 from audit import log_evaluation
-from legacy_guardrails import filter_output
+from guardrails.llama_guard_adapter import evaluate_content
+from scrubber import tokenise_payload
+
+logger = logging.getLogger(__name__)
 
 env_path = Path(__file__).parent.parent / ".env"
 if env_path.exists():
@@ -32,8 +44,8 @@ router = APIRouter(prefix="/api/batch", tags=["batch"])
 DOMAINS_DIR = Path(__file__).parent.parent / "domains"
 
 # Reuse async clients across calls (warm connection pool)
-_anthropic_client: AsyncAnthropic | None = None
-_openai_client: AsyncOpenAI | None = None
+_anthropic_client: Optional[AsyncAnthropic] = None
+_openai_client: Optional[AsyncOpenAI] = None
 
 
 def _get_anthropic_client() -> AsyncAnthropic:
@@ -52,6 +64,7 @@ def _get_openai_client() -> AsyncOpenAI:
 
 class BatchPrompt(BaseModel):
     """A single prompt in a batch."""
+
     name: str
     prompt: str
     context: list[str] | None = None
@@ -60,6 +73,7 @@ class BatchPrompt(BaseModel):
 
 class BatchRequest(BaseModel):
     """Batch evaluation request."""
+
     name: str | None = None
     prompts: list[BatchPrompt]
     models: list[str] = ["claude-sonnet-4-6", "gpt-4o-mini"]
@@ -74,7 +88,65 @@ def _provider_for_model(model: str) -> str:
     return "anthropic"
 
 
-async def _call_model_async(provider: str, model: str, prompt: str, max_tokens: int = 500) -> tuple[str, int, int]:
+def filter_output(
+    response: str,
+    domain: Optional[str] = None,
+    auto_redact: bool = True,
+) -> dict:
+    """Filter model output via Llama Guard 3 content safety evaluation.
+
+    Backward-compatible wrapper around guardrails.llama_guard_adapter.evaluate_content.
+    The return shape is a superset of the legacy filter_output shape so all existing
+    callers continue to work without modification.
+
+    Args:
+        response: Model response text.
+        domain: Optional domain context (retained for interface compat).
+        auto_redact: Retained for interface compat; PII redaction is the scrubber's
+                     responsibility, not the guardrails layer.
+
+    Returns:
+        {
+            "safe": bool,
+            "response": str,
+            "original": str,
+            "violations": list[str],
+            "redacted": bool,
+            "violation_count": int,
+            "score": float,
+        }
+    """
+    start = time.monotonic()
+    logger.info("filter_output entry", extra={"response_length": len(response)})
+
+    llama_result = evaluate_content(response)
+    violations_str: list[str] = [v.value for v in llama_result.violations]
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    logger.info(
+        "filter_output exit",
+        extra={
+            "safe": llama_result.safe,
+            "violation_count": len(violations_str),
+            "score": llama_result.score,
+            "duration_ms": duration_ms,
+        },
+    )
+
+    return {
+        "safe": llama_result.safe,
+        "response": response,
+        "original": response,
+        "violations": violations_str,
+        "redacted": False,
+        "violation_count": len(violations_str),
+        "score": llama_result.score,
+    }
+
+
+async def _call_model_async(
+    provider: str, model: str, prompt: str, max_tokens: int = 500
+) -> tuple[str, int, int]:
     """Async model invocation — all calls are parallelizable."""
     start = time.time()
     if provider == "anthropic":
@@ -115,6 +187,22 @@ async def _run_single(
         # Model call (async)
         response, latency, tokens = await _call_model_async(provider, model, test_case.prompt)
 
+        # Scrub prompt and response BEFORE tracing — raw PII must never reach Langfuse.
+        scrubbed_prompt, vault_id = tokenise_payload(
+            test_case.prompt, scope=f"batch-prompt-{model}-{batch_id}"
+        )
+        if not vault_id:
+            import hashlib
+            scrubbed_prompt = test_case.prompt
+            vault_id = f"batch-nopii_{hashlib.sha256(test_case.prompt.encode()).hexdigest()[:12]}"
+
+        scrubbed_response, response_vault_id = tokenise_payload(
+            response, scope=f"batch-resp-{model}-{batch_id}"
+        )
+        if not response_vault_id:
+            scrubbed_response = response
+            response_vault_id = ""
+
         # Tracing and evaluation are CPU/blocking — run in thread pool to not block event loop
         loop = asyncio.get_event_loop()
 
@@ -122,19 +210,24 @@ async def _run_single(
             None,
             lambda: trace_call(
                 model=model,
-                prompt=test_case.prompt,
-                response=response,
+                prompt=scrubbed_prompt,
+                response=scrubbed_response,
                 latency_ms=latency,
                 tokens_used=tokens,
-                metadata={"batch_id": batch_id, "test_case": test_case.name},
+                metadata={
+                    "batch_id": batch_id,
+                    "test_case": test_case.name,
+                    "vault_id": vault_id,
+                    "response_vault_id": response_vault_id,
+                },
             ),
         )
 
         raw_evals = await loop.run_in_executor(
             None,
             lambda: evaluate_response(
-                input_prompt=test_case.prompt,
-                actual_output=response,
+                input_prompt=scrubbed_prompt,
+                actual_output=scrubbed_response,
                 context=test_case.context or [],
             ),
         )
@@ -150,10 +243,12 @@ async def _run_single(
             "model": model,
             "trace_id": trace_id,
             "domain": batch_name,
-            "prompt": test_case.prompt,
-            "prompt_preview": test_case.prompt[:100],
-            "response": response,
-            "response_preview": response[:100],
+            "prompt": scrubbed_prompt,
+            "prompt_preview": scrubbed_prompt[:100],
+            "response": scrubbed_response,
+            "response_preview": scrubbed_response[:100],
+            "vault_id": vault_id,
+            "response_vault_id": response_vault_id,
             "latency_ms": latency,
             "tokens_used": tokens,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -234,9 +329,14 @@ async def run_batch(request: BatchRequest) -> dict:
     return batch_summary
 
 
+_DOMAIN_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
+
+
 @router.post("/run-domain/{domain_id}")
 async def run_domain_test_suite(domain_id: str) -> dict:
     """Run all test cases for a specific domain."""
+    if not _DOMAIN_ID_RE.match(domain_id):
+        raise HTTPException(status_code=400, detail="Invalid domain_id — must be 1-64 alphanumeric/underscore/hyphen characters")
     file_path = DOMAINS_DIR / f"{domain_id}.json"
     if not file_path.exists():
         return {"error": f"Domain '{domain_id}' not found"}

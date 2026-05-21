@@ -392,26 +392,20 @@ def _pii_confidence(text: str) -> float:
 # Core public API
 # ---------------------------------------------------------------------------
 
-def index_document(
+def _index_document_impl(
     doc_id: str,
     content: str,
     metadata: dict[str, Any],
     scrub: bool = True,
 ) -> bool:
-    """Index a document into Azure AI Search with optional PII scrubbing.
+    """Internal implementation of index_document — called by AzureSearchRag backend.
 
-    When scrub=True (default), runs scrubber.tokenise_payload() on the content
-    before generating embeddings. Documents with PII confidence > 0.7 are
-    REJECTED (returns False) and logged to data/rag_rejections.jsonl.
+    Contains the actual Azure AI Search upload logic without the provider proxy layer.
+    Exists to break the circular call chain:
+      index_document -> get_rag_backend().index -> AzureSearchRag.index
+      -> index_document -> ... (infinite recursion)
 
-    Args:
-        doc_id:   Unique document identifier (maps to 'id' field in index).
-        content:  Document text to index.
-        metadata: Arbitrary key/value metadata — stored as JSON string.
-        scrub:    Whether to run PII scrubbing before indexing. Default True.
-
-    Returns:
-        True on successful index; False if rejected due to PII or disabled.
+    Args and returns identical to index_document() — see that docstring.
     """
     start = time.monotonic()
     logger.info(
@@ -499,32 +493,57 @@ def index_document(
 
     elapsed = int((time.monotonic() - start) * 1000)
     logger.info(
-        "index_document success — doc_id=%s pii_score=%.4f latency_ms=%d",
+        "_index_document_impl success — doc_id=%s pii_score=%.4f latency_ms=%d",
         doc_id, pii_score, elapsed,
     )
     return True
 
 
-def search_corpus(
+def index_document(
+    doc_id: str,
+    content: str,
+    metadata: dict[str, Any],
+    scrub: bool = True,
+) -> bool:
+    """Index a document into Azure AI Search with optional PII scrubbing.
+
+    Proxies through providers.get_rag_backend().index(). The azure_search backend
+    delegates back to _index_document_impl() to avoid circular imports.
+
+    When scrub=True (default), runs scrubber.tokenise_payload() on the content
+    before generating embeddings. Documents with PII confidence > 0.7 are
+    REJECTED (returns False) and logged to data/rag_rejections.jsonl.
+
+    Args:
+        doc_id:   Unique document identifier (maps to 'id' field in index).
+        content:  Document text to index.
+        metadata: Arbitrary key/value metadata — stored as JSON string.
+        scrub:    Whether to run PII scrubbing before indexing. Default True.
+
+    Returns:
+        True on successful index; False if rejected due to PII or disabled.
+    """
+    from providers import get_rag_backend
+    return get_rag_backend().index(
+        doc_id=doc_id,
+        content=content,
+        metadata=metadata,
+        scrub=scrub,
+    )
+
+
+def _search_corpus_impl(
     query: str,
     top_k: int = _TOP_K,
     hybrid: bool = True,
 ) -> list[dict[str, Any]]:
-    """Search the RAG corpus with hybrid (BM25 + semantic vector) retrieval.
+    """Internal implementation of search_corpus — called by AzureSearchRag backend.
 
-    When hybrid=True, combines BM25 full-text scores with semantic vector
-    similarity using: combined = (semantic_weight * norm_semantic) + (bm25_weight * norm_bm25).
+    Exists to break the circular call chain:
+      search_corpus -> get_rag_backend().search -> AzureSearchRag.search
+      -> search_corpus -> ... (infinite recursion)
 
-    When hybrid=False, performs BM25-only full-text search.
-
-    Args:
-        query:  Natural language query string.
-        top_k:  Maximum number of results to return.
-        hybrid: Whether to include semantic vector reranking. Default True.
-
-    Returns:
-        List of dicts with keys: id, content, score, metadata, bm25_score, semantic_score.
-        Returns empty list if RAG is disabled or Azure Search is unreachable.
+    Args and returns identical to search_corpus() — see that docstring.
     """
     start = time.monotonic()
     logger.info(
@@ -558,6 +577,36 @@ def search_corpus(
     except Exception as exc:
         logger.error("search_corpus failed: %s", exc, exc_info=True)
         return []
+
+
+def search_corpus(
+    query: str,
+    top_k: int = _TOP_K,
+    hybrid: bool = True,
+) -> list[dict[str, Any]]:
+    """Search the RAG corpus with hybrid (BM25 + semantic vector) retrieval.
+
+    Proxies through providers.get_rag_backend().search(). The azure_search backend
+    delegates back to _search_corpus_impl() to avoid circular imports.
+
+    When hybrid=True, combines BM25 full-text scores with semantic vector
+    similarity. When hybrid=False, performs BM25-only full-text search.
+
+    Args:
+        query:  Natural language query string.
+        top_k:  Maximum number of results to return.
+        hybrid: Whether to include semantic vector reranking. Default True.
+
+    Returns:
+        List of dicts with keys: id, content, score, metadata, bm25_score, semantic_score.
+        Returns empty list if RAG is disabled or Azure Search is unreachable.
+    """
+    from providers import get_rag_backend
+    return get_rag_backend().search(
+        query=query,
+        top_k=top_k,
+        hybrid=hybrid,
+    )
 
 
 def _execute_search(
@@ -663,13 +712,12 @@ def _execute_search(
     return results
 
 
-def rag_stats() -> dict[str, Any]:
-    """Return statistics about the RAG index.
+def _rag_stats_impl() -> dict[str, Any]:
+    """Internal implementation of rag_stats — called by AzureSearchRag backend.
 
-    Returns:
-        Dict with keys: index_size, doc_count, last_updated,
-        embedding_model, rejections_total.
-        Returns zeroed stats if RAG is disabled or Azure Search is unreachable.
+    Exists to break the circular call chain:
+      rag_stats -> get_rag_backend().stats -> AzureSearchRag.stats
+      -> rag_stats -> ... (infinite recursion)
     """
     start = time.monotonic()
     logger.info("rag_stats entry — rag_enabled=%s", _RAG_ENABLED)
@@ -712,8 +760,23 @@ def rag_stats() -> dict[str, Any]:
         return result
 
     except Exception as exc:
-        logger.error("rag_stats failed: %s", exc, exc_info=True)
+        logger.error("_rag_stats_impl failed: %s", exc, exc_info=True)
         return empty_stats
+
+
+def rag_stats() -> dict[str, Any]:
+    """Return statistics about the RAG index.
+
+    Proxies through providers.get_rag_backend().stats(). The azure_search backend
+    delegates back to _rag_stats_impl() to avoid circular imports.
+
+    Returns:
+        Dict with keys: index_size, doc_count, last_updated,
+        embedding_model, rejections_total.
+        Returns zeroed stats if RAG is disabled or Azure Search is unreachable.
+    """
+    from providers import get_rag_backend
+    return get_rag_backend().stats()
 
 
 def delete_document(doc_id: str) -> bool:
