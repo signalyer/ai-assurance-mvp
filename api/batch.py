@@ -21,7 +21,7 @@ from evaluator import evaluate_response
 from api.evaluate import _normalize_eval_scores, eval_cache, runs_cache
 from storage import save_run, save_batch, get_batches
 from audit import log_evaluation
-from guardrails import filter_output
+from legacy_guardrails import filter_output
 
 env_path = Path(__file__).parent.parent / ".env"
 if env_path.exists():

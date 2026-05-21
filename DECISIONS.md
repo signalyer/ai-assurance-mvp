@@ -104,3 +104,50 @@ Why: Financial advisor guardrails block stock tips and guaranteed return claims 
      Users can still disable guardrails per-endpoint (strict=False) or globally (GUARDRAILS_ENABLED=false).
 Constrains: decorator auto-loads TopicClassifier.ALLOWED_TOPICS_DEFAULT for financial_advisor workload.
      Test coverage: 16 acceptance tests (injection, topic, safety, decorator integration).
+
+## 2026-05-21 — Tier 2 episodic memory: Postgres with database-level TTL
+Decision: Tier 2 episodic memory stored in Postgres (psql-aigovern-dev, westus2), not JSONL.
+         TTL enforced via `expires_at TIMESTAMPTZ` column; `purge_expired()` for cron-driven cleanup.
+         Inline schema bootstrap (`CREATE TABLE IF NOT EXISTS`) — no Alembic yet (none present in repo).
+Alternatives: JSONL per workload (Session 04 plan default) · SQLite · Cosmos DB · in-memory
+Why: User explicitly chose Postgres over JSONL during Session 04 planning. Database-level TTL means
+     no application-layer TTL drift; queries can filter expired rows in the WHERE clause. Postgres
+     full-text search (tsvector) provides selective_recall without an external search engine.
+Constrains: every episode write requires DATABASE_URL set. write_episode enforces vault_id when
+     SCRUBBER_ENABLED=true (mirrors tracer hardening). Parameterized SQL only — no f-string queries.
+
+## 2026-05-21 — RAG: hybrid retrieval (BM25 + semantic vector)
+Decision: Tier 3 RAG uses Azure AI Search hybrid mode: BM25 full-text + semantic vector reranking.
+         Default weights: 0.6 semantic + 0.4 BM25 (configurable via RAG_HYBRID_SEMANTIC_WEIGHT).
+         Embedding model: text-embedding-3-small (1536 dims).
+Alternatives: semantic-only · BM25-only · two-stage retrieval (broad BM25 then rerank)
+Why: User chose hybrid during Session 04 planning. Semantic-only misses exact-term queries (ticker
+     symbols, names). BM25-only misses paraphrased queries. Combined scoring with tunable weights
+     handles both. Azure AI Search natively supports both — no second infrastructure piece.
+Constrains: index_document() runs scrubber.tokenise_payload() at index time; PII > 0.7 → reject,
+     log doc_id + score (no content preview) to data/rag_rejections.jsonl. RAG_ENABLED=false
+     auto-set when Azure creds missing — all RAG ops return safe defaults so dev/test work.
+
+## 2026-05-21 — Memory API: asyncio.to_thread for sync domain functions
+Decision: API endpoints in api/memory.py wrap all calls to domain.agent_memory and domain.rag_engine
+         with asyncio.to_thread(). Domain functions remain synchronous (SQLAlchemy 2.x blocking I/O).
+Alternatives: make domain functions async (asyncpg) · keep sync and accept event-loop blocking
+Why: SQLAlchemy with psycopg2 is sync; converting to async asyncpg is a larger migration. asyncio.to_thread
+     runs sync calls in the default thread pool, preserving event-loop concurrency without rewriting
+     the data access layer. Discovered in Session 04 code review: initial implementation awaited sync
+     functions directly, which would have caused TypeError 500s on every memory endpoint.
+Constrains: every API handler that touches domain.agent_memory/rag_engine MUST use asyncio.to_thread.
+     Future async DB migration (Session 10+) can drop the wrapper without changing API signatures.
+
+## 2026-05-21 — Rename guardrails.py → legacy_guardrails.py
+Decision: Old root-level `guardrails.py` (regex-only filters from Session 0) renamed to
+         `legacy_guardrails.py` after Session 03 introduced `guardrails/` package (NeMo + Llama Guard).
+         api/security.py, api/batch.py, api/demo_run.py updated to import from new location.
+Alternatives: move legacy functions into guardrails/__init__.py · delete legacy and rewrite callers
+Why: Python's import resolution picks the package over the module when both exist with the same name.
+     Legacy filter_output / apply_guardrails / get_rail_summary still serve api/security.py adversarial
+     probing and api/batch.py — moving them into the new package would mix concerns. Rename is
+     minimal-blast-radius and preserves the legacy code's behavior for those specific call sites.
+Constrains: new guardrail work goes in `guardrails/` package + `middleware/guardrails.py` decorator.
+     `legacy_guardrails.py` is frozen — bug fixes only, no new features. Session 05 may evaluate
+     deleting it entirely once api/security.py adversarial flow is rewritten to use Garak directly.

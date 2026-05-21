@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agent Memory — AI Assurance</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* ---- Stats panel ---- */
+        .mem-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        /* ---- Episode table ---- */
+        .ep-row {
+            display: grid;
+            grid-template-columns: 130px 80px 1fr 1fr 130px;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.5rem 0.875rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            cursor: default;
+        }
+        .ep-row:last-child { border-bottom: none; }
+        .ep-row.head {
+            background: var(--bg-elevated);
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        .ep-row.outcome-success { border-left: 3px solid var(--pass); }
+        .ep-row.outcome-failure { border-left: 3px solid var(--critical); }
+        .ep-row.outcome-review  { border-left: 3px solid var(--medium); }
+
+        /* ---- Recall results ---- */
+        .recall-row {
+            display: grid;
+            grid-template-columns: 60px 130px 80px 1fr 1fr;
+            gap: 0.75rem;
+            align-items: start;
+            padding: 0.625rem 0.875rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .recall-row:last-child { border-bottom: none; }
+        .recall-row.head {
+            background: var(--bg-elevated);
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 600;
+            align-items: center;
+        }
+        .score-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .score-bar-bg {
+            flex: 1;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .score-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+
+        /* ---- Context viewer ---- */
+        .context-pre {
+            background: var(--bg-input);
+            border: 1px solid var(--border-strong);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 420px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        /* ---- Search box ---- */
+        .mem-search-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: stretch;
+        }
+        .mem-search-row input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border 0.15s;
+        }
+        .mem-search-row input:focus {
+            border-color: var(--border-focus);
+        }
+
+        /* ---- Spinner ---- */
+        .mem-spinner {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+        .mem-spinner.active { display: flex; }
+        .mem-spin-icon {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border-strong);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---- Error banner ---- */
+        .mem-error {
+            display: none;
+            background: var(--critical-bg);
+            border: 1px solid var(--critical-border);
+            border-radius: 6px;
+            padding: 0.625rem 0.875rem;
+            color: var(--critical);
+            font-size: 12px;
+            margin-bottom: 0.75rem;
+        }
+        .mem-error.active { display: block; }
+
+        /* ---- Empty states ---- */
+        .mem-empty {
+            padding: 1.5rem;
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+
+        /* ---- Outcome pills ---- */
+        .pill-success { background: var(--pass-bg); color: var(--pass); }
+        .pill-failure { background: var(--critical-bg); color: var(--critical); }
+        .pill-review  { background: var(--medium-bg); color: var(--medium); }
+        .outcome-pill {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* ---- Trace ID link ---- */
+        .trace-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-family: 'Monaco', monospace;
+            font-size: 10px;
+        }
+        .trace-link:hover { text-decoration: underline; }
+        .trace-none { color: var(--text-tertiary); font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <!-- Page header -->
+        <div class="page-header">
+            <div>
+                <div class="page-title">Agent Memory</div>
+                <div class="page-subtitle">
+                    Episodic T2 store, semantic recall, multi-tier context assembly (T1–T4) · auto-refreshes stats every 30s
+                </div>
+            </div>
+            <div class="page-actions">
+                <select class="filter-select" id="workloadSelect">
+                    <option value="">Loading workloads…</option>
+                </select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
+            </div>
+        </div>
+
+        <!-- Global error banner -->
+        <div class="mem-error" id="globalError"></div>
+
+        <!-- Stats panel -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Memory &amp; RAG Statistics</div>
+                    <div class="card-subtitle">Auto-refreshes every 30 seconds</div>
+                </div>
+            </div>
+            <div style="padding: 0.875rem 1rem;">
+                <div class="mem-spinner" id="statsSpinner">
+                    <div class="mem-spin-icon"></div>
+                    Loading stats…
+                </div>
+                <div class="mem-stat-grid" id="statCards"></div>
+            </div>
+        </div>
+
+        <!-- Episode browser -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Episode Browser</div>
+                    <div class="card-subtitle">Recent episodic memory entries for the selected workload</div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <select class="filter-select" id="lookbackSelect">
+                        <option value="7">Last 7 days</option>
+                        <option value="14">Last 14 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                    </select>
+                    <select class="filter-select" id="limitSelect">
+                        <option value="20">20 rows</option>
+                        <option value="50">50 rows</option>
+                        <option value="100">100 rows</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mem-spinner" id="episodesSpinner">
+                <div class="mem-spin-icon"></div>
+                Loading episodes…
+            </div>
+            <div class="mem-error" id="episodesError"></div>
+            <div id="episodesTable">
+                <div class="ep-row head">
+                    <div>Timestamp</div>
+                    <div>Outcome</div>
+                    <div>Prompt preview</div>
+                    <div>Response preview</div>
+                    <div>Trace ID</div>
+                </div>
+                <div class="mem-empty" id="episodesEmpty">Select a workload to load episodes.</div>
+            </div>
+        </div>
+
+        <!-- Semantic search -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Semantic Search</div>
+                    <div class="card-subtitle">Search episodic memory by semantic similarity — ranked by relevance score</div>
+                </div>
+            </div>
+            <div style="padding: 0.875rem 1rem;">
+                <div class="mem-search-row">
+                    <input
+                        type="text"
+                        id="recallInput"
+                        placeholder="Enter a query, e.g. 'compliance rejection cases' or 'hallucinated stock picks'…"
+                        autocomplete="off"
+                    />
+                    <select class="filter-select" id="recallTopK">
+                        <option value="5">Top 5</option>
+                        <option value="10">Top 10</option>
+                        <option value="20">Top 20</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary" id="recallBtn">Search</button>
+                </div>
+            </div>
+            <div class="mem-spinner" id="recallSpinner">
+                <div class="mem-spin-icon"></div>
+                Running semantic search…
+            </div>
+            <div class="mem-error" id="recallError"></div>
+            <div id="recallResults"></div>
+        </div>
+
+        <!-- Context viewer -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Context Viewer</div>
+                    <div class="card-subtitle">Assembles the full multi-tier context (T1 in-context · T2 episodic · T3 RAG · T4 procedural)</div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <label style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">
+                        <input type="checkbox" id="ctxRag" checked style="margin-right: 4px;">RAG
+                    </label>
+                    <label style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">
+                        <input type="checkbox" id="ctxProcedural" checked style="margin-right: 4px;">Procedural
+                    </label>
+                    <button class="btn btn-sm btn-primary" id="ctxBtn">Build Context</button>
+                </div>
+            </div>
+            <div class="mem-spinner" id="ctxSpinner">
+                <div class="mem-spin-icon"></div>
+                Assembling multi-tier context…
+            </div>
+            <div class="mem-error" id="ctxError"></div>
+            <div style="padding: 0.875rem 1rem;" id="ctxContainer">
+                <div class="mem-empty">Select a workload then click "Build Context".</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/memory');
+
+    // -------------------------------------------------------------------------
+    // Utility
+    // -------------------------------------------------------------------------
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+    function showSpinner(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active');
+    }
+    function hideSpinner(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    }
+    function showError(id, msg) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.add('active');
+    }
+    function clearError(id) {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = ''; el.classList.remove('active'); }
+    }
+
+    async function apiFetch(url) {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.detail || `HTTP ${r.status}`);
+        }
+        return r.json();
+    }
+
+    function outcomePill(outcome) {
+        const cls = { success: 'pill-success', failure: 'pill-failure', review: 'pill-review' }[outcome] || '';
+        return `<span class="outcome-pill ${cls}">${esc(outcome)}</span>`;
+    }
+
+    function traceCell(traceId) {
+        if (!traceId) return '<span class="trace-none">—</span>';
+        const langfuseHost = '';
+        if (langfuseHost) {
+            return `<a class="trace-link" href="${esc(langfuseHost)}/trace/${esc(traceId)}" target="_blank" rel="noopener">${esc(traceId.slice(0, 12))}…</a>`;
+        }
+        return `<span class="trace-link" title="${esc(traceId)}">${esc(traceId.slice(0, 12))}…</span>`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Workload selector
+    // -------------------------------------------------------------------------
+    async function loadWorkloads() {
+        try {
+            const d = await apiFetch('/api/domains');
+            const sel = document.getElementById('workloadSelect');
+            sel.innerHTML = '<option value="">All / none selected</option>';
+            (d.domains || []).forEach(dom => {
+                const o = document.createElement('option');
+                o.value = dom.id;
+                o.textContent = dom.name || dom.id;
+                sel.appendChild(o);
+            });
+        } catch (e) {
+            showError('globalError', 'Failed to load workloads: ' + e.message);
+        }
+    }
+
+    function selectedWorkload() {
+        return document.getElementById('workloadSelect').value;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stats
+    // -------------------------------------------------------------------------
+    async function loadStats() {
+        showSpinner('statsSpinner');
+        clearError('globalError');
+        try {
+            const d = await apiFetch('/api/memory/stats');
+            renderStats(d);
+        } catch (e) {
+            showError('globalError', 'Stats error: ' + e.message);
+            document.getElementById('statCards').innerHTML = '';
+        } finally {
+            hideSpinner('statsSpinner');
+        }
+    }
+
+    function renderStats(d) {
+        const mem = d.memory || {};
+        const rag = d.rag || {};
+
+        const totalEpisodes = mem.total_episodes != null ? mem.total_episodes : '—';
+        const expiredEpisodes = mem.expired_count != null ? mem.expired_count : '—';
+        const ragDocCount = rag.doc_count != null ? rag.doc_count : '—';
+        const ragIndexName = rag.index_name ? esc(rag.index_name) : '—';
+
+        const episodesByWorkload = mem.episodes_by_workload || mem.by_workload || {};
+        const workloadRows = Object.entries(episodesByWorkload)
+            .map(([wid, cnt]) => `<div class="flex justify-between" style="font-size:11px;padding:2px 0;">
+                <span class="text-secondary">${esc(wid)}</span>
+                <span class="font-bold">${cnt}</span>
+            </div>`)
+            .join('') || '<div class="text-xs text-tertiary">No workload breakdown available.</div>';
+
+        document.getElementById('statCards').innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <div class="kpi-icon pass">M</div>
+                    <div class="kpi-label">Total Episodes</div>
+                </div>
+                <div class="kpi-value">${esc(String(totalEpisodes))}</div>
+                <div class="kpi-trend">across all workloads</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <div class="kpi-icon medium">W</div>
+                    <div class="kpi-label">Episodes by Workload</div>
+                </div>
+                <div style="padding-top: 4px;">${workloadRows}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <div class="kpi-icon accent" style="background: var(--accent-bg); color: var(--accent);">R</div>
+                    <div class="kpi-label">RAG Documents</div>
+                </div>
+                <div class="kpi-value">${esc(String(ragDocCount))}</div>
+                <div class="kpi-trend">index: ${ragIndexName}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-header">
+                    <div class="kpi-icon high">E</div>
+                    <div class="kpi-label">Expired Episodes</div>
+                </div>
+                <div class="kpi-value">${esc(String(expiredEpisodes))}</div>
+                <div class="kpi-trend">eligible for purge</div>
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // Episode browser
+    // -------------------------------------------------------------------------
+    async function loadEpisodes() {
+        const wid = selectedWorkload();
+        if (!wid) {
+            document.getElementById('episodesEmpty').textContent = 'Select a workload to load episodes.';
+            clearEpisodeRows();
+            return;
+        }
+        const lookback = document.getElementById('lookbackSelect').value;
+        const limit = document.getElementById('limitSelect').value;
+
+        showSpinner('episodesSpinner');
+        clearError('episodesError');
+        clearEpisodeRows();
+
+        const url = `/api/memory/episodes?workload_id=${encodeURIComponent(wid)}&limit=${limit}&lookback_days=${lookback}`;
+        try {
+            const d = await apiFetch(url);
+            renderEpisodes(d.episodes || []);
+        } catch (e) {
+            showError('episodesError', 'Failed to load episodes: ' + e.message);
+        } finally {
+            hideSpinner('episodesSpinner');
+        }
+    }
+
+    function clearEpisodeRows() {
+        const tbl = document.getElementById('episodesTable');
+        const existing = tbl.querySelectorAll('.ep-row:not(.head)');
+        existing.forEach(r => r.remove());
+        document.getElementById('episodesEmpty').style.display = '';
+    }
+
+    function renderEpisodes(episodes) {
+        const empty = document.getElementById('episodesEmpty');
+        if (!episodes.length) {
+            empty.textContent = 'No episodes found for this workload and time range.';
+            empty.style.display = '';
+            return;
+        }
+        empty.style.display = 'none';
+
+        const tbl = document.getElementById('episodesTable');
+        const frag = document.createDocumentFragment();
+        episodes.forEach(ep => {
+            const row = document.createElement('div');
+            row.className = `ep-row outcome-${esc(ep.outcome)}`;
+            row.innerHTML = `
+                <div class="text-xs text-tertiary">${esc((ep.timestamp || '').slice(0, 19).replace('T', ' '))}</div>
+                <div>${outcomePill(ep.outcome)}</div>
+                <div class="text-xs text-secondary" title="${esc(ep.prompt_preview)}">${esc(ep.prompt_preview)}</div>
+                <div class="text-xs text-secondary" title="${esc(ep.response_preview)}">${esc(ep.response_preview)}</div>
+                <div>${traceCell(ep.trace_id)}</div>
+            `;
+            frag.appendChild(row);
+        });
+        tbl.appendChild(frag);
+    }
+
+    // -------------------------------------------------------------------------
+    // Semantic recall
+    // -------------------------------------------------------------------------
+    async function runRecall() {
+        const wid = selectedWorkload();
+        const query = document.getElementById('recallInput').value.trim();
+        const topK = document.getElementById('recallTopK').value;
+
+        clearError('recallError');
+
+        if (!wid) {
+            showError('recallError', 'Select a workload before searching.');
+            return;
+        }
+        if (!query) {
+            showError('recallError', 'Enter a search query.');
+            return;
+        }
+
+        showSpinner('recallSpinner');
+        document.getElementById('recallResults').innerHTML = '';
+
+        const url = `/api/memory/recall?workload_id=${encodeURIComponent(wid)}&query=${encodeURIComponent(query)}&top_k=${topK}`;
+        try {
+            const d = await apiFetch(url);
+            renderRecallResults(d.results || [], query);
+        } catch (e) {
+            showError('recallError', 'Semantic search failed: ' + e.message);
+        } finally {
+            hideSpinner('recallSpinner');
+        }
+    }
+
+    function renderRecallResults(results, query) {
+        const container = document.getElementById('recallResults');
+        if (!results.length) {
+            container.innerHTML = '<div class="mem-empty">No results found for "' + esc(query) + '".</div>';
+            return;
+        }
+
+        let html = `
+            <div class="recall-row head">
+                <div>Score</div>
+                <div>Timestamp</div>
+                <div>Outcome</div>
+                <div>Prompt preview</div>
+                <div>Response preview</div>
+            </div>
+        `;
+
+        results.forEach(r => {
+            // Defense: clamp to integer 0-100 to prevent CSS injection via NaN/string coercion
+            const rawScore = Number(r.relevance_score) || 0;
+            const scorePct = Math.max(0, Math.min(100, Math.round(rawScore * 100)));
+            const scoreColor = scorePct >= 70 ? 'var(--pass)' : scorePct >= 40 ? 'var(--medium)' : 'var(--critical)';
+            html += `
+                <div class="recall-row">
+                    <div class="score-bar-wrap">
+                        <div class="score-bar-bg">
+                            <div class="score-bar-fill" style="width:${scorePct}%; background: ${scoreColor};"></div>
+                        </div>
+                        <span style="font-size:10px; color: var(--text-secondary); min-width:28px;">${scorePct}%</span>
+                    </div>
+                    <div class="text-xs text-tertiary">${esc((r.timestamp || '').slice(0, 16).replace('T', ' '))}</div>
+                    <div>${outcomePill(r.outcome)}</div>
+                    <div class="text-xs text-secondary" title="${esc(r.prompt_preview)}">${esc(r.prompt_preview)}</div>
+                    <div class="text-xs text-secondary" title="${esc(r.response_preview)}">${esc(r.response_preview)}</div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    // -------------------------------------------------------------------------
+    // Context viewer
+    // -------------------------------------------------------------------------
+    async function buildContext() {
+        const wid = selectedWorkload();
+        clearError('ctxError');
+
+        if (!wid) {
+            showError('ctxError', 'Select a workload before building context.');
+            return;
+        }
+
+        const includeRag = document.getElementById('ctxRag').checked;
+        const includeProcedural = document.getElementById('ctxProcedural').checked;
+        const lookback = document.getElementById('lookbackSelect').value;
+
+        showSpinner('ctxSpinner');
+        document.getElementById('ctxContainer').innerHTML = '';
+
+        const url = `/api/memory/context?workload_id=${encodeURIComponent(wid)}&lookback_days=${lookback}&include_rag=${includeRag}&include_procedural=${includeProcedural}`;
+        try {
+            const d = await apiFetch(url);
+            renderContext(d);
+        } catch (e) {
+            showError('ctxError', 'Context assembly failed: ' + e.message);
+            document.getElementById('ctxContainer').innerHTML = '<div class="mem-empty">Could not assemble context.</div>';
+        } finally {
+            hideSpinner('ctxSpinner');
+        }
+    }
+
+    function renderContext(d) {
+        const container = document.getElementById('ctxContainer');
+        const charCount = (d.context || '').length;
+        container.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span class="text-xs text-secondary">
+                    Workload: <strong>${esc(d.workload_id)}</strong>
+                    &nbsp;·&nbsp;Lookback: <strong>${esc(String(d.lookback_days))}d</strong>
+                    &nbsp;·&nbsp;Length: <strong>${esc(String(charCount))} chars</strong>
+                </span>
+                <button class="btn btn-sm" id="copyCtxBtn" title="Copy to clipboard">Copy</button>
+            </div>
+            <pre class="context-pre" id="contextPre">${esc(d.context || '(empty context)')}</pre>
+        `;
+        document.getElementById('copyCtxBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(d.context || '').then(() => {
+                const btn = document.getElementById('copyCtxBtn');
+                if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); }
+            }).catch(() => {});
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Refresh all panels
+    // -------------------------------------------------------------------------
+    function refreshAll() {
+        loadStats();
+        loadEpisodes();
+    }
+
+    // -------------------------------------------------------------------------
+    // Event wiring
+    // -------------------------------------------------------------------------
+    document.getElementById('workloadSelect').addEventListener('change', loadEpisodes);
+    document.getElementById('lookbackSelect').addEventListener('change', loadEpisodes);
+    document.getElementById('limitSelect').addEventListener('change', loadEpisodes);
+    document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+    document.getElementById('recallBtn').addEventListener('click', runRecall);
+    document.getElementById('recallInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') runRecall();
+    });
+    document.getElementById('ctxBtn').addEventListener('click', buildContext);
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
+    loadWorkloads().then(() => {
+        loadStats();
+        loadEpisodes();
+    });
+
+    // Auto-refresh stats every 30 seconds
+    setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>

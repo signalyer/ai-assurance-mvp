@@ -13,7 +13,7 @@ from adversarial import (
     get_probes_for_category,
     ADVERSARIAL_PROBES,
 )
-from guardrails import (
+from legacy_guardrails import (
     apply_guardrails,
     filter_output,
     get_rail_summary,

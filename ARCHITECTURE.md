@@ -65,17 +65,26 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `domain/policy_engine.py` (OPA HTTP client + local Python fallback, 5 categories, fail-closed), `domain/trust_scorer.py` (time-decayed trust score from policy history, half-life 7 days), `middleware/policy.py` (@policy_gate decorator, raises PolicyDeniedError on DENY), `policies/base.rego` (org-mandatory), `policies/pii.rego` (posture: us-finserv, gdpr, hipaa), `policies/agent_tools.rego` (team tool authorization), `policies/financial_advisor.rego` (risk-tier critical handling)
 
 ### Session 03 (guardrails — NeMo + Llama Guard 3)
-`middleware/injection.py` (prompt injection detection via regex + heuristics), `middleware/guardrails.py` (@guardrails decorator orchestrating injection/topic/safety checks), `guardrails/nemo_adapters.py` (topic classification + topic enforcement), `guardrails/llama_guard_adapter.py` (content safety evaluation — 8 categories), `guardrails/financial_advisor_rail.py` (topic rail + guardrail rules for financial advisor), `guardrails/config/financial_advisor_rails.yaml` (NeMo topic rail YAML config)
+`middleware/injection.py` (prompt injection detection via regex + heuristics), `middleware/guardrails.py` (@guardrails decorator orchestrating injection/topic/safety checks), `guardrails/nemo_adapters.py` (topic classification + topic enforcement), `guardrails/llama_guard_adapter.py` (content safety evaluation — 8 categories), `guardrails/financial_advisor_rail.py` (topic rail + guardrail rules for financial advisor), `guardrails/config/financial_advisor_rails.yaml` (NeMo topic rail YAML config). Note: old `guardrails.py` (regex-only) renamed to `legacy_guardrails.py` to avoid module/package collision.
+
+### Session 04 (memory + RAG — Postgres + Azure AI Search)
+`domain/agent_memory.py` (Tier 2 episodic memory backed by Postgres with database-level TTL, inline schema bootstrap, parameterized SQL, scrubber vault_id enforcement, full-text search via tsvector, six public functions: write_episode/build_context/compress_episode/selective_recall/list_episodes/memory_stats/purge_expired), `domain/rag_engine.py` (Azure AI Search hybrid retrieval — BM25 + semantic vector via text-embedding-3-small, index-time PII rejection at confidence > 0.7, auto-disables on missing creds, four public functions: index_document/search_corpus/rag_stats/delete_document), `api/memory.py` (5 endpoints: POST /episodes, GET /episodes, GET /recall, GET /stats, GET /context — all using asyncio.to_thread for sync domain calls), `static/memory.html` (memory viewer UI: stats panel auto-refresh 30s, episode browser, semantic search, context viewer)
 
 ## Files — In Progress
-None — Sessions 01, 02, and 03 fully complete.
+None — Sessions 01, 02, 03, and 04 fully complete.
 
 ### RAG-related (Session 04)
 - `api/rag.py` — new
 - `static/rag-governance.html` — new
 
 ## Files — Planned
-### Session 04 — Memory + RAG
+### Session 05 — Provider Abstraction
+- `providers.py` — env-var-driven backend swap (scrubber/tracer/eval backends)
+
+### Sessions 06+ — UI, diagrams, org layer (unchanged)
+- See docs/plans/12-DAY-PRODUCTION-SPRINT.md
+
+### (Original Session 04 — now Built, retained for reference)
 - `domain/agent_memory.py` — `build_context()`, `write_episode()`,
   `compress_episode()`, `selective_recall()`
 - `domain/rag_engine.py` — Azure AI Search wrapper with index-time scrubbing
@@ -123,6 +132,13 @@ None — Sessions 01, 02, and 03 fully complete.
 - `INJECTION_DETECTION=true` — Prompt injection detection enabled
 - `TOPIC_ENFORCEMENT=true` — Topic validation for workloads enabled
 - `LLAMA_GUARD_ENABLED=true` — Llama Guard 3 content safety enabled
+
+### Added (Session 04)
+- `MEMORY_ENABLED=true|false` — Tier 2 episodic memory active (Postgres)
+- `EPISODE_TTL_SECONDS=2592000` — Default episode TTL (30 days)
+- `RAG_ENABLED=true|false` — Tier 3 RAG retrieval active (Azure AI Search)
+- `RAG_HYBRID_SEMANTIC_WEIGHT=0.6` — Hybrid scoring weight (0.6 semantic + 0.4 BM25)
+- (Existing, now active: `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY`, `AZURE_SEARCH_INDEX`, `RAG_EMBEDDING_MODEL`, `RAG_TOP_K`, `DATABASE_URL`)
 
 ### To add (per upcoming sessions)
 - `SCRUBBER_BACKEND=presidio` (Session 05)

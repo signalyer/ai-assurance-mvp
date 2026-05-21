@@ -50,6 +50,7 @@ from api.assurance_model import router as assurance_model_router, providers_rout
 from api.usage import router as usage_router
 from api.ai_system_edit import router as ai_system_edit_router
 from api.aws_demo import router as aws_demo_router
+from api.memory import router as memory_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 
 load_dotenv()
@@ -152,6 +153,7 @@ app.include_router(assurance_providers_router)
 app.include_router(usage_router)
 app.include_router(ai_system_edit_router)
 app.include_router(aws_demo_router)
+app.include_router(memory_router)
 
 
 @app.get("/api/health")

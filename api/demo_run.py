@@ -9,6 +9,7 @@ DECORATOR CHAIN (Session 03):
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import os
 from pathlib import Path
@@ -18,15 +19,18 @@ from dotenv import load_dotenv
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+logger = logging.getLogger(__name__)
+
 from tracer import trace_call
 from evaluator import evaluate_response
 from api.evaluate import eval_cache, runs_cache, _normalize_eval_scores
 from domains import load_domain, list_domains
 from storage import save_run
 from audit import log_evaluation
-from guardrails import apply_guardrails, filter_output
+from legacy_guardrails import apply_guardrails, filter_output
 from scrubber import tokenise_payload
 from middleware.guardrails import guardrails
+from domain.agent_memory import write_episode
 
 # Load env vars from project root .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -138,6 +142,31 @@ def _build_run(
         trace_id=trace_id,
         eval_scores=eval_scores,
     )
+
+    # Session 04: persist episode to Tier 2 (Postgres). No-op if MEMORY_ENABLED=false
+    # or DATABASE_URL not set — agent_memory degrades gracefully.
+    try:
+        workload_id = domain or "demo-default"
+        write_episode(
+            workload_id=workload_id,
+            prompt=scrubbed_prompt,
+            response=scrubbed_response,
+            outcome="success",
+            metadata={
+                "vault_id": vault_id,
+                "response_vault_id": response_vault_id,
+                "trace_id": trace_id,
+                "eval_scores": eval_scores,
+                "guardrail_result": guardrail_result,
+                "model": model,
+                "latency_ms": latency,
+                "tokens_used": tokens,
+            },
+        )
+    except Exception as exc:
+        # Memory write failures must NEVER break the demo run path.
+        logger.warning("write_episode failed (non-fatal): %s", exc)
+
     return run_data
 
 
