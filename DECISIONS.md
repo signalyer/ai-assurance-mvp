@@ -77,3 +77,30 @@ Why: Long Chat sessions produce plans that fragment in Code sessions. The struct
      gives a forcing function for handoff and a continuity primitive (SESSION-NN plan files).
 Constrains: every build session starts with /arch, plans via /plan, ends with /handoff.
      New decisions get appended here at the end of every session.
+
+## 2026-05-21 — Guardrails position in decorator chain
+Decision: @guardrails inserted between @scrub_pii and @trace_llm_call.
+          Order: @policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response
+Alternatives: @guardrails before @policy_gate · @guardrails after @trace_llm_call · no guardrails
+Why: Injection detection runs on scrubbed input (not raw PII). Guardrail violations block before 
+     Langfuse trace (no poisoned traces). Fails closed: no response on injection/topic/safety violation.
+Constrains: @guardrails middleware receives workload_id and auto-sets allowed_topics for known workloads.
+     Decorator raises GuardrailViolationError on violations when strict=True.
+
+## 2026-05-21 — Self-hosted guardrails only (no SaaS routing)
+Decision: All guardrails implemented locally: regex injection detection, keyword-based topic 
+          classification (NeMo-style), heuristic content safety (Llama Guard 3-style).
+Alternatives: Azure Content Safety · Lakera Guard · external guardrail APIs
+Why: SaaS guardrails route prompts externally — violates PII boundary from Sessions 01-02.
+     Fail-closed architecture requires all safety checks to happen in-process.
+Constrains: guardrail implementations are keyword/regex-based (Session 03) with LLM fallback deferred 
+     to Session 05. No external calls in the prompt path. OPA sidecar deferred to Session 10.
+
+## 2026-05-21 — Fail-closed guardrails with auto topic defaults
+Decision: Guardrails raise GuardrailViolationError immediately on violation (strict=True).
+          Known workloads (e.g., financial_advisor) auto-populate allowed_topics.
+Alternatives: soft warnings (log but continue) · no defaults (user must pass allowed_topics)
+Why: Financial advisor guardrails block stock tips and guaranteed return claims without manual config.
+     Users can still disable guardrails per-endpoint (strict=False) or globally (GUARDRAILS_ENABLED=false).
+Constrains: decorator auto-loads TopicClassifier.ALLOWED_TOPICS_DEFAULT for financial_advisor workload.
+     Test coverage: 16 acceptance tests (injection, topic, safety, decorator integration).
