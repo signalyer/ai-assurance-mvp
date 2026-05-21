@@ -21,6 +21,7 @@ from domains import load_domain, list_domains
 from storage import save_run
 from audit import log_evaluation
 from guardrails import apply_guardrails, filter_output
+from scrubber import tokenise_payload
 
 # Load env vars from project root .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -61,14 +62,40 @@ def _build_run(
     domain: str | None,
     domain_name: str,
 ) -> dict:
-    """Trace, evaluate, and persist a single model response. Synchronous (run after model call)."""
+    """Trace, evaluate, and persist a single model response. Synchronous (run after model call).
+
+    SECURITY: prompt is scrubbed via scrubber.tokenise_payload() BEFORE being passed to
+    tracer.trace_call(). Langfuse receives the scrubbed prompt only; raw PII never leaves
+    this process. The vault_id is included in trace metadata for de-ID traceability.
+    """
+    # Scrub prompt before tracing (critical: scrubber MUST run before trace_call)
+    scrubbed_prompt, vault_id = tokenise_payload(prompt, scope=f"demo-run-{model}")
+
+    # If scrubber returns empty vault_id, no PII was detected — use the original
+    # prompt for trace (it's clean). Generate a synthetic vault_id for traceability.
+    if not vault_id:
+        import hashlib
+        scrubbed_prompt = prompt
+        vault_id = f"demo-nopii_{hashlib.sha256(prompt.encode()).hexdigest()[:12]}"
+
+    # Also scrub the response (LLM output could contain hallucinated PII)
+    scrubbed_response, response_vault_id = tokenise_payload(response_text, scope=f"demo-resp-{model}")
+    if not response_vault_id:
+        scrubbed_response = response_text
+        response_vault_id = ""
+
     trace_id = trace_call(
         model=model,
-        prompt=prompt,
-        response=response_text,
+        prompt=scrubbed_prompt,  # Always send scrubbed to Langfuse
+        response=scrubbed_response,
         latency_ms=latency,
         tokens_used=tokens,
-        metadata={"demo": True, "domain": domain_name},
+        metadata={
+            "demo": True,
+            "domain": domain_name,
+            "vault_id": vault_id,
+            "response_vault_id": response_vault_id,
+        },
     )
 
     raw_evals = evaluate_response(
@@ -86,15 +113,17 @@ def _build_run(
         "model": model,
         "trace_id": trace_id,
         "domain": domain_name,
-        "prompt": prompt,
-        "prompt_preview": prompt[:100],
-        "response": response_text,
-        "response_preview": response_text[:100],
+        "prompt": scrubbed_prompt,
+        "prompt_preview": scrubbed_prompt[:100],
+        "response": scrubbed_response,
+        "response_preview": scrubbed_response[:100],
         "latency_ms": latency,
         "tokens_used": tokens,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "eval_scores": eval_scores,
         "guardrails": guardrail_result,
+        "vault_id": vault_id,
+        "response_vault_id": response_vault_id,
     }
     runs_cache.insert(0, run_data)
     save_run(run_data)

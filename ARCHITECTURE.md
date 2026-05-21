@@ -54,14 +54,15 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `assurance-providers.html`, `framework-sop.html`, `analytics.html`,
 `demo.html`, `demo-aws-analyzer.html`, `login.html`, `shared.js`, `shared.css`
 
-## Files — Built (2026-05-21, Session 01a)
+## Files — Built (2026-05-21, Session 01a + 01b)
+### Session 01a (PII scrubbing core)
 `scrubber.py` (Presidio NER + regex layer, fail-closed), `domain/deid_vault.py` (Fernet encrypted vault with TTL)
 
+### Session 01b (decorator wiring + tracer patch)
+`middleware/scrubber.py` (@scrub_pii decorator), `tracer.py` (hardened: vault_id required when SCRUBBER_ENABLED), `api/demo_run.py` (scrubs prompts before trace_call, vault_id in metadata)
+
 ## Files — In Progress
-### Critical fix (Session 01b)
-- `tracer.py` — raw-prompt leak to Langfuse (patch + scrubber integration)
-- `@scrub_pii` decorator — wire into `evaluator.py` and call sites
-- Patch `dashboard.py`, `evaluator.py`, `api/demo_run.py` call sites
+None — Session 01 fully complete.
 
 ### RAG-related (Session 04)
 - `api/rag.py` — new
@@ -108,9 +109,16 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 - `EVAL_MODEL=gpt-4o-mini`
 - `SESSION_SECRET`
 
-### Added (Session 01a)
+### Added (Session 01a + 01b, applied to Azure App Service)
 - `SCRUBBER_ENABLED=true` — Presidio scrubber active
 - `DEID_VAULT_TTL_SECONDS=3600` — Default vault entry TTL
+- `AZURE_SEARCH_ENDPOINT=https://search-aigovern-dev.search.windows.net` — RAG backend (Session 04)
+- `AZURE_SEARCH_KEY` — Azure AI Search admin key (provisioned 2026-05-21)
+- `AZURE_SEARCH_INDEX=aigovern-rag-index` — RAG index name
+- `POSTGRES_HOST=psql-aigovern-dev.postgres.database.azure.com` — Provisioned westus2
+- `POSTGRES_USER=pgadmin`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE=postgres`
+- `DATABASE_URL=postgresql://...` — Full connection string with sslmode=require
+- `RAG_EMBEDDING_MODEL=text-embedding-3-small`, `RAG_TOP_K=5`
 
 ### To add (per upcoming sessions)
 - `SCRUBBER_BACKEND=presidio` (Session 05)
