@@ -61,3 +61,6 @@ deploy/jar.txt
 
 # Azure Functions
 local.settings.json
+
+# Runtime data (generated, not committed)
+data/

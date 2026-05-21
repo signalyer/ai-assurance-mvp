@@ -54,12 +54,14 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `assurance-providers.html`, `framework-sop.html`, `analytics.html`,
 `demo.html`, `demo-aws-analyzer.html`, `login.html`, `shared.js`, `shared.css`
 
+## Files — Built (2026-05-21, Session 01a)
+`scrubber.py` (Presidio NER + regex layer, fail-closed), `domain/deid_vault.py` (Fernet encrypted vault with TTL)
+
 ## Files — In Progress
-### Critical fix (Session 01a + 01b)
-- `tracer.py` — raw-prompt leak to Langfuse (patch in 01b)
-- `scrubber.py` — new (Session 01a)
-- `domain/deid_vault.py` — new (Session 01a)
-- `@scrub_pii` decorator — wire into `evaluator.py` and call sites (Session 01b)
+### Critical fix (Session 01b)
+- `tracer.py` — raw-prompt leak to Langfuse (patch + scrubber integration)
+- `@scrub_pii` decorator — wire into `evaluator.py` and call sites
+- Patch `dashboard.py`, `evaluator.py`, `api/demo_run.py` call sites
 
 ### RAG-related (Session 04)
 - `api/rag.py` — new
@@ -106,9 +108,11 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 - `EVAL_MODEL=gpt-4o-mini`
 - `SESSION_SECRET`
 
+### Added (Session 01a)
+- `SCRUBBER_ENABLED=true` — Presidio scrubber active
+- `DEID_VAULT_TTL_SECONDS=3600` — Default vault entry TTL
+
 ### To add (per upcoming sessions)
-- `SCRUBBER_ENABLED=true` (Session 01a)
-- `DEID_VAULT_TTL_SECONDS=3600` (Session 01a)
 - `SCRUBBER_BACKEND=presidio` (Session 05)
 - `TRACER_BACKEND=langfuse` (Session 05)
 - `EVAL_BACKEND=deepeval` (Session 05)
