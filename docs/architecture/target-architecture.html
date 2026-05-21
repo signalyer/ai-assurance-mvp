@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Assurance Platform — Target Architecture &amp; Tech Stack</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #080a0d;
+  --surface: #0e1117;
+  --surface2: #141820;
+  --surface3: #1a2030;
+  --border: #1e2535;
+  --border2: #263045;
+  --text: #8fa3c0;
+  --text-dim: #4a5d80;
+  --text-bright: #e2eaf5;
+  --accent: #3b6ff5;
+  --accent2: #22d3b8;
+  --amber: #f5a623;
+  --red: #f53b5f;
+  --green: #22d37a;
+  --purple: #9b6bf5;
+  --pink: #e25fff;
+
+  --built: #22d37a;
+  --inprog: #f5a623;
+  --planned: #f53b5f;
+  --struct: #6b7a96;
+
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 0 22px 22px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+.sidebar-logo .brand {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.sidebar-logo .project {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+.sidebar-logo .domain {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.nav-section { padding: 0 12px; margin-bottom: 10px; }
+.nav-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  padding: 8px 8px 4px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text-bright); }
+.nav-item .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent);
+}
+.nav-item .dot.b { background: var(--accent2); }
+.nav-item .dot.c { background: var(--purple); }
+.nav-item .dot.d { background: var(--amber); }
+.nav-item .dot.e { background: var(--red); }
+.nav-item .dot.f { background: var(--green); }
+.nav-item .dot.g { background: var(--pink); }
+
+/* ── MAIN ── */
+.main { padding: 0; max-width: 1000px; }
+
+.hero {
+  padding: 56px 56px 44px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--bg) 100%);
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -80px; right: -80px;
+  width: 360px; height: 360px;
+  background: radial-gradient(circle, rgba(59,111,245,0.08) 0%, transparent 70%);
+}
+.hero-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.hero h1 {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1.18;
+  margin-bottom: 14px;
+  letter-spacing: -0.02em;
+}
+.hero p.lead {
+  font-size: 14px;
+  color: var(--text);
+  max-width: 720px;
+  line-height: 1.75;
+}
+.hero .meta {
+  display: flex;
+  gap: 24px;
+  margin-top: 26px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.hero .meta strong { color: var(--text-bright); font-weight: 500; }
+
+section.block {
+  padding: 44px 56px;
+  border-bottom: 1px solid var(--border);
+}
+section.block h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+section.block h2 .secnum {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(59,111,245,0.12);
+  padding: 4px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+}
+section.block h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-top: 24px;
+  margin-bottom: 10px;
+  letter-spacing: -0.005em;
+}
+section.block h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-top: 18px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+section.block p.sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+  max-width: 720px;
+}
+section.block p { margin-bottom: 12px; font-size: 13px; }
+
+ul { margin: 8px 0 14px 18px; }
+ul li { margin: 4px 0; font-size: 12.5px; }
+
+code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--surface2);
+  color: var(--text-bright);
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 14px 0;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-bright);
+}
+pre .cmt { color: var(--text-dim); }
+pre .kw { color: var(--accent); }
+pre .str { color: var(--green); }
+pre .num { color: var(--amber); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 12px;
+}
+table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border2);
+  background: var(--surface);
+}
+table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+table tr:last-child td { border-bottom: none; }
+table td strong { color: var(--text-bright); font-weight: 600; }
+
+.pill {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.pill.built { color: var(--built); border-color: var(--built); background: rgba(34,211,122,0.10); }
+.pill.inprog { color: var(--inprog); border-color: var(--inprog); background: rgba(245,166,35,0.10); }
+.pill.planned { color: var(--planned); border-color: var(--planned); background: rgba(245,59,95,0.10); }
+.pill.struct { color: var(--struct); border-color: var(--struct); background: rgba(107,122,150,0.10); }
+.pill.crit { color: var(--red); border-color: var(--red); background: rgba(245,59,95,0.16); }
+
+.callout {
+  margin: 16px 0;
+  padding: 14px 18px;
+  border-left: 3px solid;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+.callout.warn { border-color: var(--amber); background: rgba(245,166,35,0.07); }
+.callout.crit { border-color: var(--red); background: rgba(245,59,95,0.08); }
+.callout.ok { border-color: var(--green); background: rgba(34,211,122,0.07); }
+.callout.info { border-color: var(--accent); background: rgba(59,111,245,0.07); }
+.callout strong { display: block; color: var(--text-bright); margin-bottom: 4px; font-weight: 600; }
+
+/* layered architecture diagram */
+.arch {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  margin: 18px 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.arch-layer {
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 10px 0;
+  background: var(--surface2);
+}
+.arch-layer.layer-1 { border-color: rgba(155,107,245,0.4); background: rgba(155,107,245,0.04); }
+.arch-layer.layer-2 { border-color: rgba(59,111,245,0.4); background: rgba(59,111,245,0.04); }
+.arch-layer.layer-3 { border-color: rgba(245,166,35,0.4); background: rgba(245,166,35,0.04); }
+.arch-layer.layer-4 { border-color: rgba(34,211,184,0.4); background: rgba(34,211,184,0.04); }
+.arch-layer.layer-5 { border-color: rgba(34,211,122,0.4); background: rgba(34,211,122,0.04); }
+.arch-layer.layer-6 { border-color: rgba(245,59,95,0.4); background: rgba(245,59,95,0.04); }
+.arch-layer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.arch-layer-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.arch-layer-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.arch-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+.arch-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.arch-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.arch-row.cols-1 { grid-template-columns: 1fr; }
+.arch-box {
+  padding: 8px 10px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+}
+.arch-box .name { font-weight: 600; color: var(--text-bright); }
+.arch-box .det { font-size: 9.5px; color: var(--text-dim); margin-top: 3px; }
+.arch-box.b { border-color: var(--built); color: var(--text-bright); }
+.arch-box.i { border-color: var(--inprog); border-style: dashed; }
+.arch-box.p { border-color: var(--planned); border-style: dashed; }
+.arch-box.s { border-color: var(--struct); }
+
+.arrow { text-align: center; color: var(--text-dim); margin: 6px 0; font-size: 16px; }
+
+.stack-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+.stack-grid > div {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.stack-grid > div:nth-last-child(-n+2) { border-bottom: none; }
+.stack-grid .label {
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.stack-grid .val { background: var(--surface2); color: var(--text-bright); }
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0 8px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.legend .item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend .swatch {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+.legend .swatch.b { background: var(--built); border-color: var(--built); }
+.legend .swatch.i { background: transparent; border-color: var(--inprog); border-style: dashed; }
+.legend .swatch.p { background: transparent; border-color: var(--planned); border-style: dashed; }
+.legend .swatch.s { background: var(--struct); border-color: var(--struct); }
+
+/* print */
+@media print {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .main { max-width: none; padding: 0; }
+  body { background: white; color: black; font-size: 11px; }
+  .arch, table, pre { page-break-inside: avoid; }
+  section.block { padding: 22px 28px; page-break-inside: avoid; }
+  .hero { padding: 28px; }
+  * { color: #000 !important; background: white !important; border-color: #ccc !important; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">SignalLayer</div>
+    <div class="project">AI Assurance Platform</div>
+    <div class="domain">aigovern.sandboxhub.co</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Overview</div>
+    <a class="nav-item" href="#overview"><span class="dot"></span> Executive summary</a>
+    <a class="nav-item" href="#tenets"><span class="dot"></span> Architectural tenets</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Architecture</div>
+    <a class="nav-item" href="#layers"><span class="dot b"></span> Six layers</a>
+    <a class="nav-item" href="#decorators"><span class="dot c"></span> Decorator chain</a>
+    <a class="nav-item" href="#memory"><span class="dot d"></span> Four-tier memory</a>
+    <a class="nav-item" href="#pii"><span class="dot e"></span> PII pipeline</a>
+    <a class="nav-item" href="#policy"><span class="dot f"></span> Policy engine</a>
+    <a class="nav-item" href="#multiagent"><span class="dot g"></span> Multi-agent</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Governance</div>
+    <a class="nav-item" href="#org"><span class="dot"></span> Organizational layer</a>
+    <a class="nav-item" href="#frameworks"><span class="dot b"></span> Framework coverage</a>
+    <a class="nav-item" href="#evalpacks"><span class="dot c"></span> Eval pack tiers</a>
+    <a class="nav-item" href="#rtf"><span class="dot d"></span> Right-to-forget</a>
+    <a class="nav-item" href="#crosscut"><span class="dot e"></span> Cross-cutting overlay</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Tech &amp; Infra</div>
+    <a class="nav-item" href="#stack"><span class="dot"></span> Tech stack</a>
+    <a class="nav-item" href="#infra"><span class="dot b"></span> Azure infrastructure</a>
+    <a class="nav-item" href="#dataflow"><span class="dot c"></span> Data flow paths</a>
+    <a class="nav-item" href="#observability"><span class="dot d"></span> Observability</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Build</div>
+    <a class="nav-item" href="#inventory"><span class="dot"></span> Component inventory</a>
+    <a class="nav-item" href="#sprint"><span class="dot b"></span> 4-day sprint plan</a>
+    <a class="nav-item" href="#streams"><span class="dot c"></span> Parallel streams</a>
+    <a class="nav-item" href="#decisions"><span class="dot d"></span> Decisions log</a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- HERO -->
+<section class="hero" id="overview">
+  <div class="hero-tag">Target Architecture &amp; Tech Stack · v1.0</div>
+  <h1>The governance substrate for enterprise AI</h1>
+  <p class="lead">A six-layer control plane that wraps every LLM call in three enforced decorators (<code>@scrub_pii</code> → <code>@trace_llm_call</code> → <code>@evaluate_response</code>), backed by a four-tier memory model, fed by commodity evaluation tools (Langfuse + DeepEval + Presidio), and governed by an organizational layer (risk inventory, governance body, RACI, regulatory posture). It is not an eval tool, not a tracing tool, not a guardrails tool — it is the control plane that makes those tools auditable, attestable, and defensible across a portfolio of AI systems in regulated industries.</p>
+  <div class="meta">
+    <div><strong>Stack</strong> · FastAPI · Python 3.12 · Azure</div>
+    <div><strong>Domain</strong> · aigovern.sandboxhub.co</div>
+    <div><strong>Tenancy</strong> · Single, plumbed for multi</div>
+    <div><strong>Status</strong> · Build in progress</div>
+  </div>
+</section>
+
+<!-- TENETS -->
+<section class="block" id="tenets">
+  <h2><span class="secnum">01</span> Architectural tenets</h2>
+  <p class="sub">Ten rules that govern every decision. If a feature violates any of these, it does not ship.</p>
+
+  <table>
+    <thead><tr><th style="width: 28%">Tenet</th><th>What it means in practice</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Compose, don't rebuild commodities</strong></td><td>Wrap Langfuse + DeepEval + Presidio rather than build custom tracing / metrics / PII detection. Defensibility lives in the layers around them, not in reimplementing them.</td></tr>
+      <tr><td><strong>PII never crosses the LLM boundary raw</strong></td><td><code>scrubber.tokenise_payload()</code> runs BEFORE every <code>tracer.trace_call()</code>. Langfuse and any external LLM receive scrubbed payloads only. Verified at every call site.</td></tr>
+      <tr><td><strong>Policy engine fails closed</strong></td><td>OPA error → DENY. Engine unreachable → DENY. Better to block a release than to ship an unguarded one.</td></tr>
+      <tr><td><strong>No SaaS guardrails in the prompt path</strong></td><td>All guardrail tools (Presidio, NeMo Guardrails, Llama Guard 3) self-hosted. No external prompt routing.</td></tr>
+      <tr><td><strong>Every state change is an event</strong></td><td>Append-only event log is the source of truth. Materialized views are derived. Audit log = event log.</td></tr>
+      <tr><td><strong>Append-only storage</strong></td><td>JSONL via <code>storage._append_jsonl()</code>. No direct writes. Postgres holds materialized projections, not source of truth.</td></tr>
+      <tr><td><strong>Single source of truth per entity</strong></td><td>AI System registry, audit log, release decisions, evidence bundles — each lives in exactly one place. No silent duplication.</td></tr>
+      <tr><td><strong>Forward-compatible multi-tenancy</strong></td><td>Every entity carries <code>org_id</code> (defaults to <code>"default"</code> in v1). Multi-tenant v2 is column-add + filter, not a rewrite.</td></tr>
+      <tr><td><strong>Headless engine + thin clients</strong></td><td>Engine is API-only. UIs (Portal, Console) and CLI are skins. OpenAPI contract drives codegen for all clients.</td></tr>
+      <tr><td><strong>Compound engineering</strong></td><td>Every mistake corrected becomes a date-stamped rule in CLAUDE.md. The platform learns from its own history.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- SIX LAYERS -->
+<section class="block" id="layers">
+  <h2><span class="secnum">02</span> The six layers</h2>
+  <p class="sub">Top-down architecture. Each layer is its own subsystem with a Python API + HTTP API + emitted events. Lower layers are commodity; upper layers are the moat.</p>
+
+  <div class="legend">
+    <span class="item"><span class="swatch b"></span> Built</span>
+    <span class="item"><span class="swatch i"></span> In progress</span>
+    <span class="item"><span class="swatch p"></span> Planned</span>
+    <span class="item"><span class="swatch s"></span> Structural / always-on</span>
+  </div>
+
+  <div class="arch">
+
+    <div class="arch-layer layer-1">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L1 · Organizational</div>
+        <div class="arch-layer-sub">Risk &amp; Posture</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box p"><div class="name">Risk inventory</div><div class="det">enterprise risks · linkage</div></div>
+        <div class="arch-box p"><div class="name">Governance body</div><div class="det">seats · cadence · authority</div></div>
+        <div class="arch-box p"><div class="name">RACI matrix</div><div class="det">per decision type</div></div>
+        <div class="arch-box p"><div class="name">Regulatory posture</div><div class="det">FFIEC · NIST · ISO · EU AI Act</div></div>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <div class="arch-layer layer-2">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L2 · Enterprise AI Control Plane</div>
+        <div class="arch-layer-sub">Policy · Controls · Gates · Eval</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box b"><div class="name">AI Gateway / Model Broker</div><div class="det">assurance_providers.py</div></div>
+        <div class="arch-box b"><div class="name">Policy / Guardrail Engine</div><div class="det">release_gate_engine.py</div></div>
+        <div class="arch-box b"><div class="name">Agent Tool Registry / RBAC</div><div class="det">middleware/auth.py</div></div>
+        <div class="arch-box b"><div class="name">Usage · Cost · Rate Controls</div><div class="det">usage_analytics.py</div></div>
+      </div>
+      <div class="arch-row cols-3">
+        <div class="arch-box i"><div class="name">Eval &amp; Testing Service</div><div class="det">DeepEval 5→6 metrics · adversarial.py</div></div>
+        <div class="arch-box i"><div class="name">Observability &amp; Audit</div><div class="det">Langfuse · audit.py · ⚠ leaky</div></div>
+        <div class="arch-box b"><div class="name">Release Gates / Assessment</div><div class="det">assessment_engine.py</div></div>
+      </div>
+      <div class="arch-row cols-1">
+        <div class="arch-box p"><div class="name">OPA · policies/*.rego (5 categories: org · posture · risk-tier · team · system-override)</div><div class="det">Rego unit tests in CI · waiver workflow · fail-closed</div></div>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <div class="arch-layer layer-3">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L3 · PII / IP / Secret Scrubbing Pipeline</div>
+        <div class="arch-layer-sub">In progress · Critical</div>
+      </div>
+      <div class="arch-row cols-3">
+        <div class="arch-box i"><div class="name">scrubber.py</div><div class="det">Presidio NER + 12 regex patterns</div></div>
+        <div class="arch-box i"><div class="name">domain/deid_vault.py</div><div class="det">Fernet · Key Vault · TTL</div></div>
+        <div class="arch-box i"><div class="name">@scrub_pii decorator</div><div class="det">3rd decorator in chain</div></div>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <div class="arch-layer layer-4">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L4 · Four-tier agent memory</div>
+        <div class="arch-layer-sub">T4 built · T1-3 planned</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box p"><div class="name">Tier 1 · In-context</div><div class="det">assembled per call</div></div>
+        <div class="arch-box p"><div class="name">Tier 2 · Episodic</div><div class="det">JSONL · sessions</div></div>
+        <div class="arch-box p"><div class="name">Tier 3 · Semantic / RAG</div><div class="det">Azure AI Search</div></div>
+        <div class="arch-box b"><div class="name">Tier 4 · Procedural</div><div class="det">domains.py · controls</div></div>
+      </div>
+      <div class="arch-row cols-2">
+        <div class="arch-box p"><div class="name">agent_memory.py</div><div class="det">build_context · compress_episode · selective_recall</div></div>
+        <div class="arch-box p"><div class="name">rag_engine.py</div><div class="det">embed_query · retrieve_chunks · index_document (scrub-at-index)</div></div>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <div class="arch-layer layer-5">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L5 · Runtime</div>
+        <div class="arch-layer-sub">Langfuse + DeepEval + Decorator chain</div>
+      </div>
+      <div class="arch-row cols-3">
+        <div class="arch-box i"><div class="name">Langfuse Cloud</div><div class="det">trace_call · scrubbed only · Pro tier</div></div>
+        <div class="arch-box i"><div class="name">DeepEval 6-metric</div><div class="det">hallucination · relevancy · faithfulness · toxicity · PII leak · scrub score</div></div>
+        <div class="arch-box i"><div class="name">Decorator chain</div><div class="det">@scrub_pii → @trace_llm_call → @evaluate_response · order enforced</div></div>
+      </div>
+    </div>
+
+    <div class="arrow">▼</div>
+
+    <div class="arch-layer layer-6">
+      <div class="arch-layer-head">
+        <div class="arch-layer-name">L6 · LLM abstraction</div>
+        <div class="arch-layer-sub">No PII / secrets / IP crosses this boundary</div>
+      </div>
+      <div class="arch-row cols-3">
+        <div class="arch-box b"><div class="name">Anthropic Claude</div><div class="det">Sonnet 4.6 default · Opus 4.7 · Haiku 4.5</div></div>
+        <div class="arch-box b"><div class="name">OpenAI</div><div class="det">GPT-4o-mini · GPT-4.1</div></div>
+        <div class="arch-box p"><div class="name">AWS Bedrock</div><div class="det">in-boundary / regulated paths</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DECORATOR CHAIN -->
+<section class="block" id="decorators">
+  <h2><span class="secnum">03</span> Three-decorator chain</h2>
+  <p class="sub">The runtime invariant. Every LLM call in the platform passes through these three decorators in this exact order. Enforced at SDK level — using <code>@trace</code> without <code>@scrub_pii</code> raises <code>MissingScrubberError</code> at decorator application time.</p>
+
+  <pre><span class="kw">from</span> signallayer <span class="kw">import</span> scrub_pii, trace, evaluate
+
+<span class="cmt"># Production agent code — three lines wire the full L3 + L5 stack</span>
+
+<span class="kw">@</span>scrub_pii
+<span class="kw">@</span>trace(workload=<span class="str">"payments-exception"</span>)
+<span class="kw">@</span>evaluate(pack=<span class="str">"rag-default-v1"</span>)
+<span class="kw">async def</span> <span class="kw">handle_dispute</span>(query: str, context: dict) <span class="kw">-&gt;</span> str:
+    ...</pre>
+
+  <h3>What each decorator does</h3>
+  <table>
+    <thead><tr><th>Order</th><th>Decorator</th><th>Responsibilities</th><th>Backed by</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><code>@scrub_pii</code></td>
+        <td>
+          Detect PII / IP / secrets in args and return value · tokenise via Presidio NER + 12 regex patterns · write reversible token map to Fernet-encrypted vault · pass scrubbed payload downstream
+        </td>
+        <td>L3 · <code>scrubber.py</code> · <code>domain/deid_vault.py</code></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>@trace_llm_call</code></td>
+        <td>
+          Open Langfuse trace · capture scrubbed prompt + scrubbed response + model + tokens + latency · attach workload ID + agent ID + system ID + provider · emit <code>llm.call.completed</code> event
+        </td>
+        <td>L5 · <code>tracing/langfuse_client.py</code></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><code>@evaluate_response</code></td>
+        <td>
+          Run configured eval pack (Tier A mandatory + Tier B risk + Tier C team) · execute 6 DeepEval scorers in parallel · attach scores to trace · compute 3-state classification per scorer · emit <code>eval.run.completed</code> event · trigger policy gates if blocking
+        </td>
+        <td>L5 · <code>eval/runner.py</code> · DeepEval 6-metric</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout crit">
+    <strong>Today's critical defect</strong>
+    <code>tracer.py</code> sends raw prompts to Langfuse. The scrubber is not yet inserted in the chain. <strong>This is the Day 1 Hour 1 emergency fix.</strong> Until patched, no enterprise demo can run safely.
+  </div>
+</section>
+
+<!-- MEMORY -->
+<section class="block" id="memory">
+  <h2><span class="secnum">04</span> Four-tier memory model</h2>
+  <p class="sub">Memory is not just RAG. RAG is one tier of four. Each tier has its own retention policy, access control, audit, right-to-forget semantics, and PII boundary.</p>
+
+  <table>
+    <thead><tr><th>Tier</th><th>Time horizon</th><th>Backing store</th><th>PII risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>T1 · In-context</strong></td>
+        <td>This call only</td>
+        <td>LLM context window</td>
+        <td>HIGH — user turns</td>
+        <td><code>@scrub_pii</code> before LLM sees it</td>
+      </tr>
+      <tr>
+        <td><strong>T2 · Episodic</strong></td>
+        <td>Days–weeks per session</td>
+        <td>JSONL on disk · <code>data/episodes_{workload_id}.jsonl</code></td>
+        <td>HIGH — episodes contain raw user turns</td>
+        <td>Write-time scrubbing · episodes stored already-scrubbed · token vault holds originals</td>
+      </tr>
+      <tr>
+        <td><strong>T3 · Semantic / RAG</strong></td>
+        <td>Months–years · org-wide</td>
+        <td>Azure AI Search · embedded chunks · pinned to <code>text-embedding-3-small</code></td>
+        <td>CATASTROPHIC — indexed PII is searchable forever</td>
+        <td>Index-time scrubbing · <code>index_document()</code> rejects docs with HIGH-confidence PII unless classification permits</td>
+      </tr>
+      <tr>
+        <td><strong>T4 · Procedural</strong></td>
+        <td>Static · owned by platform</td>
+        <td><code>domains.py</code> · control libraries · decision rules</td>
+        <td>None — no customer data</td>
+        <td>n/a</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Orchestrator: <code>domain/agent_memory.py</code></h3>
+  <pre><span class="cmt"># Read path on every LLM call</span>
+
+<span class="kw">async def</span> build_context(workload_id, session_id, query, token_budget=<span class="num">8000</span>):
+    procedural = domains.get_procedural(workload.domain)               <span class="cmt"># T4</span>
+    rag_chunks = <span class="kw">await</span> rag_engine.retrieve_chunks(workload, query)  <span class="cmt"># T3</span>
+    episodes   = <span class="kw">await</span> selective_recall(workload, query, k=<span class="num">5</span>)        <span class="cmt"># T2</span>
+
+    <span class="cmt"># Assemble T1 within token budget — system + T4 + T3 + T2 + query</span>
+    <span class="kw">return</span> assemble(procedural, rag_chunks, episodes, query, token_budget)
+
+
+<span class="cmt"># Write path after every turn</span>
+
+<span class="kw">async def</span> write_episode(session_id, role, content, tool_calls=None):
+    scrubbed, vault_ref = scrubber.tokenise_payload(content, scope=session_id)
+    storage._append_jsonl(<span class="str">"episodes_{wid}.jsonl"</span>, {
+        <span class="str">"episode_id"</span>: uuid(),
+        <span class="str">"session_id"</span>: session_id,
+        <span class="str">"role"</span>: role,
+        <span class="str">"content_scrubbed"</span>: scrubbed,
+        <span class="str">"scrub_token_map_ref"</span>: vault_ref,
+        <span class="str">"tool_calls"</span>: tool_calls,
+        <span class="str">"created_at"</span>: now(),
+    })</pre>
+
+  <h3>Compression + recall</h3>
+  <ul>
+    <li><strong><code>compress_episode(session_id)</code></strong> — triggered when token count &gt; 4000. Uses Claude Haiku to summarise. Original episodes marked <code>compressed_at</code>, summary written as new episode with provenance link.</li>
+    <li><strong><code>selective_recall(query, k, tier_filter)</code></strong> — embedding-similarity search over T2 episodes + T3 chunks. Deduplicated by source. Ranked by relevance × recency × classification accessibility.</li>
+  </ul>
+</section>
+
+<!-- PII PIPELINE -->
+<section class="block" id="pii">
+  <h2><span class="secnum">05</span> PII pipeline (L3 detail)</h2>
+  <p class="sub">The single most-important boundary in the system. Customer data on one side, traces and external services on the other. Every byte that crosses must be tokenized.</p>
+
+  <h3>Scrubber: Presidio + regex layering</h3>
+  <table>
+    <thead><tr><th>Entity</th><th>Detection</th><th>Token pattern</th></tr></thead>
+    <tbody>
+      <tr><td>PERSON · ORG · LOCATION</td><td>Presidio NER (<code>en_core_web_sm</code>)</td><td><code>[PERSON_001]</code></td></tr>
+      <tr><td>EMAIL_ADDRESS</td><td>Presidio + RFC 5322 regex</td><td><code>[EMAIL_001]</code></td></tr>
+      <tr><td>PHONE_NUMBER</td><td>Presidio + libphonenumber</td><td><code>[PHONE_001]</code></td></tr>
+      <tr><td>US_SSN · IBAN · CREDIT_CARD</td><td>Presidio + Luhn check</td><td><code>[SSN_001]</code> · <code>[CC_001]</code></td></tr>
+      <tr><td>IP_ADDRESS</td><td>Presidio</td><td><code>[IP_001]</code></td></tr>
+      <tr><td>US_BANK_NUMBER · ABA routing</td><td>Custom regex</td><td><code>[BANK_001]</code></td></tr>
+      <tr><td>AWS_ARN · Azure resource ID</td><td>Custom regex</td><td><code>[ARN_001]</code></td></tr>
+      <tr><td>API_KEY · BEARER_TOKEN</td><td>High-entropy + format heuristics</td><td><code>[KEY_001]</code></td></tr>
+      <tr><td>DATE_OF_BIRTH · MRN · NPI</td><td>Custom regex (healthcare extension)</td><td><code>[DOB_001]</code> · <code>[MRN_001]</code></td></tr>
+      <tr><td>Custom domain entities</td><td>Pluggable regex hook per workload</td><td><code>[CUST_001]</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>De-ID Vault: <code>domain/deid_vault.py</code></h3>
+  <div class="stack-grid">
+    <div class="label">Encryption</div><div class="val">Fernet (AES-128-CBC + HMAC-SHA256) via <code>cryptography</code> library</div>
+    <div class="label">Key source</div><div class="val">Azure Key Vault (<code>DEID_VAULT_KEY</code>) · fallback HKDF from <code>SESSION_SECRET</code> in dev</div>
+    <div class="label">Storage</div><div class="val">Append-only JSONL at <code>data/deid_vault.jsonl</code> via <code>storage._append_jsonl()</code></div>
+    <div class="label">TTL</div><div class="val">Application-layer · default <code>DEID_VAULT_TTL_SECONDS=3600</code> · per-entry override</div>
+    <div class="label">Scope</div><div class="val">Per-session · per-workload · per-org (deletion cascades by scope)</div>
+    <div class="label">Restore semantics</div><div class="val">Internal only · never exposed via API to external clients</div>
+    <div class="label">Failure mode</div><div class="val">If scrubber fails → drop trace locally · never ship raw to Langfuse</div>
+  </div>
+
+  <h3>Index-time scrubbing for RAG</h3>
+  <p>Tier 3 (Azure AI Search) is the highest-risk store. PII indexed there is searchable forever. <code>rag_engine.index_document()</code> enforces:</p>
+  <ul>
+    <li>Scrub every chunk before embedding</li>
+    <li>If HIGH-confidence PII detected and document <code>classification</code> is not <code>public</code> with explicit allow → <strong>reject document</strong> + audit log entry</li>
+    <li>Record <code>scrub_audit_hash</code> (SHA-256 of pre-scrub document) on every chunk → proves a scrubbed version was indexed</li>
+    <li>Pin embedding model version in index name (<code>aigovern-rag-{workload}-embsmall-v1</code>) — upgrades are explicit, not silent</li>
+  </ul>
+</section>
+
+<!-- POLICY ENGINE -->
+<section class="block" id="policy">
+  <h2><span class="secnum">06</span> Policy engine (OPA + Rego)</h2>
+  <p class="sub">Six evaluation contexts. Five policy categories with explicit precedence. CI-gated unit tests. Tamper-evident audit. Waivers required with expiration.</p>
+
+  <h3>Five categories · strict precedence</h3>
+  <table>
+    <thead><tr><th>Category</th><th>Path</th><th>Author</th><th>Approver</th><th>Scope</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Org-mandatory</strong></td><td><code>policies/org/</code></td><td>AI Governance Lead</td><td>CISO + AI Council</td><td>Every system · cannot be opted out</td></tr>
+      <tr><td><strong>Posture-driven</strong></td><td><code>policies/postures/{id}/</code></td><td>AI Governance Lead</td><td>AI Council</td><td>Systems matching the regulatory posture</td></tr>
+      <tr><td><strong>Risk-tier-driven</strong></td><td><code>policies/risk-tiers/{tier}/</code></td><td>AI Governance Lead</td><td>AI Governance Lead</td><td>Systems classified at that tier</td></tr>
+      <tr><td><strong>Team</strong></td><td><code>policies/teams/{team}/</code></td><td>Team lead</td><td>AI Governance Lead</td><td>Only that team's systems</td></tr>
+      <tr><td><strong>System-override</strong></td><td><code>policies/systems/{id}/</code></td><td>Team owner</td><td>AI Gov Lead + CISO (HIGH/CRIT)</td><td>One system · requires active waiver</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Six evaluation contexts</h3>
+  <ol>
+    <li><strong>Pre-LLM call</strong> — <code>@policy_gate</code> decorator queries OPA with system + agent + scrubbed prompt metadata + user + tool intent</li>
+    <li><strong>Release gate evaluation</strong> — each gate is a Rego rule against eval results + controls + findings</li>
+    <li><strong>Control applicability</strong> — at intake + reassessment · which controls fire for this classification + posture</li>
+    <li><strong>Agent binding authorization</strong> — when a system subscribes to a reusable agent · classification + version checks</li>
+    <li><strong>Tool authorization</strong> — runtime · per tool call · agent + tool + user context</li>
+    <li><strong>Right-to-forget cascade</strong> — which stores to purge for a subject</li>
+  </ol>
+
+  <h3>Example: org-mandatory PII boundary policy</h3>
+  <pre><span class="cmt"># policies/org/pii_no_raw_to_langfuse.rego
+# frameworks: NIST.AI.RMF.1.0/MEASURE-2.7, OWASP.LLM.10.2025/LLM02, EU.AI.Act/AnnexIV-2.b</span>
+
+<span class="kw">package</span> org.pii
+
+<span class="kw">import</span> future.keywords.if
+
+deny[<span class="str">"raw PII detected en route to trace"</span>] <span class="kw">if</span> {
+    input.decorator == <span class="str">"trace_llm_call"</span>
+    input.scrubbed == <span class="kw">false</span>
+}
+
+deny[<span class="str">"scrubber bypass attempted"</span>] <span class="kw">if</span> {
+    input.decorator == <span class="str">"trace_llm_call"</span>
+    input.payload_contains_pii_pattern == <span class="kw">true</span>
+    input.scrub_token_map_ref == <span class="str">""</span>
+}</pre>
+
+  <h3>Deployment</h3>
+  <ul>
+    <li><strong>Sidecar process</strong> on the same App Service · started via supervisor alongside uvicorn</li>
+    <li><strong>Bundle reload</strong> from <code>policies/main/</code> every 60s (OPA bundle service)</li>
+    <li><strong>HTTP API</strong> at <code>localhost:8181/v1/data/...</code> · engine talks to OPA only over localhost</li>
+    <li><strong>Atomic activation</strong> — bundles replace whole; partial loads never fire</li>
+    <li><strong>Fail-closed</strong> — OPA unreachable / timeout / error → DENY · alert fires</li>
+  </ul>
+</section>
+
+<!-- MULTI-AGENT -->
+<section class="block" id="multiagent">
+  <h2><span class="secnum">07</span> Multi-agent &amp; Agent Library</h2>
+  <p class="sub">Each AI System (deployable unit) has 1..N agents. Agents are versioned and reusable across teams. Publishing v2 of a reusable agent triggers re-evaluation for every subscriber.</p>
+
+  <pre><span class="cmt"># Entity model</span>
+
+<span class="kw">class</span> Agent:
+    id: str                                   <span class="cmt"># agent-pii-scrub-utility-v3</span>
+    name: str
+    version: str                              <span class="cmt"># semver</span>
+    owner_team: str
+    agent_type: <span class="kw">Literal</span>[<span class="str">"custom"</span>, <span class="str">"reusable"</span>]
+    classification_envelope: list[str]        <span class="cmt"># classifications this agent may process</span>
+    signature_schema: dict                    <span class="cmt"># input/output JSON schema</span>
+    framework_refs: list[FrameworkRef]
+    status: <span class="kw">Literal</span>[<span class="str">"draft"</span>, <span class="str">"published"</span>, <span class="str">"deprecated"</span>]
+
+<span class="kw">class</span> System:
+    id: str
+    name: str
+    owner_team: str
+    risk_tier: <span class="kw">Literal</span>[<span class="str">"LOW"</span>, <span class="str">"MED"</span>, <span class="str">"HIGH"</span>, <span class="str">"CRITICAL"</span>]
+    regulatory_posture: str
+    bindings: list[AgentBinding]              <span class="cmt"># 1..N</span>
+
+<span class="kw">class</span> AgentBinding:
+    system_id: str
+    agent_id: str
+    pinned_version: str                       <span class="cmt"># explicit version pinning</span>
+    role: str                                 <span class="cmt"># orchestrator · scrubber · summariser · etc</span>
+    bound_at: datetime
+    last_re_evaluated_at: datetime</pre>
+
+  <h3>Publish / subscribe semantics</h3>
+  <ul>
+    <li>Team Risk publishes v2 of <code>pii-scrubbing-utility-agent</code></li>
+    <li>Engine emits <code>agent.version.published</code> event with diff vs previous version</li>
+    <li>Every subscriber (Team Payments, Team CX) receives a notification + re-evaluation window (7 days default)</li>
+    <li>Subscriber can: pin v1 (no upgrade) · accept v2 (re-evaluate with new eval run) · fork (custom agent)</li>
+    <li>After expiration: auto-pin enforced + finding opened "subscriber failed to re-evaluate"</li>
+  </ul>
+
+  <h3>Cross-agent gates (System-level)</h3>
+  <p>Multi-agent systems carry release gates evaluated against the agent graph as a whole:</p>
+  <ul>
+    <li><strong>Orchestration correctness</strong> — does the agent graph reach a valid terminal state on representative inputs?</li>
+    <li><strong>Plan coherence</strong> — do agent-to-agent handoffs preserve task intent? (LLM judge with calibration set)</li>
+    <li><strong>Authority boundary</strong> — does any sub-agent escalate beyond its role's RBAC?</li>
+    <li><strong>Weakest-link rule</strong> — the system's risk tier inherits the highest tier among its agents</li>
+  </ul>
+</section>
+
+<!-- ORG LAYER -->
+<section class="block" id="org">
+  <h2><span class="secnum">08</span> Organizational layer (L1)</h2>
+  <p class="sub">The layer no competitor packages. Risk inventory, governance body, RACI, and regulatory posture together differentiate a fintech SOP from a hospital SOP — same platform, different controls fire.</p>
+
+  <table>
+    <thead><tr><th>Subsystem</th><th>Module</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Risk inventory</strong></td>
+        <td><code>domain/risk_inventory.py</code></td>
+        <td>Enterprise risk register. Every AI system links to parent risks. Risks tied to regulatory posture. Drives heat maps + executive reporting.</td>
+      </tr>
+      <tr>
+        <td><strong>Governance body</strong></td>
+        <td><code>domain/governance_body.py</code></td>
+        <td>AI Council / Risk Committee / Model Risk. Seats, meeting cadence, decision authority matrix. Owns approval routing.</td>
+      </tr>
+      <tr>
+        <td><strong>RACI</strong></td>
+        <td><code>domain/raci.py</code></td>
+        <td>Matrix per (AI System × decision type). Decision types: deploy · retire · change model · expand scope · waive control · override gate.</td>
+      </tr>
+      <tr>
+        <td><strong>Regulatory posture</strong></td>
+        <td><code>domain/regulatory_posture.py</code></td>
+        <td>Per-org config of applicable frameworks (NIST AI RMF · EU AI Act · FFIEC · HIPAA · SR 11-7 · ISO 42001 · DORA · NYDFS) and strictness level. Drives control applicability + RACI resolution.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout info">
+    <strong>Why this is the moat</strong>
+    Generic AI eval tools are commodities. The organizational layer turns the platform into infrastructure: same controls + same scorers + same policies produce a fintech-appropriate SOP for one customer and a hospital-appropriate SOP for another, automatically, with the posture selection alone driving the difference.
+  </div>
+</section>
+
+<!-- FRAMEWORKS -->
+<section class="block" id="frameworks">
+  <h2><span class="secnum">09</span> Framework coverage</h2>
+  <p class="sub">Six frameworks in v1 with explicit mappings on every control, scorer, gate, and policy. Coverage engine computes per-system per-framework status with evidence pointers. Evidence bundles cite framework references inline for auditors.</p>
+
+  <table>
+    <thead><tr><th>Framework</th><th>v1 scope</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>NIST AI RMF 1.0</strong></td>
+        <td>4 functions (GOVERN · MAP · MEASURE · MANAGE) · top 20 subcategories</td>
+        <td>Most-requested US reference for AI governance</td>
+      </tr>
+      <tr>
+        <td><strong>OWASP LLM Top 10 (2025)</strong></td>
+        <td>All 10 threats · each with ≥1 defense wired</td>
+        <td>Threat coverage non-negotiable for LLM platforms</td>
+      </tr>
+      <tr>
+        <td><strong>EU AI Act</strong></td>
+        <td>Annex IV documentation requirements (10 items)</td>
+        <td>Auditors look for this exact artifact shape</td>
+      </tr>
+      <tr>
+        <td><strong>ISO/IEC 42001</strong></td>
+        <td>Clause 5–10 essentials (top 15 controls)</td>
+        <td>De facto AI management standard</td>
+      </tr>
+      <tr>
+        <td><strong>SR 11-7</strong></td>
+        <td>Sections IV, V, VII (model risk · validation · governance)</td>
+        <td>US bank model risk management</td>
+      </tr>
+      <tr>
+        <td><strong>FFIEC IT Handbook</strong></td>
+        <td>AI-relevant subset of Information Security + Architecture booklets</td>
+        <td>Bank IT examiner expectation</td>
+      </tr>
+      <tr>
+        <td><strong>US-FinServ overlay</strong></td>
+        <td>Composes NIST + SR 11-7 + FFIEC + GLBA + NYDFS</td>
+        <td>Demonstrates the composition pattern · maps to demo</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>OWASP LLM Top 10 — defense map</h3>
+  <table>
+    <thead><tr><th>Threat</th><th>MVP defenses</th></tr></thead>
+    <tbody>
+      <tr><td><strong>LLM01 · Prompt Injection</strong></td><td><code>@scrub_pii</code> + NeMo input rail + Llama Guard + <code>EVL-PI-001</code> Garak probe + <code>org/prompt_injection.rego</code></td></tr>
+      <tr><td><strong>LLM02 · Sensitive Information Disclosure</strong></td><td>Tier 4 PII pipeline (Presidio + Fernet) + <code>EVL-PII-001</code> + scrub-score metric + <code>org/pii_no_raw.rego</code></td></tr>
+      <tr><td><strong>LLM03 · Supply Chain</strong></td><td>Provider audit (L6) + vendor risk record + agent library versioning + <code>EVL-SC-001</code></td></tr>
+      <tr><td><strong>LLM04 · Data &amp; Model Poisoning</strong></td><td>RAG corpus pre-scrub at index time + dataset classification + <code>EVL-DP-001</code> poisoning probe + golden-dataset versioning</td></tr>
+      <tr><td><strong>LLM05 · Improper Output Handling</strong></td><td>NeMo output rail + structured output validation + <code>EVL-OH-001</code></td></tr>
+      <tr><td><strong>LLM06 · Excessive Agency</strong></td><td>Agent Tool Registry + RBAC + <code>tool_authz.rego</code> per-team + <code>EVL-TA-001</code> tool-abuse probe</td></tr>
+      <tr><td><strong>LLM07 · System Prompt Leakage</strong></td><td>Prompt versioning + leak detection scorer (<code>EVL-SPL-001</code>) + <code>org/system_prompt_secrets.rego</code></td></tr>
+      <tr><td><strong>LLM08 · Vector / Embedding Weakness</strong></td><td>RAG poisoning probe (Garak) + index integrity audit + embedding-model version pin + <code>EVL-EV-001</code></td></tr>
+      <tr><td><strong>LLM09 · Misinformation</strong></td><td>Groundedness + faithfulness scorers + hallucination detection (<code>EVL-HAL-001</code>) + RAG attribution</td></tr>
+      <tr><td><strong>LLM10 · Unbounded Consumption</strong></td><td>Per-agent rate limits + per-day judge budget + token caps + <code>EVL-RES-001</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>NIST AI RMF function map</h3>
+  <table>
+    <thead><tr><th>Function</th><th>Subcategories</th><th>MVP modules</th></tr></thead>
+    <tbody>
+      <tr><td><strong>GOVERN</strong></td><td>G-1..G-6</td><td>L1 Org layer (governance_body, raci, risk_inventory, regulatory_posture) · policy engine (org-mandatory) · audit log</td></tr>
+      <tr><td><strong>MAP</strong></td><td>M-1..M-5</td><td>System intake · risk classification (deterministic rules) · applicability resolver</td></tr>
+      <tr><td><strong>MEASURE</strong></td><td>ME-1..ME-4</td><td>L5 runtime (Langfuse + DeepEval 6-metric) · adversarial (Garak) · calibration sets · <code>/evals</code> dashboard</td></tr>
+      <tr><td><strong>MANAGE</strong></td><td>MG-1..MG-4</td><td>Findings workflow · release gates · reassessment cadence · right-to-forget · retirement (v2)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- EVAL PACKS -->
+<section class="block" id="evalpacks">
+  <h2><span class="secnum">10</span> Eval pack tier model</h2>
+  <p class="sub">Prevents arbitrary-eval drift across teams. Engine refuses release if Tier A or B aren't passing. Teams extend in Tier C but cannot remove A/B.</p>
+
+  <table>
+    <thead><tr><th>Tier</th><th>Scope</th><th>Scorers</th><th>Authority</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>A · Org-mandatory</strong></td>
+        <td>Every system, every release</td>
+        <td>PII leakage · hallucination · toxicity · scrub score</td>
+        <td>AI Governance Lead · cannot be opted out</td>
+      </tr>
+      <tr>
+        <td><strong>B · Risk-tier-mandatory</strong></td>
+        <td>HIGH / CRITICAL systems</td>
+        <td>Faithfulness · prompt-injection resistance · groundedness</td>
+        <td>Risk classification triggers; AI Gov approves bypass with waiver</td>
+      </tr>
+      <tr>
+        <td><strong>C · Team-discretionary</strong></td>
+        <td>Team-owned · per system</td>
+        <td>Custom scorers · domain-specific (e.g. SQL equivalence, diagnosis accuracy, regulatory citation correctness)</td>
+        <td>Team lead · approved by AI Gov</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Eval pack schema (extended for the dashboard)</h3>
+  <pre><span class="cmt"># eval-packs/rag-default-v1.yaml</span>
+pack_id: rag-default-v1
+tier: A
+scorers:
+  - id: EVL-PI-001
+    name: Prompt Injection Resistance
+    domain: Security                      <span class="cmt"># for /evals filtering</span>
+    scorer_type: deepeval.injection_detect
+    threshold: <span class="num">85</span>
+    warning_band: [<span class="num">80</span>, <span class="num">85</span>]               <span class="cmt"># warn 80-85, fail &lt;80</span>
+    score_scale: <span class="num">100</span>                       <span class="cmt"># normalize to 0-100</span>
+    weight_in_composite: <span class="num">0.20</span>
+    framework_refs:
+      - {framework: OWASP.LLM.10.2025, threat: LLM01}
+      - {framework: NIST.AI.RMF.1.0, subcategory: MEASURE-2.7}</pre>
+</section>
+
+<!-- RIGHT TO FORGET -->
+<section class="block" id="rtf">
+  <h2><span class="secnum">11</span> Right-to-forget cascade</h2>
+  <p class="sub">A single request from a regulator cascades across every store where the subject's data could exist. Verification report with SHA-256 hashes proves each cascade step completed.</p>
+
+  <pre><span class="kw">async def</span> forget(subject_id: str, scope: <span class="kw">Literal</span>[<span class="str">"global"</span>, <span class="str">"system"</span>], target_id: str | None):
+    <span class="cmt"># Cascade in dependency order</span>
+
+    <span class="cmt"># 1. Vault — revoke token map entries</span>
+    v = vault.forget_by_subject(subject_id)
+    emit(<span class="str">"forget.vault.complete"</span>, removed=v.count, hash=v.verification_hash)
+
+    <span class="cmt"># 2. Tier 2 episodic — secure delete</span>
+    e = episodic.forget_by_subject(subject_id, scope, target_id)
+    emit(<span class="str">"forget.tier2.complete"</span>, removed=e.count, hash=e.verification_hash)
+
+    <span class="cmt"># 3. Tier 3 RAG — delete chunks by source_id</span>
+    r = rag.forget_by_subject(subject_id, scope, target_id)
+    emit(<span class="str">"forget.tier3.complete"</span>, removed=r.count, hash=r.verification_hash)
+
+    <span class="cmt"># 4. Langfuse — delete traces via API</span>
+    l = langfuse.delete_traces_by_metadata(subject_id=subject_id)
+    emit(<span class="str">"forget.langfuse.complete"</span>, removed=l.count)
+
+    <span class="cmt"># 5. Audit log entry with verification bundle</span>
+    bundle = {
+        <span class="str">"subject_id"</span>: subject_id,
+        <span class="str">"requested_by"</span>: actor,
+        <span class="str">"approved_by"</span>: approver,
+        <span class="str">"cascade_results"</span>: [v, e, r, l],
+        <span class="str">"composite_hash"</span>: sha256(v.hash + e.hash + r.hash + l.count),
+    }
+    storage._append_jsonl(<span class="str">"data/forget_audit.jsonl"</span>, bundle)
+    <span class="kw">return</span> bundle</pre>
+</section>
+
+<!-- CROSS-CUTTING -->
+<section class="block" id="crosscut">
+  <h2><span class="secnum">12</span> Cross-cutting governance overlay</h2>
+  <p class="sub">Applies at every layer. This is what turns Langfuse + DeepEval + Presidio from commodities into compliance infrastructure.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Concern</th><th>T1 in-ctx</th><th>T2 episodic</th><th>T3 RAG</th><th>T4 procedural</th><th>Langfuse</th><th>DeepEval</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>PII scrubbed</strong></td><td>required</td><td>write-time</td><td>index-time</td><td>n/a</td><td>enforced</td><td>enforced</td></tr>
+      <tr><td><strong>Audit log entry</strong></td><td>every call</td><td>every write</td><td>every index/retrieve</td><td>static</td><td>yes</td><td>yes</td></tr>
+      <tr><td><strong>Access control</strong></td><td>per-workload</td><td>per-session+role</td><td>per-classification</td><td>platform</td><td>per-role</td><td>per-role</td></tr>
+      <tr><td><strong>Retention policy</strong></td><td>per-call</td><td>90d default</td><td>per-source TTL</td><td>static</td><td>configurable</td><td>configurable</td></tr>
+      <tr><td><strong>Right-to-forget</strong></td><td>n/a</td><td>by session_id</td><td>by source_id</td><td>n/a</td><td>by trace_id</td><td>cascades</td></tr>
+      <tr><td><strong>Reproducibility</strong></td><td>non-deterministic</td><td>append-only</td><td>index version pinned</td><td>versioned</td><td>trace ID stable</td><td>metric versioned</td></tr>
+      <tr><td><strong>Provenance</strong></td><td>call context</td><td>session lineage</td><td>source_id chain</td><td>code version</td><td>trace metadata</td><td>scorer version</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- TECH STACK -->
+<section class="block" id="stack">
+  <h2><span class="secnum">13</span> Tech stack</h2>
+  <p class="sub">Pragmatic choices. Battle-tested defaults. Minimum framework surface area. Every library has a one-line justification.</p>
+
+  <h3>Engine (core)</h3>
+  <div class="stack-grid">
+    <div class="label">Language</div><div class="val">Python 3.12 · <code>from __future__ import annotations</code> in every file</div>
+    <div class="label">Web framework</div><div class="val">FastAPI · async-first · OpenAPI auto-generation</div>
+    <div class="label">ASGI server</div><div class="val">uvicorn behind gunicorn (1 worker, UvicornWorker) on App Service</div>
+    <div class="label">Data models</div><div class="val">Pydantic v2 (<code>ConfigDict</code>, not <code>Config</code> class) for serialization · dataclasses for internal-only</div>
+    <div class="label">Validation</div><div class="val">Pydantic at API boundary · strict typing throughout</div>
+    <div class="label">Storage</div><div class="val">JSONL via <code>storage._append_jsonl()</code> for events · Azure Postgres Flexible Server for materialized views</div>
+    <div class="label">Auth</div><div class="val"><code>itsdangerous</code> URLSafeTimedSerializer · 10-min sliding sessions · Entra ID OIDC (v2)</div>
+    <div class="label">Logging</div><div class="val">Structured (JSON) · App Insights ingestion via OpenCensus or direct REST</div>
+    <div class="label">Async patterns</div><div class="val"><code>asyncio.gather</code> for all independent LLM calls · never sequential when parallel is possible</div>
+  </div>
+
+  <h3>L3 · PII pipeline</h3>
+  <div class="stack-grid">
+    <div class="label">PII detection</div><div class="val">Microsoft Presidio Analyzer · <code>en_core_web_sm</code> spaCy model</div>
+    <div class="label">Custom patterns</div><div class="val">12 regex (SSN · CC · IBAN · ARN · API_KEY · IP · phone · DOB · MRN · NPI · ABA · custom hook)</div>
+    <div class="label">Encryption</div><div class="val">Fernet (cryptography library) — AES-128-CBC + HMAC-SHA256</div>
+    <div class="label">Key management</div><div class="val">Azure Key Vault · key reference via Managed Identity in prod</div>
+    <div class="label">Vault storage</div><div class="val">JSONL ciphertext at <code>data/deid_vault.jsonl</code> · TTL enforced in app layer</div>
+  </div>
+
+  <h3>L4 · Memory</h3>
+  <div class="stack-grid">
+    <div class="label">T1 in-context</div><div class="val">Assembled per call · token budget allocator</div>
+    <div class="label">T2 episodic</div><div class="val">JSONL on disk · per-workload file · embedding-similarity recall via <code>numpy</code></div>
+    <div class="label">T3 RAG</div><div class="val">Azure AI Search Basic tier · vector + hybrid search · pinned to <code>text-embedding-3-small</code></div>
+    <div class="label">T4 procedural</div><div class="val">In-code (<code>domains.py</code>) · control libraries · decision rules</div>
+    <div class="label">Compression</div><div class="val">Claude Haiku 4.5 for summarization (cheap · fast)</div>
+    <div class="label">Embeddings</div><div class="val"><code>text-embedding-3-small</code> 1536-d · query cache 1h TTL</div>
+  </div>
+
+  <h3>L5 · Runtime / Eval</h3>
+  <div class="stack-grid">
+    <div class="label">Tracing</div><div class="val">Langfuse Cloud Pro · scrubbed payloads only · trace ID linked to system + workload + agent</div>
+    <div class="label">Metrics</div><div class="val">DeepEval (6 scorers) · async parallel · judge models per scorer</div>
+    <div class="label">Adversarial</div><div class="val">Garak (already wired in <code>adversarial.py</code>)</div>
+    <div class="label">Guardrails</div><div class="val">NeMo Guardrails (input/output rails) · Llama Guard 3 (toxicity / unsafe)</div>
+    <div class="label">Judge models</div><div class="val">Claude Sonnet 4.6 for high-fidelity scorers · GPT-4o-mini for high-volume</div>
+  </div>
+
+  <h3>L2 · Policy / Controls</h3>
+  <div class="stack-grid">
+    <div class="label">Policy engine</div><div class="val">OPA (Open Policy Agent) v0.61+ · Rego policies in <code>policies/</code></div>
+    <div class="label">OPA deployment</div><div class="val">Sidecar process on same App Service · localhost:8181 · bundle hot-reload</div>
+    <div class="label">Rego testing</div><div class="val"><code>opa test ./policies</code> · CI gate · coverage required (≥1 allow + ≥1 deny per rule)</div>
+    <div class="label">Control library</div><div class="val">YAML in <code>controls/library/</code> · 15 controls in MVP</div>
+    <div class="label">Release gates</div><div class="val">Python-evaluated against eval results + control assignments · 6 gates in MVP</div>
+  </div>
+
+  <h3>Frontend</h3>
+  <div class="stack-grid">
+    <div class="label">Framework</div><div class="val">Vanilla JS + Vite · no React / Vue / framework lock-in · matches existing aigovern aesthetic</div>
+    <div class="label">Templating</div><div class="val">Server-rendered HTML from FastAPI (Jinja2) for v1 · SPA migration planned</div>
+    <div class="label">CSS</div><div class="val">Custom CSS with design tokens (CSS variables) · dark mode default · responsive desktop-first</div>
+    <div class="label">Charts</div><div class="val">Lightweight inline SVG sparklines · Chart.js only where needed</div>
+    <div class="label">Icons</div><div class="val">Lucide via inline SVG · no icon font</div>
+  </div>
+
+  <h3>SDK + CLI</h3>
+  <div class="stack-grid">
+    <div class="label">SDK language</div><div class="val">Python only in v1 (Node / Go / Java in v2)</div>
+    <div class="label">SDK package</div><div class="val"><code>signallayer</code> · pip-installable · ~250 LOC</div>
+    <div class="label">CLI package</div><div class="val"><code>signallayer-cli</code> · entry point <code>sl</code> · ~400 LOC</div>
+    <div class="label">SDK contract</div><div class="val">Generated from engine's OpenAPI · pinned version per release</div>
+    <div class="label">HMAC</div><div class="val">SHA-256 over body + timestamp + nonce · 300s window</div>
+  </div>
+
+  <h3>DevOps</h3>
+  <div class="stack-grid">
+    <div class="label">Version control</div><div class="val">Git · GitHub (<code>signalyer/ai-assurance-mvp</code>)</div>
+    <div class="label">CI/CD</div><div class="val">GitHub Actions · lint + type-check + unit + integration tests + Rego tests · auto-deploy to dev</div>
+    <div class="label">Linting</div><div class="val">ruff (Python) · prettier (frontend) · opa fmt --check (Rego)</div>
+    <div class="label">Type checking</div><div class="val">mypy strict mode for all <code>domain/</code> and <code>api/</code> modules</div>
+    <div class="label">Deployment</div><div class="val">Azure App Service Linux · zip deploy via Oryx · forward-slash paths (Python zipfile)</div>
+    <div class="label">Secrets</div><div class="val">Azure Key Vault · referenced from App Service settings · never in code</div>
+  </div>
+</section>
+
+<!-- AZURE INFRA -->
+<section class="block" id="infra">
+  <h2><span class="secnum">14</span> Azure infrastructure</h2>
+  <p class="sub">All resources in subscription <code>SignalLayerDev</code>, resource group <code>rg-aigovern-dev</code>, region eastus.</p>
+
+  <table>
+    <thead><tr><th>Resource</th><th>SKU / Tier</th><th>Purpose</th><th>Status</th><th>Monthly</th></tr></thead>
+    <tbody>
+      <tr><td><code>app-aigovern-dev</code></td><td>P1V3 Linux Python 3.12 · Always On · HTTPS only · TLS 1.2 min</td><td>FastAPI engine + OPA sidecar</td><td><span class="pill built">Built</span></td><td>$340</td></tr>
+      <tr><td><code>pg-aigovern-dev</code></td><td>Postgres Flexible · B2ms · 128GB · PITR 35d</td><td>Materialized views from event log</td><td><span class="pill planned">Plan</span></td><td>$130</td></tr>
+      <tr><td><code>srch-aigovern-dev</code></td><td>Azure AI Search Basic · 1 replica · 1 partition</td><td>Tier 3 RAG index</td><td><span class="pill planned">Plan</span></td><td>$75</td></tr>
+      <tr><td><code>kv-aigovern-dev</code></td><td>Standard</td><td>Fernet vault key · HMAC · session secret · DB conn</td><td><span class="pill built">Built</span></td><td>$5</td></tr>
+      <tr><td><code>staigoverndev</code></td><td>Standard LRS</td><td>JSONL backups · evidence bundles · static SPA hosting (v2)</td><td><span class="pill built">Built</span></td><td>$5</td></tr>
+      <tr><td><code>ai-aigovern-dev</code></td><td>App Insights · Log Analytics workspace</td><td>Telemetry · alerts · dashboards</td><td><span class="pill built">Built</span></td><td>$30</td></tr>
+      <tr><td>Langfuse Cloud</td><td>Pro tier · 100K traces/mo</td><td>L5 observability</td><td><span class="pill inprog">Provis</span></td><td>$99</td></tr>
+      <tr><td>Anthropic + OpenAI</td><td>Pay-as-you-go</td><td>L6 LLM abstraction · production + judges</td><td><span class="pill built">Built</span></td><td>~$200-500</td></tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top: 14px;"><strong>Total monthly:</strong> ~$884–1,184 at demo load.</p>
+
+  <h3>Deployment topology</h3>
+  <pre>                    DNS · aigovern.sandboxhub.co
+                              │
+                              ▼
+                    Azure Front Door / direct CNAME
+                              │
+                              ▼
+                    app-aigovern-dev (App Service P1V3)
+                    ┌────────────────────────────────┐
+                    │  uvicorn (FastAPI engine)      │
+                    │  └─ OPA sidecar (localhost:8181)│
+                    └────────────────────────────────┘
+                              │
+            ┌─────────────────┼─────────────────┬─────────────────┐
+            ▼                 ▼                 ▼                 ▼
+      ┌──────────┐    ┌──────────────┐   ┌──────────┐      ┌──────────┐
+      │ Postgres │    │ Azure AI     │   │ Key Vault│      │ Storage  │
+      │ Flexible │    │ Search Basic │   │ kv-*-dev │      │ st*dev   │
+      │ pg-*-dev │    │ srch-*-dev   │   │          │      │          │
+      └──────────┘    └──────────────┘   └──────────┘      └──────────┘
+            │                 │                 │                 │
+            └─────────────────┼─────────────────┴─────────────────┘
+                              ▼
+                    App Insights · ai-*-dev
+                              │
+                              ▼
+                    Langfuse Cloud Pro
+                    https://cloud.langfuse.com</pre>
+</section>
+
+<!-- DATA FLOW -->
+<section class="block" id="dataflow">
+  <h2><span class="secnum">15</span> Data flow paths</h2>
+  <p class="sub">Every operation in the platform flows through one of three paths.</p>
+
+  <h3>Path A · LLM call (the hot path)</h3>
+  <pre>User input arrives at an agent
+    │
+    ▼
+agent_memory.build_context(workload, session, query)
+    ├─ Tier 4 procedural rules (domains.py)
+    ├─ Tier 3 RAG chunks (rag_engine.retrieve_chunks)
+    ├─ Tier 2 episodes (selective_recall)
+    └─ Assembles Tier 1 within token budget
+    │
+    ▼
+@scrub_pii(args)
+    ├─ Presidio entity detection
+    ├─ token vault writes for any PII found
+    └─ returns scrubbed prompt
+    │
+    ▼
+@trace_llm_call → Langfuse.trace_call(scrubbed_prompt)
+    │
+    ▼
+LLM abstraction (Claude / GPT-4o-mini / Bedrock)
+    └─ provider routing via assurance_providers per workload sensitivity
+    │
+    ▼
+@scrub_pii(response) on the way back
+    │
+    ▼
+@evaluate_response → DeepEval scores attached to trace
+    ├─ Tier A: PII leakage · hallucination · toxicity · scrub score
+    ├─ Tier B: faithfulness · injection resistance (if HIGH/CRIT)
+    ├─ Tier C: team-discretionary scorers
+    └─ policy gate check → block / warn / pass
+    │
+    ▼
+agent_memory.write_episode(session, turn) → Tier 2 append (scrubbed)
+    │
+    ▼
+Response returned to user</pre>
+
+  <h3>Path B · RAG ingest</h3>
+  <pre>Document arrives for indexing
+    │
+    ▼
+rag_engine.index_document(workload, source, content, classification)
+    │
+    ▼
+scrubber.scan(content)
+    ├─ HIGH-confidence PII + classification != 'public' → reject + audit
+    └─ otherwise → scrub, record audit hash of pre-scrub doc
+    │
+    ▼
+Semantic chunking (~500 tokens, 50-token overlap)
+    │
+    ▼
+Embed via text-embedding-3-small (pinned)
+    │
+    ▼
+Upsert to Azure AI Search (index named with embedding-model version)
+    │
+    ▼
+audit_log.write(source_id, chunk_count, pii_entities, indexed_at, scrub_hash)</pre>
+
+  <h3>Path C · Governance read (the cold path)</h3>
+  <pre>Auditor / Risk / CISO request
+    │
+    ▼
+api/grc · api/reports · api/evidence
+    │
+    ▼
+Read across:
+    ├─ AI Systems registry (data/ai_systems.jsonl)
+    ├─ Findings (findings_events.jsonl)
+    ├─ Release gate decisions (release_gates.jsonl)
+    ├─ Revision history (ai_system_revisions.jsonl)
+    ├─ Audit log (events.jsonl)
+    ├─ Langfuse traces (filtered by workload + time)
+    ├─ DeepEval scores (joined from trace metadata)
+    └─ Scrub audit (every scrub event)
+    │
+    ▼
+Bundle assembly:
+    ├─ PDF executive summary (WeasyPrint)
+    ├─ JSON raw evidence
+    ├─ CSV detail tables
+    ├─ framework_coverage.json with citations
+    │
+    ▼
+SHA-256 hash → evidence_bundles row → download link</pre>
+</section>
+
+<!-- OBSERVABILITY -->
+<section class="block" id="observability">
+  <h2><span class="secnum">16</span> Observability of the engine itself</h2>
+  <p class="sub">A governance platform without self-observability is a contradiction. App Insights dashboards + alerts on every critical path.</p>
+
+  <table>
+    <thead><tr><th>Signal</th><th>Threshold</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Ingest latency p95</td><td>&gt; 500ms</td><td>Alert · investigate Postgres or scrubber</td></tr>
+      <tr><td>Judge call cost per day per provider</td><td>&gt; budget × 1.2</td><td>Alert Finance · cap rate</td></tr>
+      <tr><td>Failed HMAC verifications per hour</td><td>&gt; 100/hr</td><td>Alert SecOps · suspected attack</td></tr>
+      <tr><td>Outbox depth (events backlog)</td><td>&gt; 100</td><td>Alert · platform sync broken</td></tr>
+      <tr><td>DB connection pool saturation</td><td>&gt; 80%</td><td>Alert · scale Postgres or tune</td></tr>
+      <tr><td>OPA process down</td><td>any</td><td>Page on-call · platform fails closed (DENY all)</td></tr>
+      <tr><td>Vault write failure</td><td>any</td><td>Alert · scrubber drops traces locally</td></tr>
+      <tr><td>PII leak detection (scrub_score &lt; threshold)</td><td>any single event</td><td>Page · file finding · block affected system</td></tr>
+      <tr><td>Eval failure rate</td><td>&gt; 5% in 24h</td><td>Alert team owner · investigate</td></tr>
+      <tr><td>Policy deny rate</td><td>&gt; 20% on a single policy</td><td>Investigate · policy may be overly broad</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- COMPONENT INVENTORY -->
+<section class="block" id="inventory">
+  <h2><span class="secnum">17</span> Component inventory</h2>
+  <p class="sub">Built · In progress · Planned. The honest state of the codebase.</p>
+
+  <h3>Built · ~25 modules</h3>
+  <pre><span class="cmt"># Root</span>
+dashboard.py · storage.py · tracer.py (⚠ leaky) · evaluator.py · guardrails.py (regex-only)
+adversarial.py · audit.py · report.py · pdf_report.py · mock_data.py · domains.py
+
+<span class="cmt"># Domain</span>
+domain/models.py · domain/repository.py · domain/runtime_connectors.py
+domain/assessment_engine.py · domain/release_gate_engine.py · domain/risk_classification.py
+domain/findings_workflow.py · domain/evidence_repository.py · domain/framework_coverage.py
+domain/runtime_engine.py · domain/portfolio.py · domain/notifications.py
+domain/governance_guide.py · domain/assurance_providers.py · domain/usage_analytics.py
+domain/reports.py · domain/ai_system_edit.py · domain/aws_demo_flow.py
+
+<span class="cmt"># API</span>
+api/grc.py · api/runtime_v2.py · api/assessment.py · api/release_gates.py · api/evaluate.py
+api/traces.py · api/findings_v2.py · api/connectors.py · api/demo_run.py · api/reports.py
+api/guide.py · api/assurance_model.py · api/usage.py · api/ai_system_edit.py · api/aws_demo.py
+
+<span class="cmt"># UI · 16 pages</span>
+static/index.html · ai-systems.html · findings.html · runtime.html · release-gates.html
+static/evidence.html · governance.html · assessment.html · evals.html · policies.html
+static/reports.html · connectors.html · assurance-providers.html · framework-sop.html
+static/analytics.html · demo.html · demo-aws-analyzer.html · login.html · shared.js · shared.css
+
+<span class="cmt"># Middleware</span>
+middleware/auth.py · 5-role accounts (demo-ciso · demo-risk · demo-engineer · demo-reviewer · demo-readonly)</pre>
+
+  <h3>In progress · 6 modules</h3>
+  <pre><span class="cmt"># L3 PII pipeline (Day 1)</span>
+scrubber.py · domain/deid_vault.py · @scrub_pii decorator
+
+<span class="cmt"># Critical fix</span>
+tracer.py raw-prompt leak (Day 1 Hour 1)
+
+<span class="cmt"># RAG (Day 3)</span>
+api/rag.py · static/rag-governance.html</pre>
+
+  <h3>Planned · 15+ modules</h3>
+  <pre><span class="cmt"># L2 Policy (Day 5)</span>
+domain/policy_engine.py · domain/trust_scorer.py · middleware/policy.py
+policies/org/*.rego · policies/postures/*.rego · policies/teams/*.rego
+
+<span class="cmt"># L4 Memory (Day 4)</span>
+domain/agent_memory.py · domain/rag_engine.py · Tier 2 JSONL stores
+
+<span class="cmt"># L1 Org (later)</span>
+domain/risk_inventory.py · domain/governance_body.py · domain/raci.py
+domain/regulatory_posture.py · 3 new UI pages
+
+<span class="cmt"># Multi-agent</span>
+domain/agents/registry.py · library.py · binding.py · versioning.py
+static/agent-library.html
+
+<span class="cmt"># SDK + CLI</span>
+sdk/signallayer/* · cli/sl/* · entry_points
+
+<span class="cmt"># Frameworks</span>
+frameworks/nist-ai-rmf/* · frameworks/owasp-llm-top10/* · frameworks/eu-ai-act/*
+frameworks/iso-42001/* · frameworks/sr-11-7/* · frameworks/ffiec/* · frameworks/overlays/*
+static/frameworks.html
+
+<span class="cmt"># Provider abstraction</span>
+providers.py · env-var-driven backend swap</pre>
+</section>
+
+<!-- SPRINT -->
+<section class="block" id="sprint">
+  <h2><span class="secnum">18</span> 4-day production sprint plan</h2>
+  <p class="sub">Production-grade quality. Real backend across critical paths. Explicit Phase 2 deferrals where appropriate. 3 parallel Claude Code accounts for ~2.7× effective parallelism.</p>
+
+  <h3>Day-by-day</h3>
+  <table>
+    <thead><tr><th>Day</th><th>Pillar</th><th>Deliverables</th><th>Quality bar</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>1</strong></td>
+        <td>L3 PII pipeline</td>
+        <td>
+          tracer.py leak fix (H1) · scrubber.py with Presidio + 12 regex · deid_vault.py with Fernet · @scrub_pii decorator wired · /pii-pipeline admin page · Azure provisioning (Postgres + AI Search)
+        </td>
+        <td>50/50 unit tests · vault TTL test passes · end-to-end smoke shows tokens in Langfuse</td>
+      </tr>
+      <tr>
+        <td><strong>2</strong></td>
+        <td>L5 Runtime · Evals</td>
+        <td>
+          DeepEval 6-metric wired (real) · domain categorization · 3-state classification · stable Eval IDs · calibration sets · /evals dashboard matching screenshot (KPI cards · trends · status donut · sparkline table)
+        </td>
+        <td>Live LLM call scored on all 6 metrics &lt;5min/1Kcases · κ ≥ 0.7 per scorer · dashboard renders real scores</td>
+      </tr>
+      <tr>
+        <td><strong>3</strong></td>
+        <td>L2 Policy · Frameworks · Multi-agent</td>
+        <td>
+          OPA sidecar deployed · policy_engine.py · 3 Rego policies + tests · frameworks/ YAML × 6 · framework_refs backfilled · /frameworks matrix page · Agent + AgentBinding schema · /agent-library page
+        </td>
+        <td>OPA evaluating real Rego · Rego CI tests green · framework matrix renders real coverage with SHA-256 evidence</td>
+      </tr>
+      <tr>
+        <td><strong>4</strong></td>
+        <td>L4 Memory · Right-to-forget · Polish · Deploy</td>
+        <td>
+          agent_memory.py · rag_engine.py + AI Search indexing · Tier 2 episodic store · right-to-forget cascade · /audit-events page · demo control panel · production hardening · deploy + dry-run
+        </td>
+        <td>All 6 scenarios pass on production URL · 4 App Insights alerts firing · stakeholder dry-run clean</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Cross-cutting (every day)</h3>
+  <ul>
+    <li>Unit tests on every module · integration tests at integration windows</li>
+    <li>Daily EOD commit + push · status report</li>
+    <li>ARCHITECTURE.md + DECISIONS.md updated</li>
+    <li>App Insights ingestion verified</li>
+    <li>Smoke test gates Day's deliverable acceptance</li>
+  </ul>
+
+  <h3>What's deferred to Phase 2 (acknowledged in demo)</h3>
+  <ul>
+    <li>Team Portal / Governance Console split (single app with role-based views works)</li>
+    <li>CLI + Python SDK (slide showing snippet · Phase 2 deliverable)</li>
+    <li>Real-time webhooks for agent version updates (polling works for demo)</li>
+    <li>Tamper-evident hash-chained audit log (append-only is enough for v1)</li>
+    <li>Per-tenant Azure AI Search (single index for MVP)</li>
+    <li>BYO Azure subscription deploys (single subscription)</li>
+    <li>Mobile / responsive console (desktop-first)</li>
+  </ul>
+</section>
+
+<!-- STREAMS -->
+<section class="block" id="streams">
+  <h2><span class="secnum">19</span> Three parallel work streams</h2>
+  <p class="sub">Strict file ownership · no overlap · integration windows at noon and EOD daily. You serve as integrator and PM for ~6 hours total over 4 days.</p>
+
+  <table>
+    <thead><tr><th>Stream</th><th>Account</th><th>Owns</th><th>Hours</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>A · Runtime + Security (lead)</strong></td>
+        <td>#1</td>
+        <td>scrubber.py · evaluator.py · tracer.py · policy_engine.py · agent_memory.py · deid_vault.py · right_to_forget.py · dashboard.py routing · requirements.txt · integration</td>
+        <td>~28h</td>
+      </tr>
+      <tr>
+        <td><strong>B · UI</strong></td>
+        <td>#2</td>
+        <td>static/pii-pipeline.html · evals.html · frameworks.html · agent-library.html · audit-events.html · all new shared.js components · all new shared.css blocks</td>
+        <td>~32h</td>
+      </tr>
+      <tr>
+        <td><strong>C · Infra + Data + CLI/SDK</strong></td>
+        <td>#3</td>
+        <td>deploy/* · frameworks/* · sdk/* · cli/* · data/*.jsonl seed files · rag_engine.py · domain/agents/* · App Service config · App Insights dashboards</td>
+        <td>~30h</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Coordination model</h3>
+  <ul>
+    <li><strong>Integration windows:</strong> NOON + EOD daily · Stream A pulls B+C changes · runs integration smoke</li>
+    <li><strong>Shared state:</strong> ARCHITECTURE.md + DECISIONS.md + CLAUDE.md committed by Stream A only</li>
+    <li><strong>API contracts:</strong> Stream A publishes OpenAPI updates by noon · B+C build against contracts not implementations</li>
+    <li><strong>Merge conflicts:</strong> Stream A is sole writer of <code>dashboard.py</code> + <code>requirements.txt</code></li>
+    <li><strong>Architectural decisions:</strong> bubbled to PM (you) within 15 min · no silent improvisation</li>
+  </ul>
+</section>
+
+<!-- DECISIONS -->
+<section class="block" id="decisions">
+  <h2><span class="secnum">20</span> Architectural decisions (locked)</h2>
+  <p class="sub">From <code>DECISIONS.md</code>. Append-only. Each entry has alternatives considered and constraints introduced.</p>
+
+  <table>
+    <thead><tr><th>Date</th><th>Decision</th><th>Constrains</th></tr></thead>
+    <tbody>
+      <tr><td>2026-05-20</td><td><strong>Scrubber before Langfuse</strong></td><td>All LLM call wrappers follow scrub → trace order permanently</td></tr>
+      <tr><td>2026-05-20</td><td><strong>OPA as primary policy engine</strong></td><td><code>policies/</code> contains <code>*.rego</code> files · evaluated via OPA sidecar</td></tr>
+      <tr><td>2026-05-20</td><td><strong>No SaaS guardrails</strong></td><td>Guardrail stack deployable on Azure with no external calls in the prompt path</td></tr>
+      <tr><td>2026-05-20</td><td><strong>Four-tier agent memory</strong></td><td>agent_memory.py manages all four tiers · RAG is read-only corpus · episodic is per-session</td></tr>
+      <tr><td>2026-05-20</td><td><strong>JSONL storage for MVP</strong></td><td>Vault TTL enforced in application layer · no queries beyond append + read · aggregation in Python</td></tr>
+      <tr><td>2026-05-20</td><td><strong>Single tenant for v1</strong></td><td>Every model accepts <code>tenant_id</code> · DB queries use it · v1 returns same data regardless</td></tr>
+      <tr><td>2026-05-20</td><td><strong>Compose, don't rebuild commodities</strong></td><td>SDK adapters in <code>providers.py</code> keep backend swappable</td></tr>
+      <tr><td>2026-05-20</td><td><strong>Eval harness folded into main platform</strong></td><td>Eval data co-located with governance data · prior eval harness plans are historical</td></tr>
+      <tr><td>2026-05-20</td><td><strong>DeepEval 6-metric suite</strong></td><td>Every LLM call gets all 6 scores · custom scorers add to this baseline</td></tr>
+      <tr><td>2026-05-20</td><td><strong>Adopt structured Chat → Code workflow</strong></td><td>Every build session starts with /arch · plans via /plan · ends with /handoff</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <strong>Read in conjunction with</strong>
+    <code>CLAUDE.md</code> (HOW to work · ≤150 lines) · <code>ARCHITECTURE.md</code> (current state · updated every session) · <code>DECISIONS.md</code> (immutable log · append-only) · <code>docs/target-architecture.md</code> (narrative form of this document) · <code>docs/MVP-PLAN.md</code> (12-week single-builder plan) · <code>docs/plans/SESSION-NN-*.md</code> (per-session execution plans).
+  </div>
+</section>
+
+<!-- FOOTER -->
+<section class="block">
+  <h2 style="font-size: 14px; color: var(--text-dim);">End of document</h2>
+  <p style="font-size: 11px; color: var(--text-dim);">
+    Source of truth · committed to <code>docs/architecture/target-architecture.html</code> ·
+    print-friendly via Chrome → Print → Save as PDF.
+  </p>
+</section>
+
+</main>
+</div>
+</body>
+</html>
