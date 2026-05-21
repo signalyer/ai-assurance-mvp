@@ -1,33 +1,40 @@
-"""Langfuse tracer — two functions for tracing and fetching."""
+"""Langfuse tracer — two functions for tracing and fetching.
+
+Langfuse is imported lazily so dashboard.py can load when the langfuse SDK
+isn't installed (e.g. slim production image). If the SDK is missing or
+credentials are absent, trace_call returns a no-op trace id and get_recent_traces
+returns an empty list.
+"""
 
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from dotenv import load_dotenv
-from langfuse import Langfuse
 
 load_dotenv()
 
-_client: Optional[Langfuse] = None
+_client: Optional[Any] = None
 _traces_cache: dict[str, dict] = {}
 
 
-def _get_client() -> Langfuse:
-    """Get or create Langfuse client."""
+def _get_client():
+    """Get or create Langfuse client. Returns None if SDK or creds are unavailable."""
     global _client
-    if _client is None:
-        public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
-        secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-        host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    if _client is not None:
+        return _client
 
-        if not public_key or not secret_key:
-            raise ValueError("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY required")
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY")
+    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    if not public_key or not secret_key:
+        return None
 
-        _client = Langfuse(
-            public_key=public_key,
-            secret_key=secret_key,
-            host=host,
-        )
+    try:
+        from langfuse import Langfuse
+    except ImportError:
+        return None
+
+    _client = Langfuse(public_key=public_key, secret_key=secret_key, host=host)
     return _client
 
 
@@ -57,9 +64,9 @@ def trace_call(
         metadata = {}
 
     client = _get_client()
-
-    # Use the new Langfuse API
     trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
+    if client is None:
+        return trace_id
 
     try:
         # Create a generation event using the new API
@@ -94,8 +101,10 @@ def get_recent_traces(limit: int = 10) -> list[dict]:
         List of trace dicts with: id, model, prompt, response, latency_ms, tokens_used, timestamp, metadata
     """
     client = _get_client()
+    result: list[dict] = []
+    if client is None:
+        return result
 
-    result = []
     try:
         # Try to fetch traces via the API
         # Note: Langfuse Cloud API requires HTTP calls or SDK async methods

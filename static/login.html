@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign in — AI Assurance Platform</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-deep, #0b1020); }
+        .login-card {
+            background: var(--bg-card, #131a30);
+            border: 1px solid var(--border, #1f2a44);
+            border-radius: 10px; padding: 2rem; width: 360px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
+        }
+        .login-card h1 { font-size: 18px; margin: 0 0 4px; color: var(--text-primary, #e6ecff); }
+        .login-card .sub { font-size: 12px; color: var(--text-tertiary, #7a86a6); margin-bottom: 1.25rem; }
+        .login-card label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary, #7a86a6); margin: 10px 0 4px; }
+        .login-card input {
+            width: 100%; box-sizing: border-box;
+            background: var(--bg-deep, #0b1020); border: 1px solid var(--border, #1f2a44);
+            color: var(--text-primary, #e6ecff); padding: 8px 10px; border-radius: 6px;
+            font-size: 13px; font-family: inherit;
+        }
+        .login-card input:focus { outline: none; border-color: rgba(99,102,241,0.6); }
+        .login-card button {
+            margin-top: 16px; width: 100%; background: rgba(99,102,241,0.85);
+            color: white; border: 0; padding: 10px; border-radius: 6px; font-size: 13px;
+            font-weight: 600; cursor: pointer;
+        }
+        .login-card button:hover { background: rgba(99,102,241,1); }
+        .login-card button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .err { color: #f87171; font-size: 12px; margin-top: 10px; min-height: 16px; }
+        .footnote { font-size: 10px; color: var(--text-tertiary, #7a86a6); margin-top: 14px; text-align: center; }
+    </style>
+</head>
+<body>
+    <form class="login-card" onsubmit="return doLogin(event)">
+        <h1>AI Assurance Platform</h1>
+        <div class="sub">Sign in with your demo credentials.</div>
+
+        <label for="u">Username</label>
+        <input id="u" name="username" autocomplete="username" required autofocus>
+
+        <label for="p">Password</label>
+        <input id="p" name="password" type="password" autocomplete="current-password" required>
+
+        <button id="btn" type="submit">Sign in</button>
+        <div id="err" class="err"></div>
+
+        <div class="footnote">SignalLayer — Enterprise AI Assurance</div>
+    </form>
+
+    <script>
+    async function doLogin(ev) {
+        ev.preventDefault();
+        const btn = document.getElementById('btn');
+        const err = document.getElementById('err');
+        err.textContent = '';
+        btn.disabled = true;
+        btn.textContent = 'Signing in…';
+
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get('next') || '/';
+
+        const body = new URLSearchParams();
+        body.set('username', document.getElementById('u').value);
+        body.set('password', document.getElementById('p').value);
+        body.set('next', next);
+
+        try {
+            const r = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+                credentials: 'same-origin'
+            });
+            if (r.ok) {
+                const j = await r.json();
+                window.location.href = j.next || '/';
+                return false;
+            }
+            err.textContent = 'Invalid username or password.';
+        } catch (e) {
+            err.textContent = 'Network error — try again.';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+        return false;
+    }
+    </script>
+</body>
+</html>

@@ -16,7 +16,7 @@
             </div>
             <div class="page-actions">
                 <button class="btn btn-sm">Export Inventory</button>
-                <button class="btn btn-sm btn-primary">+ Register System</button>
+                <a class="btn btn-sm btn-primary" href="/ai-systems/new">+ Register System</a>
             </div>
         </div>
 
@@ -132,12 +132,30 @@
             `).join('');
         }
 
+        let CURRENT_SYSTEM = null;
+        let EDIT_INFO = null;
+        let EFFECTIVE = null;
+
         async function openDrawer(systemId) {
             const r = await fetch(`/api/grc/ai-systems/${systemId}`);
             const s = await r.json();
+            CURRENT_SYSTEM = s;
+
+            // Fetch edit-info + effective state (Edit feature)
+            try {
+                const [eiR, effR] = await Promise.all([
+                    fetch(`/api/ai-systems/${systemId}/edit-info`),
+                    fetch(`/api/ai-systems/${systemId}/effective`),
+                ]);
+                EDIT_INFO = eiR.ok ? await eiR.json() : null;
+                EFFECTIVE = effR.ok ? await effR.json() : null;
+            } catch (e) { EDIT_INFO = null; EFFECTIVE = null; }
+
             document.getElementById('drawerTitle').textContent = s.name;
+            const pendingBanner = renderPendingBanner();
 
             document.getElementById('drawerBody').innerHTML = `
+                ${pendingBanner}
                 <div class="drawer-section">
                     <div class="flex gap-2 mb-3">
                         ${severityBadge(s.risk_level)}
@@ -202,10 +220,249 @@
                     <div class="drawer-section-title">Last Assessment</div>
                     <div class="text-sm">${s.last_assessment} · next ${s.next_assessment}</div>
                 </div>
+
+                <div class="drawer-section" id="revisionsSection"></div>
+
+                <div class="drawer-section" id="editFormSection" style="display:none;"></div>
+
+                <div class="drawer-section" style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <a class="btn btn-sm btn-primary" href="/assessment?system=${s.id}">Run Assessment</a>
+                    <button class="btn btn-sm btn-secondary" onclick="toggleEditForm()">Edit System</button>
+                    <button class="btn btn-sm btn-secondary" onclick="loadRevisions()">Revision History</button>
+                </div>
             `;
 
+            renderRevisionsSection();
             document.getElementById('drawerOverlay').classList.add('open');
             document.getElementById('drawer').classList.add('open');
+        }
+
+        // ============ Edit System feature ===================================
+
+        function renderPendingBanner() {
+            const st = EDIT_INFO && EDIT_INFO.status;
+            if (!st || !st.has_pending_material) return '';
+            return `
+                <div class="drawer-section" style="background: rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.45); border-left:4px solid #f87171; border-radius:6px;">
+                    <div style="font-size:11px; font-weight:700; color:#fecaca; text-transform:uppercase; letter-spacing:0.06em;">⚠ Pending Revision — Release Blocked</div>
+                    <div class="text-xs text-secondary" style="margin-top:6px;">
+                        A material edit is awaiting approval. The system cannot serve production traffic until reviewers approve or reject.
+                    </div>
+                    <div style="margin-top:8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="loadRevisions()">View Pending Revision</button>
+                    </div>
+                </div>`;
+        }
+
+        async function renderRevisionsSection() {
+            const slot = document.getElementById('revisionsSection');
+            if (!slot || !CURRENT_SYSTEM) return;
+            try {
+                const r = await fetch(`/api/ai-systems/${CURRENT_SYSTEM.id}/revisions`);
+                const d = await r.json();
+                const revs = d.revisions || [];
+                if (revs.length === 0) {
+                    slot.innerHTML = `
+                        <div class="drawer-section-title">Edit History</div>
+                        <div class="text-xs text-tertiary">No edits recorded.</div>`;
+                    return;
+                }
+                slot.innerHTML = `
+                    <div class="drawer-section-title">Edit History (${revs.length})</div>
+                    ${revs.slice(0, 6).map(r => renderRevisionRow(r)).join('')}`;
+            } catch (e) {
+                slot.innerHTML = '';
+            }
+        }
+
+        function renderRevisionRow(r) {
+            const fieldsList = (r.fields_changed || []).map(c => c.field).join(', ') || '—';
+            const statusColor = ({
+                'auto_applied': '#86efac',
+                'approved':     '#86efac',
+                'pending':      '#fcd34d',
+                'rejected':     '#fca5a5',
+                'overridden':   '#a5b4fc',
+            })[r.approval_status] || 'var(--text-tertiary)';
+            const tierStyle = r.tier === 'material'
+                ? 'background:rgba(248,113,113,0.10); border:1px solid rgba(248,113,113,0.40); color:#fca5a5;'
+                : 'background:rgba(99,102,241,0.10); border:1px solid rgba(99,102,241,0.40); color:#c7d2fe;';
+            const approverHtml = (r.approvers || []).map(a =>
+                `<div class="text-xs text-secondary">${a.role}: ${a.decision} by ${a.user}</div>`
+            ).join('');
+            const pendingActions = r.approval_status === 'pending'
+                ? `<div style="margin-top:6px; display:flex; gap:6px;">
+                       <button class="btn btn-sm btn-primary" onclick="decideRevision('${r.revision_id}','APPROVE')">Approve</button>
+                       <button class="btn btn-sm btn-secondary" onclick="decideRevision('${r.revision_id}','REJECT')">Reject</button>
+                   </div>`
+                : '';
+            return `
+                <div style="padding:8px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; background:var(--bg-deep);">
+                    <div class="flex justify-between items-center">
+                        <span class="font-mono text-xs">${r.revision_id}</span>
+                        <span style="font-size:10px; padding:1px 6px; border-radius:3px; font-family:var(--font-mono); ${tierStyle}">${r.tier.toUpperCase()}</span>
+                    </div>
+                    <div class="text-xs" style="margin-top:4px; color:${statusColor}; font-weight:600; text-transform:uppercase;">${r.approval_status}</div>
+                    <div class="text-xs text-secondary" style="margin-top:4px;"><b>Fields:</b> ${fieldsList}</div>
+                    ${r.change_reason ? `<div class="text-xs text-tertiary" style="margin-top:2px;"><b>Reason:</b> ${r.change_reason} (${r.change_category})</div>` : ''}
+                    ${(r.triggered_reruns||[]).length ? `<div class="text-xs text-tertiary" style="margin-top:2px;"><b>Re-run:</b> ${r.triggered_reruns.join(', ')}</div>` : ''}
+                    ${r.created_at ? `<div class="text-xs text-tertiary" style="margin-top:2px;">${r.created_at} · by ${r.created_by||'system'}</div>` : ''}
+                    ${approverHtml}
+                    ${pendingActions}
+                </div>`;
+        }
+
+        async function loadRevisions() {
+            await renderRevisionsSection();
+        }
+
+        async function decideRevision(revId, decision) {
+            const note = decision === 'REJECT' ? prompt('Reason for rejection?') || '' : '';
+            const r = await fetch(`/api/ai-systems/revisions/${revId}/decide`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ decision: decision, note: note }),
+            });
+            if (!r.ok) {
+                const j = await r.json();
+                alert('Decision failed: ' + JSON.stringify(j.detail || j));
+                return;
+            }
+            await openDrawer(CURRENT_SYSTEM.id);  // re-fetch everything
+        }
+
+        function toggleEditForm() {
+            const slot = document.getElementById('editFormSection');
+            if (!slot) return;
+            if (slot.style.display === 'none') {
+                renderEditForm();
+                slot.style.display = '';
+                slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                slot.style.display = 'none';
+            }
+        }
+
+        function renderEditForm() {
+            const ei = EDIT_INFO || { field_tiers: { soft: [], material: [] }, valid_change_categories: ['Other'] };
+            const s = (EFFECTIVE && EFFECTIVE.ai_system) || CURRENT_SYSTEM || {};
+            const softFields = ei.field_tiers.soft || [];
+            const materialFields = ei.field_tiers.material || [];
+
+            const softRows = softFields.map(f => `
+                <label class="form-row" style="display:flex; flex-direction:column; margin-bottom:8px;">
+                    <span class="text-xs text-tertiary" style="text-transform:uppercase; letter-spacing:0.06em;">${f}</span>
+                    <input class="form-input" data-edit-field="${f}" data-tier="soft"
+                           value="${(s[f] != null ? String(s[f]).replace(/"/g,'&quot;') : '')}"
+                           style="background:var(--bg-deep); border:1px solid var(--border); color:var(--text-primary); padding:6px 10px; border-radius:5px; font-size:12px;">
+                </label>`).join('');
+
+            const matRows = materialFields.map(f => {
+                const v = s[f];
+                const display = Array.isArray(v) ? JSON.stringify(v) : (typeof v === 'boolean' ? String(v) : (v == null ? '' : String(v)));
+                return `
+                    <label class="form-row" style="display:flex; flex-direction:column; margin-bottom:8px;">
+                        <span class="text-xs" style="text-transform:uppercase; letter-spacing:0.06em; color:#fca5a5;">⚠ ${f} <span style="font-size:10px; opacity:0.75;">(material — requires approval)</span></span>
+                        <input class="form-input" data-edit-field="${f}" data-tier="material"
+                               data-original="${display.replace(/"/g,'&quot;')}"
+                               value="${display.replace(/"/g,'&quot;')}"
+                               style="background:var(--bg-deep); border:1px solid rgba(248,113,113,0.30); color:var(--text-primary); padding:6px 10px; border-radius:5px; font-size:12px;">
+                    </label>`;
+            }).join('');
+
+            const categories = (ei.valid_change_categories || []).map(c => `<option value="${c}">${c}</option>`).join('');
+
+            document.getElementById('editFormSection').innerHTML = `
+                <div class="drawer-section-title">Edit AI System</div>
+                <div class="text-xs text-tertiary" style="margin-bottom:10px;">
+                    Soft fields auto-save. Red-marked material fields require reviewer approval and block release until approved.
+                </div>
+
+                <div style="margin-bottom:10px;">
+                    <div class="text-xs text-secondary" style="margin-bottom:6px;"><b>Soft fields (auto-applied)</b></div>
+                    ${softRows}
+                </div>
+
+                <div style="margin-bottom:10px;">
+                    <div class="text-xs" style="margin-bottom:6px; color:#fca5a5;"><b>Material fields (approval required)</b></div>
+                    ${matRows}
+                </div>
+
+                <label class="form-row" style="display:flex; flex-direction:column; margin-bottom:8px;">
+                    <span class="text-xs text-tertiary" style="text-transform:uppercase; letter-spacing:0.06em;">Change reason (required for material)</span>
+                    <textarea id="editChangeReason" rows="2"
+                              style="background:var(--bg-deep); border:1px solid var(--border); color:var(--text-primary); padding:6px 10px; border-radius:5px; font-size:12px; font-family:inherit;"></textarea>
+                </label>
+
+                <label class="form-row" style="display:flex; flex-direction:column; margin-bottom:10px;">
+                    <span class="text-xs text-tertiary" style="text-transform:uppercase; letter-spacing:0.06em;">Change category</span>
+                    <select id="editChangeCategory"
+                            style="background:var(--bg-deep); border:1px solid var(--border); color:var(--text-primary); padding:6px 10px; border-radius:5px; font-size:12px;">
+                        ${categories}
+                    </select>
+                </label>
+
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-sm btn-primary" onclick="submitEdit()">Submit Edit</button>
+                    <button class="btn btn-sm btn-secondary" onclick="toggleEditForm()">Cancel</button>
+                </div>
+                <div id="editMsg" class="text-xs" style="margin-top:8px;"></div>`;
+        }
+
+        function parseEditValue(raw, originalDisplay) {
+            // Try JSON first (for arrays / booleans), fall back to string
+            const trimmed = (raw || '').trim();
+            if (trimmed === '') return '';
+            if (trimmed === 'true') return true;
+            if (trimmed === 'false') return false;
+            if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                try { return JSON.parse(trimmed); } catch (e) { /* fall through */ }
+            }
+            // If original was numeric, try to parse as number
+            if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+            if (/^-?\d+\.\d+$/.test(trimmed)) return parseFloat(trimmed);
+            return trimmed;
+        }
+
+        async function submitEdit() {
+            const msg = document.getElementById('editMsg');
+            msg.textContent = ''; msg.style.color = 'var(--text-tertiary)';
+            const inputs = document.querySelectorAll('[data-edit-field]');
+            const changes = {};
+            const sBase = (EFFECTIVE && EFFECTIVE.ai_system) || CURRENT_SYSTEM || {};
+            inputs.forEach(el => {
+                const f = el.getAttribute('data-edit-field');
+                const current = sBase[f];
+                const parsed = parseEditValue(el.value, el.getAttribute('data-original') || '');
+                const currentJson = JSON.stringify(current);
+                const parsedJson = JSON.stringify(parsed);
+                if (currentJson !== parsedJson) changes[f] = parsed;
+            });
+            if (Object.keys(changes).length === 0) {
+                msg.textContent = 'No changes to submit.'; return;
+            }
+            const reason = document.getElementById('editChangeReason').value || '';
+            const category = document.getElementById('editChangeCategory').value || 'Other';
+
+            const r = await fetch(`/api/ai-systems/${CURRENT_SYSTEM.id}/edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ changes, change_reason: reason, change_category: category }),
+            });
+            if (!r.ok) {
+                const j = await r.json();
+                const errs = (j.detail && j.detail.errors) || [JSON.stringify(j.detail || j)];
+                msg.style.color = '#fca5a5';
+                msg.innerHTML = '<b>Edit rejected:</b> ' + errs.join('; ');
+                return;
+            }
+            const j = await r.json();
+            const rev = j.revision;
+            msg.style.color = '#86efac';
+            msg.innerHTML = `<b>${rev.approval_status === 'pending' ? 'Pending approval' : 'Applied'}:</b> ${rev.revision_id}`;
+            await openDrawer(CURRENT_SYSTEM.id);
         }
 
         function closeDrawer() {

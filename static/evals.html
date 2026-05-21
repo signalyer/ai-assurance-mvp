@@ -2,324 +2,272 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Evals — AI Assurance</title>
+    <title>Evals — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .eval-suite-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem 1.25rem;
-            margin-bottom: 0.75rem;
+        .sys-eval-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            margin-bottom: 0.875rem; overflow: hidden;
+        }
+        .sys-eval-header {
+            padding: 0.875rem 1rem;
+            display: grid; grid-template-columns: 1fr 140px 110px 160px 200px;
+            gap: 0.875rem; align-items: center;
+            border-bottom: 1px solid var(--border); cursor: pointer;
+        }
+        .sys-eval-header:hover { background: var(--bg-card-hover); }
+        .sys-eval-card.expanded .sys-eval-header { background: var(--bg-elevated); }
+
+        .eval-row {
             display: grid;
-            grid-template-columns: 1fr 100px 100px 110px 110px 90px;
-            gap: 1rem;
-            align-items: center;
+            grid-template-columns: 28px 1fr 130px 110px 130px 90px;
+            gap: 0.75rem; align-items: center;
+            padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 13px;
         }
+        .eval-row:last-child { border-bottom: none; }
+        .eval-row.FAIL { border-left: 3px solid var(--critical); }
+        .eval-row.WARN { border-left: 3px solid var(--medium); }
+        .eval-row.PASS { border-left: 3px solid var(--pass); }
+        .eval-row .toggle { font-size: 12px; color: var(--text-secondary); cursor: pointer; user-select: none; }
 
-        .eval-name {
-            font-size: 13.5px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 0.25rem;
+        .eval-detail {
+            padding: 0.75rem 1rem 0.75rem 3rem;
+            background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+            font-size: 12px; color: var(--text-secondary);
         }
+        .eval-detail .row { display: grid; grid-template-columns: 130px 1fr; gap: 0.5rem; padding: 0.25rem 0; }
+        .eval-detail dt { color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+        .eval-detail ul { margin: 4px 0 0 1rem; padding: 0; }
+        .eval-detail .sample { font-family: var(--font-mono); font-size: 11px; padding: 2px 0; color: var(--text-secondary); }
 
-        .eval-desc {
-            font-size: 11.5px;
-            color: var(--text-tertiary);
+        .score-line { display: flex; gap: 0.5rem; align-items: baseline; }
+        .score-num { font-size: 17px; font-weight: 700; font-feature-settings: 'tnum'; }
+        .score-thresh { font-size: 11px; color: var(--text-tertiary); }
+
+        .impact-pill {
+            font-size: 10px; padding: 2px 7px; border-radius: 999px;
+            text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;
         }
-
-        .eval-score {
-            font-size: 18px;
-            font-weight: 700;
-            font-feature-settings: 'tnum';
-        }
-
-        .eval-meta-label {
-            font-size: 10.5px;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            margin-bottom: 2px;
-            letter-spacing: 0.04em;
-        }
-
-        .gate-impact-badge {
-            font-size: 10.5px;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-weight: 600;
-            text-align: center;
-        }
-
-        .gate-blocks { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
-        .gate-warns { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
-        .gate-none { background: rgba(149, 159, 178, 0.08); color: var(--text-secondary); border: 1px solid var(--border-strong); }
-
-        .eval-header-row {
-            display: grid;
-            grid-template-columns: 1fr 100px 100px 110px 110px 90px;
-            gap: 1rem;
-            padding: 0.5rem 1.25rem;
-            font-size: 10.5px;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
+        .impact-pill.BLOCKS_RELEASE { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .impact-pill.CONDITIONAL { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
+        .impact-pill.NONE { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-strong); }
     </style>
 </head>
 <body>
-<div class="app">
-    <div id="sidebar"></div>
-    <div class="main">
-        <div id="topbar"></div>
-        <div class="page">
+    <div id="topbar"></div>
 
-            <div class="page-header">
-                <div>
-                    <div class="page-title">Eval Suite Results</div>
-                    <div class="page-subtitle">AI evaluation metrics — feed into release gate decisions and finding generation</div>
-                </div>
-                <div class="page-actions">
-                    <select class="filter-select" id="systemSelect">
-                        <option value="">All systems</option>
-                    </select>
-                    <button class="btn">View Trends</button>
-                    <button class="btn btn-primary">Run All Evals</button>
-                </div>
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Evaluation Suite</div>
+                <div class="page-subtitle">Evals feed release gates, findings, residual risk, and framework coverage — not vanity metrics</div>
             </div>
-
-            <div class="kpi-row" id="evalKpi" style="grid-template-columns: repeat(4, 1fr);"></div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <div class="card-title">Evaluation Suite</div>
-                        <div class="text-xs text-tertiary mt-1">Each eval is mapped to a release gate and policy control</div>
-                    </div>
-                </div>
-
-                <div class="eval-header-row">
-                    <div>Evaluation</div>
-                    <div>Score</div>
-                    <div>Threshold</div>
-                    <div>Pass/Fail</div>
-                    <div>Release Impact</div>
-                    <div>Control</div>
-                </div>
-
-                <div id="evalList"></div>
+            <div class="page-actions">
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
             </div>
-
-            <div class="card mt-3">
-                <div class="card-header">
-                    <div class="card-title">Historical Performance</div>
-                    <a href="/analytics" class="card-link">Detailed analytics ›</a>
-                </div>
-                <div class="text-sm text-secondary mb-3">7-day eval pass rate trend across all systems</div>
-                <div id="historyChart"></div>
-            </div>
-
         </div>
+
+        <div class="kpi-row" id="kpis"></div>
+        <div id="systems"></div>
     </div>
-</div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/evals');
+    initPage('/evals');
 
-        const EVAL_SUITE = [
-            {
-                name: "PII Leakage",
-                description: "Detects PII (SSN, accounts, emails, phone) in agent responses",
-                score: 0.0,
-                threshold: "= 0",
-                passed: true,
-                gate_impact: "BLOCKS",
-                control: "AI-001",
-                framework: "OWASP LLM02",
-            },
-            {
-                name: "Prompt Injection Resistance",
-                description: "% of injection probes that fail to override the system prompt",
-                score: 0.78,
-                threshold: "≥ 0.95",
-                passed: false,
-                gate_impact: "BLOCKS",
-                control: "AI-003",
-                framework: "OWASP LLM01",
-            },
-            {
-                name: "RAG Groundedness",
-                description: "% of factual claims directly supported by retrieved context",
-                score: 0.91,
-                threshold: "≥ 0.85",
-                passed: true,
-                gate_impact: "BLOCKS",
-                control: "AI-004",
-                framework: "OWASP LLM08",
-            },
-            {
-                name: "Hallucination Rate",
-                description: "% of claims unsupported by ground truth or context",
-                score: 0.16,
-                threshold: "≤ 0.05",
-                passed: false,
-                gate_impact: "WARNS",
-                control: "AI-008",
-                framework: "AI 600-1 GAI-2.2",
-            },
-            {
-                name: "Tool Authorization",
-                description: "% of unauthorized tool invocations correctly blocked",
-                score: 0.98,
-                threshold: "= 1.0",
-                passed: false,
-                gate_impact: "BLOCKS",
-                control: "AI-006",
-                framework: "OWASP AAI-02",
-            },
-            {
-                name: "Audit Log Completeness",
-                description: "% of actions captured in immutable audit log with full attribution",
-                score: 0.94,
-                threshold: "= 1.0",
-                passed: false,
-                gate_impact: "BLOCKS",
-                control: "AI-009",
-                framework: "SOC2 CC7.2",
-            },
-            {
-                name: "Bias / Fairness",
-                description: "Demographic parity across customer segments",
-                score: 0.83,
-                threshold: "≥ 0.80",
-                passed: true,
-                gate_impact: "WARNS",
-                control: "AI-008",
-                framework: "NIST AI RMF Measure 2.11",
-            },
-            {
-                name: "Answer Relevancy",
-                description: "Response addresses the user's question",
-                score: 0.88,
-                threshold: "≥ 0.70",
-                passed: true,
-                gate_impact: "NONE",
-                control: "AI-008",
-                framework: "NIST AI RMF Measure 2.3",
-            },
-            {
-                name: "Toxicity",
-                description: "Detection of harmful, abusive, or biased language",
-                score: 0.02,
-                threshold: "≤ 0.30",
-                passed: true,
-                gate_impact: "BLOCKS",
-                control: "AI-001",
-                framework: "AI 600-1 GAI-2.3",
-            },
-        ];
+    let OVERVIEW = [];
+    let EXPANDED = new Set();
+    let EVAL_DETAIL = {};
+    let OPEN_EVALS = new Set();
 
-        async function loadSystems() {
-            const r = await fetch('/api/grc/ai-systems');
-            const d = await r.json();
-            const sel = document.getElementById('systemSelect');
-            d.systems.forEach(s => {
-                const o = document.createElement('option');
-                o.value = s.id;
-                o.textContent = s.name;
-                sel.appendChild(o);
-            });
-        }
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-        function render() {
-            const passed = EVAL_SUITE.filter(e => e.passed).length;
-            const blocking = EVAL_SUITE.filter(e => !e.passed && e.gate_impact === 'BLOCKS').length;
-            const warning = EVAL_SUITE.filter(e => !e.passed && e.gate_impact === 'WARNS').length;
+    const evalStatusBadge = s => {
+        const map = { PASS: 'badge-pass', FAIL: 'badge-critical', WARN: 'badge-medium' };
+        return `<span class="badge ${map[s] || 'badge-neutral'}">${s}</span>`;
+    };
 
-            document.getElementById('evalKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">⚗</div><div class="kpi-label">Total Evals</div></div><div class="kpi-value">${EVAL_SUITE.length}</div><div class="kpi-trend">9 production metrics</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passed}</div><div class="kpi-trend">${Math.round(passed/EVAL_SUITE.length*100)}% pass rate</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocking Failures</div></div><div class="kpi-value critical">${blocking}</div><div class="kpi-trend">prevent release</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">⚠</div><div class="kpi-label">Warnings</div></div><div class="kpi-value">${warning}</div><div class="kpi-trend">non-blocking</div></div>
-            `;
+    const pct = x => Math.round((x || 0) * 100);
 
-            const gateImpactMap = {
-                BLOCKS: 'gate-blocks',
-                WARNS: 'gate-warns',
-                NONE: 'gate-none',
-            };
-            const gateImpactLabel = {
-                BLOCKS: 'BLOCKS',
-                WARNS: 'WARN',
-                NONE: 'NONE',
-            };
+    async function loadOverview() {
+        const r = await fetch('/api/grc/evals/v2/overview');
+        const d = await r.json();
+        OVERVIEW = d.systems.filter(s => s.total > 0);
+        renderKpis();
+        renderSystems();
+    }
 
-            document.getElementById('evalList').innerHTML = EVAL_SUITE.map(e => {
-                const scoreColor = e.passed ? 'var(--pass)' : 'var(--critical)';
-                return `
-                <div class="eval-suite-card">
+    function renderKpis() {
+        const total = OVERVIEW.reduce((s, x) => s + x.total, 0);
+        const passes = OVERVIEW.reduce((s, x) => s + x.passes, 0);
+        const warns = OVERVIEW.reduce((s, x) => s + x.warns, 0);
+        const fails = OVERVIEW.reduce((s, x) => s + x.fails, 0);
+        const blocking = OVERVIEW.reduce((s, x) => s + x.blocking_fails, 0);
+        document.getElementById('kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Total Evals</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">across ${OVERVIEW.length} systems</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passes}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Warnings</div></div><div class="kpi-value">${warns}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocking Failures</div></div><div class="kpi-value critical">${blocking}</div><div class="kpi-trend">of ${fails} total fails</div></div>
+        `;
+    }
+
+    function renderSystems() {
+        const order = s => s.fails > 0 ? 0 : s.warns > 0 ? 1 : 2;
+        OVERVIEW.sort((a, b) => order(a) - order(b) || a.ai_system_name.localeCompare(b.ai_system_name));
+        document.getElementById('systems').innerHTML = OVERVIEW.map(s => {
+            const expanded = EXPANDED.has(s.ai_system_id);
+            return `
+            <div class="sys-eval-card ${expanded ? 'expanded' : ''}">
+                <div class="sys-eval-header" onclick="toggleSystem('${s.ai_system_id}')">
                     <div>
-                        <div class="eval-name">${e.name}</div>
-                        <div class="eval-desc">${e.description}</div>
-                        <div class="mt-2">${frameworkBadges([e.framework])}</div>
+                        <div class="text-sm font-bold">${esc(s.ai_system_name)}</div>
+                        <div class="text-xs text-secondary mt-1">${s.ai_system_id} · ${esc(s.domain)} · ${s.runtime_status}</div>
                     </div>
                     <div>
-                        <div class="eval-meta-label">Score</div>
-                        <div class="eval-score" style="color: ${scoreColor}">${e.score.toFixed(2)}</div>
+                        <div class="text-xs text-secondary">Evals</div>
+                        <div class="text-sm font-bold">${s.total}</div>
                     </div>
                     <div>
-                        <div class="eval-meta-label">Threshold</div>
-                        <div class="font-mono text-sm">${e.threshold}</div>
-                    </div>
-                    <div>
-                        ${e.passed ? '<span class="badge badge-pass">PASS</span>' : '<span class="badge badge-critical">FAIL</span>'}
-                    </div>
-                    <div>
-                        <div class="gate-impact-badge ${gateImpactMap[e.gate_impact]}">${gateImpactLabel[e.gate_impact]}</div>
-                    </div>
-                    <div>
-                        <div class="eval-meta-label">Control</div>
-                        <span class="framework-badge">${e.control}</span>
-                    </div>
-                </div>
-                `;
-            }).join('');
-
-            // Mini line chart for historical pass rate
-            const series = [{
-                name: 'Pass Rate',
-                color: '#10b981',
-                data: [62, 68, 65, 71, 70, 74, Math.round(passed/EVAL_SUITE.length*100)],
-            }, {
-                name: 'Hallucination Rate',
-                color: '#ef4444',
-                data: [22, 19, 18, 20, 17, 16, 16],
-            }, {
-                name: 'Prompt Injection',
-                color: '#f59e0b',
-                data: [85, 82, 80, 78, 79, 77, 78],
-            }];
-            const labels = ['May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19'];
-
-            document.getElementById('historyChart').innerHTML = `
-                ${renderLineChart(series, { width: 800, height: 200, xLabels: labels })}
-                <div class="linechart-legend">
-                    ${series.map(s => `
-                        <div class="linechart-legend-item">
-                            <div class="linechart-legend-dot" style="background: ${s.color}"></div>
-                            <span>${s.name}</span>
-                            <span class="font-bold text-primary">${s.data[s.data.length - 1]}%</span>
+                        <div class="text-xs text-secondary">Pass / Warn / Fail</div>
+                        <div class="text-sm">
+                            <span class="text-pass font-bold">${s.passes}</span> /
+                            <span class="text-medium font-bold">${s.warns}</span> /
+                            <span class="text-critical font-bold">${s.fails}</span>
                         </div>
-                    `).join('')}
+                    </div>
+                    <div>
+                        <div class="text-xs text-secondary">Blocking</div>
+                        <div class="text-sm font-bold ${s.blocking_fails > 0 ? 'text-critical' : ''}">${s.blocking_fails}</div>
+                    </div>
+                    <div class="text-right">
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); runSimulated('${s.ai_system_id}', this)">Run Simulated Eval Suite</button>
+                    </div>
+                </div>
+                <div id="evals-${s.ai_system_id}" style="display: ${expanded ? 'block' : 'none'};"></div>
+            </div>
+            `;
+        }).join('');
+        EXPANDED.forEach(loadDetail);
+    }
+
+    async function toggleSystem(sid) {
+        if (EXPANDED.has(sid)) EXPANDED.delete(sid);
+        else EXPANDED.add(sid);
+        renderSystems();
+    }
+
+    async function loadDetail(sid) {
+        const r = await fetch(`/api/grc/evals/v2/system/${sid}`);
+        const d = await r.json();
+        EVAL_DETAIL[sid] = d;
+        const container = document.getElementById('evals-' + sid);
+        if (!container) return;
+        const header = `
+            <div class="eval-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary);">
+                <div></div><div>Eval / Source</div><div>Score</div><div>Status</div><div>Release Impact</div><div>Run</div>
+            </div>`;
+        container.innerHTML = header + d.evals.map(e => {
+            const isOpen = OPEN_EVALS.has(e.id);
+            const pretty = e.eval_type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+            return `
+                <div class="eval-row ${e.status}" onclick="toggleEval('${e.id}')">
+                    <div class="toggle" id="tog-${e.id}">${isOpen ? '▾' : '▸'}</div>
+                    <div>
+                        <div class="text-sm font-bold">${pretty}</div>
+                        <div class="text-xs text-tertiary">${e.tool_source} · n=${e.test_count}${e.failed_count ? ' · ' + e.failed_count + ' failures' : ''}</div>
+                    </div>
+                    <div class="score-line">
+                        <span class="score-num ${e.status === 'PASS' ? 'text-pass' : e.status === 'FAIL' ? 'text-critical' : 'text-medium'}">${pct(e.score)}%</span>
+                        <span class="score-thresh">/ ${pct(e.threshold)}%</span>
+                    </div>
+                    <div>${evalStatusBadge(e.status)}</div>
+                    <div><span class="impact-pill ${e.release_impact}">${e.release_impact.replace(/_/g, ' ')}</span></div>
+                    <div class="text-xs text-tertiary text-right">${(e.run_at || '').slice(0, 10)}</div>
+                </div>
+                <div class="eval-detail" id="d-${e.id}" style="display: ${isOpen ? 'block' : 'none'};">
+                    ${e.notes ? `<div class="row"><dt>Notes</dt><dd>${esc(e.notes)}</dd></div>` : ''}
+                    <div class="row">
+                        <dt>Pass rate</dt>
+                        <dd>${pct(e.pass_rate || (e.test_count ? (e.test_count - e.failed_count) / e.test_count : 0))}% — ${e.test_count - e.failed_count}/${e.test_count} cases pass</dd>
+                    </div>
+                    <div class="row">
+                        <dt>Controls</dt>
+                        <dd>${(e.control_mappings || []).map(c => `<span class="framework-badge">${c}</span>`).join(' ') || '—'}</dd>
+                    </div>
+                    <div class="row">
+                        <dt>Frameworks</dt>
+                        <dd>${(e.framework_mappings || []).map(f => `<span class="framework-badge">${f.framework.replace(/_/g, ' ')} ${f.clause}</span>`).join(' ') || '—'}</dd>
+                    </div>
+                    ${e.evidence_id ? `
+                    <div class="row">
+                        <dt>Evidence</dt>
+                        <dd><a class="framework-badge" href="/evidence?id=${e.evidence_id}" style="cursor:pointer;">${e.evidence_id}</a></dd>
+                    </div>` : ''}
+                    ${e.sample_failures && e.sample_failures.length ? `
+                    <div class="row">
+                        <dt>Sample failures</dt>
+                        <dd><ul>${e.sample_failures.map(f => `<li class="sample">${esc(f)}</li>`).join('')}</ul></dd>
+                    </div>` : ''}
                 </div>
             `;
-        }
+        }).join('');
+    }
 
-        loadSystems();
-        render();
+    function toggleEval(eid) {
+        event.stopPropagation();
+        if (OPEN_EVALS.has(eid)) OPEN_EVALS.delete(eid);
+        else OPEN_EVALS.add(eid);
+        const el = document.getElementById('d-' + eid);
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        const tog = document.getElementById('tog-' + eid);
+        if (tog) tog.textContent = OPEN_EVALS.has(eid) ? '▾' : '▸';
+    }
+
+    async function runSimulated(sid, btn) {
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = 'Running…';
+        try {
+            const r = await fetch(`/api/grc/evals/v2/run/${sid}`, { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) { alert('Run failed: ' + (d.detail || JSON.stringify(d))); return; }
+            const a = d.assessment, g = d.release_gates;
+            const summary =
+`Simulated eval suite complete for ${sid}
+
+${d.eval_count} evals refreshed at ${d.ran_at}
+
+Assessment Engine:
+  overall score    ${a.overall_score}
+  inherent risk    ${a.inherent_risk}
+  residual risk    ${a.residual_risk} (${a.residual_score}/100)
+  release reco     ${a.release_recommendation}
+  rule fired       ${a.rule_fired}
+  failed controls  ${a.failed_controls.length}
+  evidence         ${Math.round(a.evidence_completeness * 100)}%
+
+Release Gate Engine:
+  decision         ${g.decision}
+  pass/fail/warn   ${g.pass_count}/${g.fail_count}/${g.warning_count}
+  blocking fails   ${g.blocking_failures}
+
+Rationale: ${a.rationale}`;
+            alert(summary);
+            await loadOverview();
+            if (EXPANDED.has(sid)) loadDetail(sid);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    }
+
+    window.toggleSystem = toggleSystem;
+    window.toggleEval = toggleEval;
+    window.runSimulated = runSimulated;
+    document.getElementById('refreshBtn').addEventListener('click', loadOverview);
+
+    loadOverview();
     </script>
 </body>
 </html>

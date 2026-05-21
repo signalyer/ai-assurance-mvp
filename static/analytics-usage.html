@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Usage Analytics — AI Assurance Platform</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .ua-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.875rem; margin-bottom: 1rem; }
+        .ua-kpi {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem; border-left: 3px solid rgba(99,102,241,0.5);
+        }
+        .ua-kpi .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); }
+        .ua-kpi .val { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+        .ua-kpi .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+        .ua-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem; margin-bottom: 1rem;
+        }
+        .ua-card h2 { font-size: 13px; margin: 0 0 4px; color: var(--text-primary); }
+        .ua-card .sub { font-size: 11px; color: var(--text-tertiary); margin-bottom: 10px; }
+
+        table.ua-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table.ua-table th, table.ua-table td {
+            text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        table.ua-table th {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-tertiary); background: var(--bg-deep);
+        }
+        table.ua-table td .mono { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+        table.ua-table td.num { text-align: right; font-family: var(--font-mono); }
+
+        .pill-evt {
+            display: inline-block; padding: 1px 6px; border-radius: 3px;
+            font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+            background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-secondary);
+        }
+        .pill-evt.LOGIN         { background: rgba(74,222,128,0.10); border-color: rgba(74,222,128,0.4); color: #86efac; }
+        .pill-evt.LOGOUT        { background: rgba(148,163,184,0.10); border-color: rgba(148,163,184,0.4); color: #cbd5e1; }
+        .pill-evt.PAGE_VIEW     { background: rgba(99,102,241,0.10); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+        .pill-evt.API_CALL      { background: rgba(56,189,248,0.10); border-color: rgba(56,189,248,0.4); color: #7dd3fc; }
+        .pill-evt.LOGIN_FAILED  { background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.4); color: #fca5a5; }
+        .pill-evt.SESSION_EXPIRED { background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.4); color: #fcd34d; }
+
+        .ua-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .ua-controls select, .ua-controls button {
+            background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-primary);
+            padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer;
+        }
+        .ua-controls button:hover { border-color: rgba(99,102,241,0.5); }
+
+        .ua-banner {
+            background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.35);
+            border-radius: 6px; padding: 8px 12px; font-size: 12px; color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+        .ua-banner b { color: var(--text-primary); }
+
+        .ua-error {
+            background: rgba(248,113,113,0.10); border: 1px solid rgba(248,113,113,0.45);
+            border-radius: 8px; padding: 1rem; font-size: 13px; color: #fecaca;
+        }
+        .idle-bar {
+            height: 4px; background: var(--bg-deep); border-radius: 2px; overflow: hidden; min-width: 80px;
+        }
+        .idle-bar > div { height: 100%; background: linear-gradient(90deg, #4ade80, #fbbf24, #f87171); }
+
+        .two-col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0.875rem; }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Usage Analytics</div>
+                <div class="page-subtitle">
+                    Logins, active sessions, page-by-page usage, and geolocation.
+                    <span style="color: var(--text-tertiary);">All timestamps in CST (America/Chicago). Inactivity timeout: 10 min.</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="uaContent">
+            <div class="ua-banner">Loading…</div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    let UA_DAYS = 7;
+
+    function pillEvent(t) {
+        return `<span class="pill-evt ${t}">${t}</span>`;
+    }
+    function fmtIdle(secs) {
+        if (secs < 60) return secs + 's';
+        const m = Math.floor(secs / 60), s = secs % 60;
+        return m + 'm ' + s + 's';
+    }
+    function fmtLocation(r) {
+        const parts = [r.city, r.region, r.country].filter(Boolean);
+        return parts.join(', ') || '—';
+    }
+    function trim(s, n) {
+        if (!s) return '';
+        return s.length > n ? s.substring(0, n) + '…' : s;
+    }
+
+    async function loadAll() {
+        const c = document.getElementById('uaContent');
+        try {
+            const [sumR, sessR, evR] = await Promise.all([
+                fetch('/api/usage/summary?days=' + UA_DAYS, { credentials: 'same-origin' }),
+                fetch('/api/usage/active-sessions', { credentials: 'same-origin' }),
+                fetch('/api/usage/events?days=' + UA_DAYS + '&limit=200', { credentials: 'same-origin' }),
+            ]);
+            if (sumR.status === 403) {
+                c.innerHTML = '<div class="ua-error">Access denied. Usage Analytics is restricted to <b>demo-ciso</b>. Sign in as that user to view this page.</div>';
+                return;
+            }
+            if (!sumR.ok) throw new Error('summary ' + sumR.status);
+            const summary = await sumR.json();
+            const active  = await sessR.json();
+            const events  = await evR.json();
+            render(summary, active, events);
+        } catch (e) {
+            c.innerHTML = '<div class="ua-error">Failed to load analytics: ' + e.message + '</div>';
+        }
+    }
+
+    function render(summary, active, events) {
+        const t = summary.totals || {};
+        const rows = (summary.by_user || []).map(u => `
+            <tr>
+                <td><b>${u.user}</b></td>
+                <td class="num">${u.logins}</td>
+                <td class="num">${u.page_views}</td>
+                <td>${u.last_seen_cst || '—'}</td>
+                <td class="mono">${u.last_ip || '—'}</td>
+                <td>${u.last_city || '—'}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="6" style="color:var(--text-tertiary);">No activity yet.</td></tr>';
+
+        const topPages = (summary.top_pages || []).map(p => `
+            <tr><td><span class="mono">${p.path}</span></td><td class="num">${p.views}</td></tr>
+        `).join('') || '<tr><td colspan="2" style="color:var(--text-tertiary);">No page views yet.</td></tr>';
+
+        const countries = (summary.by_country || []).map(g => `
+            <tr><td>${g.country}</td><td class="num">${g.events}</td></tr>
+        `).join('') || '<tr><td colspan="2" style="color:var(--text-tertiary);">No geo-resolvable IPs yet.</td></tr>';
+
+        const sessRows = (active.sessions || []).map(s => {
+            const idlePct = Math.min(100, Math.round((s.idle_seconds / active.inactivity_timeout_seconds) * 100));
+            return `
+            <tr>
+                <td><b>${s.user}</b><div class="mono" style="color:var(--text-tertiary);">${s.session_id.substring(0,12)}…</div></td>
+                <td class="mono">${s.ip || '—'}</td>
+                <td>${fmtLocation(s)}<div class="mono" style="color:var(--text-tertiary);">${s.isp || ''}</div></td>
+                <td>${s.started_at_cst}</td>
+                <td>${s.last_activity_cst}<div style="margin-top:4px;" title="${idlePct}% of inactivity window used"><div class="idle-bar"><div style="width:${idlePct}%"></div></div></div></td>
+                <td class="num">${fmtIdle(s.idle_seconds)}</td>
+                <td class="num">${fmtIdle(s.expires_in_seconds)}</td>
+                <td title="${s.user_agent || ''}">${trim(s.user_agent, 36)}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="8" style="color:var(--text-tertiary);">No active sessions.</td></tr>';
+
+        const evRows = (events.events || []).slice(0, 100).map(e => `
+            <tr>
+                <td>${e.ts_cst}</td>
+                <td>${pillEvent(e.event)}</td>
+                <td><b>${e.user || '—'}</b></td>
+                <td class="mono">${e.path || ''}</td>
+                <td class="mono">${e.ip || '—'}</td>
+                <td>${[e.city, e.country].filter(Boolean).join(', ') || '—'}</td>
+                <td title="${e.user_agent || ''}">${trim(e.user_agent, 30)}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="7" style="color:var(--text-tertiary);">No events yet.</td></tr>';
+
+        document.getElementById('uaContent').innerHTML = `
+            <div class="ua-banner">
+                <b>Server time (CST):</b> ${summary.now_cst}
+                &nbsp;·&nbsp; <b>Window:</b> last ${summary.window_days} days
+                &nbsp;·&nbsp; <b>Inactivity timeout:</b> ${active.inactivity_timeout_seconds / 60} min
+                &nbsp;·&nbsp; <b>Geolocation:</b> ip-api.com (cached 24h)
+            </div>
+
+            <div class="ua-grid">
+                <div class="ua-kpi"><div class="lbl">Active Sessions</div><div class="val">${t.active_sessions || 0}</div><div class="sub">last activity within 10 min</div></div>
+                <div class="ua-kpi"><div class="lbl">Logins (${UA_DAYS}d)</div><div class="val">${t.logins || 0}</div></div>
+                <div class="ua-kpi"><div class="lbl">Page Views (${UA_DAYS}d)</div><div class="val">${t.page_views || 0}</div></div>
+                <div class="ua-kpi"><div class="lbl">Unique Users (${UA_DAYS}d)</div><div class="val">${t.unique_users || 0}</div></div>
+                <div class="ua-kpi"><div class="lbl">Total Events (${UA_DAYS}d)</div><div class="val">${t.events || 0}</div></div>
+            </div>
+
+            <div class="ua-card">
+                <h2>Active Sessions</h2>
+                <div class="sub">Sessions whose last activity is within the 10-minute window.</div>
+                <table class="ua-table">
+                    <thead><tr>
+                        <th>User</th><th>IP</th><th>Location / ISP</th>
+                        <th>Started (CST)</th><th>Last activity (CST)</th>
+                        <th>Idle</th><th>Expires in</th><th>User-Agent</th>
+                    </tr></thead>
+                    <tbody>${sessRows}</tbody>
+                </table>
+            </div>
+
+            <div class="two-col">
+                <div class="ua-card">
+                    <h2>Activity by User</h2>
+                    <div class="sub">Logins, page views, last-seen location.</div>
+                    <table class="ua-table">
+                        <thead><tr>
+                            <th>User</th><th>Logins</th><th>Page Views</th>
+                            <th>Last Seen (CST)</th><th>Last IP</th><th>Last Location</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+
+                <div class="ua-card">
+                    <h2>Top Pages</h2>
+                    <div class="sub">Most-viewed paths in the window.</div>
+                    <table class="ua-table">
+                        <thead><tr><th>Path</th><th>Views</th></tr></thead>
+                        <tbody>${topPages}</tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="ua-card">
+                    <h2>Recent Events</h2>
+                    <div class="ua-controls">
+                        <label style="font-size:11px; color:var(--text-tertiary);">Window:</label>
+                        <select id="uaDays">
+                            <option value="1">1 day</option>
+                            <option value="7" selected>7 days</option>
+                            <option value="30">30 days</option>
+                            <option value="90">90 days</option>
+                        </select>
+                        <button id="uaReload">Refresh</button>
+                    </div>
+                    <table class="ua-table">
+                        <thead><tr>
+                            <th>Time (CST)</th><th>Event</th><th>User</th>
+                            <th>Path</th><th>IP</th><th>Location</th><th>User-Agent</th>
+                        </tr></thead>
+                        <tbody>${evRows}</tbody>
+                    </table>
+                </div>
+
+                <div class="ua-card">
+                    <h2>By Country</h2>
+                    <div class="sub">Distinct event counts. Private/loopback IPs not resolved.</div>
+                    <table class="ua-table">
+                        <thead><tr><th>Country</th><th>Events</th></tr></thead>
+                        <tbody>${countries}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        const sel = document.getElementById('uaDays');
+        if (sel) {
+            sel.value = String(UA_DAYS);
+            sel.addEventListener('change', () => { UA_DAYS = parseInt(sel.value, 10); loadAll(); });
+        }
+        const rb = document.getElementById('uaReload');
+        if (rb) rb.addEventListener('click', loadAll);
+    }
+
+    initPage('/analytics-usage');
+    loadAll();
+    // Auto-refresh every 20s for active sessions feel
+    setInterval(loadAll, 20000);
+    </script>
+</body>
+</html>

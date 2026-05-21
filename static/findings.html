@@ -4,6 +4,62 @@
     <meta charset="UTF-8">
     <title>Findings — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .pri-pill { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+        .pri-P0 { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .pri-P1 { background: var(--high-bg);     color: var(--high);     border: 1px solid var(--high-border); }
+        .pri-P2 { background: var(--medium-bg);   color: var(--medium);   border: 1px solid var(--medium-border); }
+        .pri-P3 { background: var(--low-bg);      color: var(--low);      border: 1px solid var(--low-border); }
+
+        .status-pill {
+            font-size: 10px; padding: 2px 6px; border-radius: 4px;
+            text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em;
+        }
+        .status-OPEN          { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .status-IN_PROGRESS   { background: var(--high-bg);     color: var(--high);     border: 1px solid var(--high-border); }
+        .status-RISK_ACCEPTED { background: var(--medium-bg);   color: var(--medium);   border: 1px solid var(--medium-border); }
+        .status-REMEDIATED    { background: var(--info-bg);     color: var(--accent);   border: 1px solid rgba(99,102,241,0.3); }
+        .status-VERIFIED      { background: var(--pass-bg);     color: var(--pass);     border: 1px solid var(--pass-border); }
+        .status-CLOSED        { background: rgba(149,159,178,0.08); color: var(--text-secondary); border: 1px solid var(--border-strong); }
+
+        .impact-pill {
+            font-size: 10px; padding: 2px 6px; border-radius: 999px;
+            text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em;
+        }
+        .impact-BLOCK_PRODUCTION { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .impact-BLOCK_PILOT      { background: var(--high-bg);     color: var(--high);     border: 1px solid var(--high-border); }
+        .impact-WARNING          { background: var(--medium-bg);   color: var(--medium);   border: 1px solid var(--medium-border); }
+        .impact-NO_IMPACT        { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
+
+        .find-row {
+            display: grid;
+            grid-template-columns: 70px 50px 1fr 130px 110px 90px 120px 110px 120px 70px;
+            gap: 0.5rem; align-items: center;
+            padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border);
+            font-size: 12px; cursor: pointer;
+        }
+        .find-row:hover { background: var(--bg-card-hover); }
+        .find-row.head { background: var(--bg-elevated); font-size: 10px; text-transform: uppercase; color: var(--text-secondary); cursor: default; font-weight: 600; }
+        .sla-pill { font-size: 11px; padding: 1px 5px; border-radius: 4px; }
+        .sla-pill.ok { color: var(--text-secondary); }
+        .sla-pill.due { background: var(--medium-bg); color: var(--medium); }
+        .sla-pill.breach { background: var(--critical-bg); color: var(--critical); }
+
+        .drawer-row { display: grid; grid-template-columns: 140px 1fr; gap: 0.5rem; padding: 4px 0; font-size: 12px; }
+        .drawer-row dt { color: var(--text-tertiary); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .timeline-item {
+            display: grid; grid-template-columns: 24px 1fr;
+            gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed var(--border);
+            font-size: 12px;
+        }
+        .timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 6px; }
+        .timeline-item:last-child { border-bottom: none; }
+
+        .action-btn-row { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1200; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 8px; padding: 1.25rem; width: 520px; max-width: 90vw; }
+    </style>
 </head>
 <body>
     <div id="topbar"></div>
@@ -11,61 +67,42 @@
     <div class="page">
         <div class="page-header">
             <div>
-                <div class="page-title">Security & Compliance Findings</div>
-                <div class="page-subtitle">All open and remediated AI risk findings across the enterprise</div>
+                <div class="page-title">Findings &amp; Remediation</div>
+                <div class="page-subtitle">Each finding maps to ≥1 control, ≥1 framework, and ≥1 release gate where relevant</div>
             </div>
             <div class="page-actions">
-                <button class="btn btn-sm">Export</button>
-                <button class="btn btn-sm btn-primary">+ New Finding</button>
+                <select class="filter-select" id="scopeSelect">
+                    <option value="ALL">All AI Systems</option>
+                </select>
+                <select class="filter-select" id="statusFilter">
+                    <option value="">All Statuses</option>
+                </select>
+                <select class="filter-select" id="prioFilter">
+                    <option value="">All Priorities</option>
+                    <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
+                </select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
+                <button class="btn btn-sm" id="summarizeFindingBtn" title="Route through the Assurance Model with sanitized metadata only">Summarize top finding</button>
             </div>
         </div>
 
-        <div class="kpi-row" style="grid-template-columns: repeat(5, 1fr);" id="findingsKpi"></div>
+        <div class="kpi-row" id="kpis"></div>
 
-        <div class="filter-bar">
-            <input type="text" class="filter-input" placeholder="Search…" id="searchInput">
-            <select class="filter-select" id="severityFilter">
-                <option value="">All severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
-            </select>
-            <select class="filter-select" id="statusFilter">
-                <option value="">All statuses</option>
-                <option value="OPEN">Open</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RISK_ACCEPTED">Risk Accepted</option>
-                <option value="REMEDIATED">Remediated</option>
-                <option value="VERIFIED">Verified</option>
-            </select>
-            <select class="filter-select" id="systemFilter">
-                <option value="">All systems</option>
-            </select>
-        </div>
+        <div id="assistResp"></div>
 
         <div class="card" style="padding: 0; overflow: hidden;">
-            <table class="data-table" id="findingsTable">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Severity</th>
-                        <th>Title</th>
-                        <th>AI System</th>
-                        <th>Framework</th>
-                        <th>Owner</th>
-                        <th>SLA</th>
-                        <th>Status</th>
-                        <th>Release Impact</th>
-                    </tr>
-                </thead>
-                <tbody><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
-            </table>
+            <div class="find-row head">
+                <div>ID</div><div>Pri</div><div>Title / Asset</div><div>AI System</div>
+                <div>Control</div><div>Frameworks</div><div>Owner</div>
+                <div>SLA</div><div>Status / Impact</div><div>Evidence</div>
+            </div>
+            <div id="findings"></div>
         </div>
     </div>
 
+    <!-- Detail drawer -->
     <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
-    <div class="drawer" id="drawer">
+    <div class="drawer" id="drawer" style="width: 680px;">
         <div class="drawer-header">
             <div class="drawer-title" id="drawerTitle">Finding</div>
             <button class="drawer-close" onclick="closeDrawer()">×</button>
@@ -73,152 +110,367 @@
         <div class="drawer-body" id="drawerBody"></div>
     </div>
 
+    <!-- Generic action modal -->
+    <div class="modal-overlay" id="actionModal">
+        <div class="modal">
+            <h3 id="actionTitle" style="margin: 0 0 0.5rem 0;">Action</h3>
+            <div class="text-xs text-secondary mb-3" id="actionSub"></div>
+            <div id="actionForm"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                <button class="btn btn-sm" onclick="closeActionModal()">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="actionSubmit">Submit</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/findings');
-        let allFindings = [];
-        let allSystems = [];
+    initPage('/findings');
 
-        async function load() {
-            const [fr, sr] = await Promise.all([
-                fetch('/api/grc/findings'),
-                fetch('/api/grc/ai-systems'),
-            ]);
-            const fd = await fr.json();
-            const sd = await sr.json();
-            allFindings = fd.findings;
-            allSystems = sd.systems;
+    const STATE = { scope: 'ALL', status: '', priority: '' };
+    const STATUS_VALUES = ['OPEN','IN_PROGRESS','RISK_ACCEPTED','REMEDIATED','VERIFIED','CLOSED'];
+    let FINDINGS = [];
+    let CURRENT_DRAWER = null;
+    let CURRENT_ACTION = null;
 
-            const sel = document.getElementById('systemFilter');
-            allSystems.forEach(s => {
-                const o = document.createElement('option');
-                o.value = s.id;
-                o.textContent = s.name;
-                sel.appendChild(o);
-            });
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-            renderKpis();
-            render();
-
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('id')) openDrawer(params.get('id'));
-        }
-
-        function renderKpis() {
-            const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-            const open = allFindings.filter(f => f.status === 'OPEN' || f.status === 'IN_PROGRESS');
-            open.forEach(f => counts[f.severity]++);
-            const breached = open.filter(f => f.sla_remaining_hours < 0).length;
-
-            document.getElementById('findingsKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${counts.CRITICAL}</div><div class="kpi-trend">P0 — immediate</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">High</div></div><div class="kpi-value high">${counts.HIGH}</div><div class="kpi-trend">P1 — 7-day SLA</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◆</div><div class="kpi-label">Medium</div></div><div class="kpi-value">${counts.MEDIUM}</div><div class="kpi-trend">30-day SLA</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">◇</div><div class="kpi-label">Low</div></div><div class="kpi-value">${counts.LOW}</div><div class="kpi-trend">90-day SLA</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⏱</div><div class="kpi-label">SLA Breached</div></div><div class="kpi-value critical">${breached}</div><div class="kpi-trend">past due</div></div>
-            `;
-        }
-
-        function render() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
-            const sev = document.getElementById('severityFilter').value;
-            const status = document.getElementById('statusFilter').value;
-            const sys = document.getElementById('systemFilter').value;
-
-            const filtered = allFindings.filter(f =>
-                (!search || f.title.toLowerCase().includes(search) || f.id.toLowerCase().includes(search)) &&
-                (!sev || f.severity === sev) &&
-                (!status || f.status === status) &&
-                (!sys || f.system_id === sys)
-            );
-
-            const tbody = document.querySelector('#findingsTable tbody');
-            if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No findings match filters</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = filtered.map(f => {
-                const impactCls = f.release_impact === 'BLOCKS_RELEASE' ? 'badge-critical' : f.release_impact === 'CONDITIONAL' ? 'badge-medium' : 'badge-neutral';
-                return `
-                <tr onclick="openDrawer('${f.id}')">
-                    <td class="font-mono">${f.id}</td>
-                    <td><span class="severity-indicator ${f.severity.toLowerCase()}"></span>${severityBadge(f.severity)}</td>
-                    <td>
-                        <div class="cell-primary">${f.title}</div>
-                        <div class="cell-secondary">${f.description.substring(0, 80)}…</div>
-                    </td>
-                    <td class="text-sm text-secondary">${f.system_name}</td>
-                    <td>${frameworkBadges(f.framework_mapping.slice(0, 2))}${f.framework_mapping.length > 2 ? `<span class="text-xs text-tertiary">+${f.framework_mapping.length - 2}</span>` : ''}</td>
-                    <td class="text-sm">${f.owner}</td>
-                    <td>${slaCell(f.sla_remaining_hours)}</td>
-                    <td>${statusBadge(f.status)}</td>
-                    <td><span class="badge ${impactCls}">${f.release_impact.replace(/_/g, ' ')}</span></td>
-                </tr>
-                `;
-            }).join('');
-        }
-
-        async function openDrawer(findingId) {
-            const r = await fetch(`/api/grc/findings/${findingId}`);
-            const f = await r.json();
-            document.getElementById('drawerTitle').textContent = f.id;
-
-            document.getElementById('drawerBody').innerHTML = `
-                <div class="drawer-section">
-                    <div class="flex gap-2 mb-3">
-                        ${severityBadge(f.severity)}
-                        ${statusBadge(f.status)}
-                    </div>
-                    <div class="text-sm font-bold mb-2">${f.title}</div>
-                    <div class="text-sm text-secondary">${f.description}</div>
-                </div>
-
-                <div class="drawer-section">
-                    <div class="drawer-section-title">Details</div>
-                    <dl class="def-list">
-                        <dt>System</dt><dd>${f.system_name}</dd>
-                        <dt>Owner</dt><dd>${f.owner} · ${f.owner_email}</dd>
-                        <dt>Discovered</dt><dd>${f.discovered}</dd>
-                        <dt>SLA</dt><dd>${slaCell(f.sla_remaining_hours)} (${f.sla_days}-day SLA)</dd>
-                        <dt>Release Impact</dt><dd>${f.release_impact.replace(/_/g, ' ')}</dd>
-                    </dl>
-                </div>
-
-                <div class="drawer-section">
-                    <div class="drawer-section-title">Framework Mappings</div>
-                    <div>${frameworkBadges(f.framework_mapping)}</div>
-                </div>
-
-                <div class="drawer-section">
-                    <div class="drawer-section-title">Linked Evidence</div>
-                    <div class="flex gap-1" style="flex-wrap: wrap;">
-                        ${(f.evidence_ids || []).map(e => `<a href="/evidence?id=${e}" class="framework-badge" style="cursor: pointer;">${e}</a>`).join('')}
-                    </div>
-                </div>
-
-                <div class="drawer-section">
-                    <button class="btn btn-primary btn-sm">Assign Owner</button>
-                    <button class="btn btn-sm">Mark Remediated</button>
-                    <button class="btn btn-sm">Risk Accept</button>
-                </div>
-            `;
-
-            document.getElementById('drawerOverlay').classList.add('open');
-            document.getElementById('drawer').classList.add('open');
-        }
-
-        function closeDrawer() {
-            document.getElementById('drawerOverlay').classList.remove('open');
-            document.getElementById('drawer').classList.remove('open');
-            window.history.replaceState({}, '', '/findings');
-        }
-
-        ['searchInput', 'severityFilter', 'statusFilter', 'systemFilter'].forEach(id => {
-            document.getElementById(id).addEventListener('input', render);
+    function buildStatusFilter() {
+        const sel = document.getElementById('statusFilter');
+        STATUS_VALUES.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s; o.textContent = s.replace(/_/g, ' ');
+            sel.appendChild(o);
         });
+    }
 
-        load();
+    async function loadScope() {
+        const r = await fetch('/api/grc/ai-systems');
+        const d = await r.json();
+        const sel = document.getElementById('scopeSelect');
+        d.systems.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id; o.textContent = s.name; sel.appendChild(o);
+        });
+    }
+
+    async function loadFindings() {
+        const r = await fetch(`/api/grc/findings/v2/list?scope=${encodeURIComponent(STATE.scope)}`);
+        const d = await r.json();
+        FINDINGS = d.findings;
+        renderKpis();
+        render();
+    }
+
+    function renderKpis() {
+        const p0 = FINDINGS.filter(f => f.priority === 'P0' && f.status !== 'CLOSED' && f.status !== 'VERIFIED' && f.status !== 'REMEDIATED').length;
+        const open = FINDINGS.filter(f => f.status === 'OPEN' || f.status === 'IN_PROGRESS').length;
+        const breached = FINDINGS.filter(f => f.sla_breached).length;
+        const blockProd = FINDINGS.filter(f => f.release_impact === 'BLOCK_PRODUCTION' && (f.status === 'OPEN' || f.status === 'IN_PROGRESS')).length;
+        document.getElementById('kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Open P0</div></div><div class="kpi-value critical">${p0}</div><div class="kpi-trend">block production</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">Open / In Progress</div></div><div class="kpi-value">${open}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">⏱</div><div class="kpi-label">SLA Breached</div></div><div class="kpi-value">${breached}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Block Production</div></div><div class="kpi-value critical">${blockProd}</div></div>
+        `;
+    }
+
+    function filtered() {
+        return FINDINGS.filter(f =>
+            (!STATE.status   || f.status === STATE.status) &&
+            (!STATE.priority || f.priority === STATE.priority)
+        );
+    }
+
+    function slaPill(f) {
+        const d = new Date(f.sla_due_date + 'T00:00:00Z');
+        const today = new Date(); today.setUTCHours(0,0,0,0);
+        const days = Math.round((d - today) / (1000*60*60*24));
+        if (f.sla_breached) return `<span class="sla-pill breach">${days}d overdue</span>`;
+        if (days <= 3) return `<span class="sla-pill due">${days}d</span>`;
+        return `<span class="sla-pill ok">${days}d</span>`;
+    }
+
+    function render() {
+        const rows = filtered();
+        document.getElementById('findings').innerHTML = rows.length === 0
+            ? '<div class="empty-state" style="padding: 1.5rem;">No findings match filters.</div>'
+            : rows.map(f => `
+                <div class="find-row" onclick="openDrawer('${f.id}')">
+                    <div class="font-mono font-bold">${esc(f.id)}</div>
+                    <div><span class="pri-pill pri-${f.priority}">${f.priority}</span></div>
+                    <div>
+                        <div class="text-sm font-bold">${esc(f.title)}</div>
+                        <div class="text-xs text-tertiary">${esc(f.asset || '—')}</div>
+                    </div>
+                    <div class="text-xs">${esc(f.ai_system_name)}</div>
+                    <div><span class="framework-badge">${esc(f.control_id || '—')}</span></div>
+                    <div class="text-xs">${f.mapped_frameworks.slice(0, 2).map(x => x.replace(/_/g, ' ').replace(/TOP10/, '')).join(' · ')}${f.mapped_frameworks.length > 2 ? ' +' + (f.mapped_frameworks.length - 2) : ''}</div>
+                    <div class="text-xs">${esc(f.owner)}</div>
+                    <div>${slaPill(f)}</div>
+                    <div>
+                        <span class="status-pill status-${f.status}">${f.status.replace(/_/g, ' ')}</span><br>
+                        <span class="impact-pill impact-${f.release_impact}" style="margin-top: 2px; display: inline-block;">${f.release_impact.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div class="text-xs text-tertiary text-right">${f.evidence_ids.length}</div>
+                </div>
+            `).join('');
+    }
+
+    // === Detail drawer ===
+    async function openDrawer(id) {
+        const r = await fetch('/api/grc/findings/v2/' + encodeURIComponent(id));
+        const f = await r.json();
+        if (!r.ok) return;
+        CURRENT_DRAWER = f;
+        document.getElementById('drawerTitle').textContent = f.id + ' — ' + f.title;
+        document.getElementById('drawerBody').innerHTML = renderDrawer(f);
+        document.getElementById('drawerOverlay').classList.add('open');
+        document.getElementById('drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+        CURRENT_DRAWER = null;
+        document.getElementById('drawerOverlay').classList.remove('open');
+        document.getElementById('drawer').classList.remove('open');
+    }
+
+    function renderDrawer(f) {
+        return `
+            <div class="drawer-section">
+                <div class="flex gap-2 mb-3 items-center">
+                    <span class="pri-pill pri-${f.priority}">${f.priority}</span>
+                    <span class="status-pill status-${f.status}">${f.status.replace(/_/g,' ')}</span>
+                    <span class="impact-pill impact-${f.release_impact}">${f.release_impact.replace(/_/g,' ')}</span>
+                </div>
+                <div class="text-sm">${esc(f.description)}</div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Details</div>
+                <div class="drawer-row"><dt>System</dt><dd>${esc(f.ai_system_name)} (${esc(f.ai_system_id)})</dd></div>
+                <div class="drawer-row"><dt>Asset</dt><dd>${esc(f.asset || '—')}</dd></div>
+                <div class="drawer-row"><dt>Owner</dt><dd>${esc(f.owner)} ${f.owner_email ? '<span class="text-xs text-tertiary"> · ' + esc(f.owner_email) + '</span>' : ''}</dd></div>
+                <div class="drawer-row"><dt>Discovered</dt><dd>${esc(f.discovered)}</dd></div>
+                <div class="drawer-row"><dt>SLA Due</dt><dd>${esc(f.sla_due_date)} ${slaPill(f)}</dd></div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Mapped Controls</div>
+                ${f.mapped_controls.length === 0 ? '<div class="text-xs text-tertiary">—</div>' : f.mapped_controls.map(c => `
+                    <div class="drawer-row">
+                        <dt>${esc(c.control_id)}</dt>
+                        <dd>${esc(c.title)} <span class="framework-badge">${c.priority}</span></dd>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Mapped Frameworks</div>
+                <div class="flex gap-1" style="flex-wrap: wrap;">
+                    ${f.framework_mappings.map(fm => `<span class="framework-badge">${esc(fm.framework.replace(/_/g, ' '))} · ${esc(fm.clause)}</span>`).join('')}
+                </div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Release Gates Affected</div>
+                <div class="flex gap-1" style="flex-wrap: wrap;">
+                    ${f.release_gates_affected.length === 0 ? '<span class="text-xs text-tertiary">No release gate references this control.</span>' :
+                      f.release_gates_affected.map(g => `<a href="/release-gates" class="framework-badge" style="cursor: pointer;">${esc(g)}</a>`).join('')}
+                </div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Evidence (${f.evidence_ids.length})</div>
+                <div class="flex gap-1" style="flex-wrap: wrap;">
+                    ${f.evidence_ids.length === 0 ? '<span class="text-xs text-tertiary">No evidence attached.</span>' :
+                      f.evidence_ids.map(e => `<a href="/evidence" class="framework-badge" style="cursor: pointer;">${esc(e)}</a>`).join('')}
+                </div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Remediation Guidance</div>
+                <div class="text-sm">${esc(f.remediation_guidance || '—')}</div>
+            </div>
+
+            ${f.exception ? `
+            <div class="drawer-section" style="background: var(--medium-bg); padding: 0.625rem 0.75rem; border-radius: 6px; border: 1px solid var(--medium-border);">
+                <div class="drawer-section-title">Active Exception</div>
+                <div class="text-sm">${esc(f.exception.risk_acceptor)} (${esc(f.exception.role)}) · expires ${esc(f.exception.expires_at)}</div>
+                ${f.exception.compensating_controls && f.exception.compensating_controls.length ? `
+                    <ul class="text-xs text-secondary" style="margin: 4px 0 0 1rem;">
+                        ${f.exception.compensating_controls.map(c => `<li>${esc(c)}</li>`).join('')}
+                    </ul>` : ''}
+            </div>` : ''}
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Actions</div>
+                <div class="action-btn-row">
+                    <button class="btn btn-sm" onclick="openAction('ASSIGN_OWNER')">Assign Owner</button>
+                    <button class="btn btn-sm" onclick="openAction('CHANGE_STATUS')">Change Status</button>
+                    <button class="btn btn-sm" onclick="openAction('ATTACH_EVIDENCE')">Attach Evidence</button>
+                    <button class="btn btn-sm" onclick="openAction('RISK_ACCEPT')">Approve Exception</button>
+                    <button class="btn btn-sm" onclick="openAction('MARK_REMEDIATED')">Mark Remediated</button>
+                    <button class="btn btn-sm btn-primary" onclick="openAction('VERIFY_REMEDIATION')">Verify Remediation</button>
+                    <button class="btn btn-sm" onclick="openAction('COMMENT')">Comment</button>
+                </div>
+            </div>
+
+            <div class="drawer-section">
+                <div class="drawer-section-title">Timeline (${f.timeline.length})</div>
+                ${f.timeline.length === 0 ? '<div class="text-xs text-tertiary">No events yet.</div>' :
+                  f.timeline.slice().reverse().map(e => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <div>
+                            <div class="text-xs"><b>${esc(e.event_type.replace(/_/g, ' '))}</b> by ${esc(e.actor)} · ${esc(e.ts.slice(0, 19))}</div>
+                            ${e.note ? `<div class="text-sm" style="margin-top: 2px;">${esc(e.note)}</div>` : ''}
+                            ${e.data && Object.keys(e.data).length ? `<div class="text-xs text-tertiary" style="margin-top: 2px;">${esc(JSON.stringify(e.data))}</div>` : ''}
+                        </div>
+                    </div>
+                  `).join('')}
+            </div>
+        `;
+    }
+
+    // === Action modal ===
+    const ACTION_FORMS = {
+        ASSIGN_OWNER: {
+            title: 'Assign Owner',
+            fields: [
+                { key: 'owner',       label: 'Owner Name',  type: 'text', required: true },
+                { key: 'owner_email', label: 'Owner Email', type: 'text' },
+            ],
+            actor_required: true,
+        },
+        CHANGE_STATUS: {
+            title: 'Change Status',
+            fields: [
+                { key: 'new_status', label: 'New Status', type: 'select', options: STATUS_VALUES, required: true },
+            ],
+            actor_required: true,
+        },
+        ATTACH_EVIDENCE: {
+            title: 'Attach Evidence',
+            fields: [
+                { key: 'evidence_ids_csv', label: 'Evidence IDs (comma-separated)', type: 'text', required: true },
+            ],
+            actor_required: true,
+        },
+        RISK_ACCEPT: {
+            title: 'Approve Risk-Accept Exception',
+            fields: [
+                { key: 'risk_acceptor', label: 'Risk Acceptor', type: 'text', required: true },
+                { key: 'role',          label: 'Role', type: 'select', options: ['AI_GOVERNANCE','CRO','CISO','MODEL_RISK','APPSEC','INTERNAL_AUDIT','BUSINESS_OWNER'], required: true },
+                { key: 'expires_at',    label: 'Expires (max 90 days)', type: 'date', required: true },
+                { key: 'compensating_controls_csv', label: 'Compensating Controls (comma-separated)', type: 'text' },
+            ],
+            actor_required: true,
+        },
+        MARK_REMEDIATED:    { title: 'Mark Remediated', fields: [], actor_required: true },
+        VERIFY_REMEDIATION: { title: 'Verify Remediation', fields: [], actor_required: true },
+        COMMENT:            { title: 'Add Comment', fields: [{ key: 'note', label: 'Comment', type: 'textarea', required: true }], actor_required: true },
+    };
+
+    function openAction(type) {
+        if (!CURRENT_DRAWER) return;
+        const def = ACTION_FORMS[type];
+        CURRENT_ACTION = type;
+        document.getElementById('actionTitle').textContent = def.title;
+        document.getElementById('actionSub').textContent = CURRENT_DRAWER.id + ' — ' + CURRENT_DRAWER.title;
+        let html = `
+            <div class="form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-field">
+                    <label class="form-label">Actor (your name)</label>
+                    <input class="form-input" id="f-actor" placeholder="e.g. sarah.mitchell">
+                </div>`;
+        def.fields.forEach(fld => {
+            if (fld.type === 'select') {
+                html += `<div class="form-field"><label class="form-label">${fld.label}${fld.required ? '<span class="req">*</span>':''}</label>
+                    <select class="form-select" id="f-${fld.key}">
+                        ${fld.options.map(o => `<option value="${o}">${o.replace(/_/g, ' ')}</option>`).join('')}
+                    </select></div>`;
+            } else if (fld.type === 'textarea') {
+                html += `<div class="form-field"><label class="form-label">${fld.label}${fld.required ? '<span class="req">*</span>':''}</label>
+                    <textarea class="form-textarea" id="f-${fld.key}"></textarea></div>`;
+            } else {
+                html += `<div class="form-field"><label class="form-label">${fld.label}${fld.required ? '<span class="req">*</span>':''}</label>
+                    <input class="form-input" type="${fld.type}" id="f-${fld.key}"></div>`;
+            }
+        });
+        html += '</div>';
+        document.getElementById('actionForm').innerHTML = html;
+        document.getElementById('actionModal').classList.add('open');
+    }
+
+    function closeActionModal() {
+        document.getElementById('actionModal').classList.remove('open');
+        CURRENT_ACTION = null;
+    }
+
+    document.getElementById('actionSubmit').addEventListener('click', async () => {
+        if (!CURRENT_DRAWER || !CURRENT_ACTION) return;
+        const def = ACTION_FORMS[CURRENT_ACTION];
+        const actor = document.getElementById('f-actor').value.trim();
+        if (!actor) { alert('Actor required.'); return; }
+        const data = {};
+        let note = null;
+        for (const fld of def.fields) {
+            const el = document.getElementById('f-' + fld.key);
+            const val = el.value.trim();
+            if (fld.required && !val) { alert(fld.label + ' is required.'); return; }
+            if (fld.key === 'note') note = val;
+            else if (fld.key.endsWith('_csv')) {
+                const key = fld.key.replace(/_csv$/, '');
+                data[key] = val ? val.split(',').map(s => s.trim()).filter(Boolean) : [];
+            } else if (val) {
+                data[fld.key] = val;
+            }
+        }
+        const body = { event_type: CURRENT_ACTION, actor, data, note };
+        const r = await fetch(`/api/grc/findings/v2/${encodeURIComponent(CURRENT_DRAWER.id)}/event`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (!r.ok) { alert('Failed: ' + (d.detail || JSON.stringify(d))); return; }
+        closeActionModal();
+        // Reload detail + list
+        await openDrawer(CURRENT_DRAWER.id);
+        await loadFindings();
+    });
+
+    document.getElementById('scopeSelect').addEventListener('change', e => { STATE.scope = e.target.value; loadFindings(); });
+    document.getElementById('statusFilter').addEventListener('change', e => { STATE.status = e.target.value; render(); });
+    document.getElementById('prioFilter').addEventListener('change', e => { STATE.priority = e.target.value; render(); });
+    document.getElementById('refreshBtn').addEventListener('click', loadFindings);
+    document.getElementById('summarizeFindingBtn').addEventListener('click', async () => {
+        // Pick the highest-severity open finding in the current view; route it through the policy engine.
+        try {
+            const r = await fetch('/api/grc/findings/v2/list');
+            const d = await r.json();
+            const open = (d.findings || []).filter(f => f.status === 'OPEN' || f.status === 'IN_PROGRESS');
+            const rank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+            open.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+            const top = open[0];
+            if (!top) return alert('No open findings to summarize.');
+            await callAssuranceModel('summarize-finding', {
+                ai_system_id: top.ai_system_id,
+                data_classes: ['sanitized_eval_trace', 'redacted_evidence'],
+                payload: { finding_id: top.id, title: top.title, severity: top.severity, control_id: top.control_id },
+                user: 'governance-ui',
+            }, 'assistResp');
+        } catch (e) { alert('Summarize failed: ' + e); }
+    });
+
+    window.openDrawer = openDrawer;
+    window.closeDrawer = closeDrawer;
+    window.openAction = openAction;
+    window.closeActionModal = closeActionModal;
+
+    buildStatusFilter();
+    loadScope().then(loadFindings);
     </script>
 </body>
 </html>

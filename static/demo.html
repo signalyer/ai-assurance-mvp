@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Guided Demo — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .demo-grid {
+            display: grid; grid-template-columns: 320px 1fr;
+            gap: 1.25rem; align-items: start;
+        }
+        .stepper { background: var(--bg-card); border: 1px solid var(--border);
+                   border-radius: 8px; padding: 0.75rem; position: sticky; top: 1rem; }
+        .stepper-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+                         color: var(--text-tertiary); margin-bottom: 0.5rem; padding: 0 0.25rem; }
+        .step-item { display: flex; gap: 0.5rem; align-items: flex-start;
+                     padding: 0.5rem 0.5rem; border-radius: 6px; cursor: pointer;
+                     border-left: 2px solid transparent; }
+        .step-item:hover { background: var(--bg-hover); }
+        .step-item.active { background: var(--bg-hover); border-left-color: var(--accent); }
+        .step-item.done .step-num { background: var(--green); color: #0a0d18; }
+        .step-item .step-num {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: var(--bg-deep); color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; flex-shrink: 0;
+        }
+        .step-item .step-label { font-size: 12px; line-height: 1.35; padding-top: 2px; }
+        .step-item.done .step-label { color: var(--text-secondary); }
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1.25rem;
+        }
+        .panel-head { display: flex; justify-content: space-between; align-items: center;
+                      margin-bottom: 0.5rem; gap: 1rem; }
+        .panel-head h2 { font-size: 17px; margin: 0; }
+        .panel-narration { color: var(--text-secondary); font-size: 13px; line-height: 1.55;
+                           margin-bottom: 1rem; }
+        .kv { display: grid; grid-template-columns: 200px 1fr; gap: 0.25rem 1rem; font-size: 13px; }
+        .kv .k { color: var(--text-tertiary); }
+        .kv .v { color: var(--text-primary); }
+        .result-block { background: var(--bg-deep); border: 1px solid var(--border);
+                        border-radius: 6px; padding: 0.875rem 1rem; margin-top: 0.875rem; }
+        .pill-list { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+        .pill { background: var(--bg-deep); border: 1px solid var(--border);
+                padding: 2px 8px; border-radius: 10px; font-size: 11px;
+                color: var(--text-secondary); }
+        .pill.ok { color: var(--green); border-color: rgba(74,222,128,0.3); }
+        .pill.fail { color: var(--red); border-color: rgba(248,113,113,0.3); }
+        .delta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; margin-top: 0.75rem; }
+        .delta-card { background: var(--bg-deep); border: 1px solid var(--border);
+                      border-radius: 6px; padding: 0.875rem; }
+        .delta-card.before { border-left: 3px solid var(--red); }
+        .delta-card.after { border-left: 3px solid var(--green); }
+        .delta-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+                             color: var(--text-tertiary); margin-bottom: 0.5rem; }
+        pre.json { background: var(--bg-deep); border: 1px solid var(--border);
+                   border-radius: 6px; padding: 0.75rem; font-size: 11px;
+                   max-height: 360px; overflow: auto; color: var(--text-secondary); }
+        .actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .hero-banner {
+            background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(56,189,248,0.08));
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;
+        }
+        .hero-banner h1 { font-size: 18px; margin: 0 0 0.25rem; }
+        .hero-banner p { color: var(--text-secondary); font-size: 13px; margin: 0; }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="hero-banner">
+            <h1>Guided Demo — Payments Exception Review Agent</h1>
+            <p>End-to-end walkthrough of the assurance lifecycle for a regulated FS agent on AWS Bedrock. Click each step to execute it live against the engine.</p>
+        </div>
+
+        <div class="page-header">
+            <div>
+                <div class="page-title">FS Demo Walkthrough</div>
+                <div class="page-subtitle" id="systemSubtitle">Loading…</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm" id="resetBtn">Reset Demo</button>
+                <button class="btn btn-sm btn-primary" id="runAllBtn">Run All Steps</button>
+            </div>
+        </div>
+
+        <div class="demo-grid">
+            <div class="stepper" id="stepper"></div>
+            <div id="panel"></div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/demo');
+
+    const STEPS = [
+        { n: 1,  label: "Submit AI system intake",
+                 narration: "An intake form captures the AI system: business owner, model, data classes, autonomy level, tools, RAG sources, AWS architecture, and regulatory exposure. The intake feeds every downstream stage." },
+        { n: 2,  label: "Classify inherent risk → HIGH",
+                 narration: "Deterministic 6-rule classifier evaluates the intake. Sensitive data + RAG + tools + FS regulatory exposure triggers HIGH. The rules and rationale are captured for audit." },
+        { n: 3,  label: "Apply required controls",
+                 narration: "The platform selects the P0/P1 controls applicable to this system from the 40-control library — Bedrock guardrails, tool authz, HITL, audit logging, PII isolation, etc. Each control is mapped to NIST AI RMF, NIST 600-1, OWASP LLM Top 10, OWASP Agentic Top 10, and the FS overlay." },
+        { n: 4,  label: "Run assessment (v1)",
+                 narration: "The Assessment Engine evaluates each control against current evidence, evals, findings, and runtime events. It produces an overall score, residual risk, framework coverage, and a release recommendation." },
+        { n: 5,  label: "Generate findings",
+                 narration: "Failed controls produce findings. The seed system has a CRITICAL prompt-injection bypass plus HIGH findings for cross-customer context bleed, unauthorized tool calls, and an unscanned RAG corpus." },
+        { n: 6,  label: "Run simulated evals",
+                 narration: "DeepEval, Garak, and PyRIT connectors run against the agent. The simulated runs produce normalized EvalResult / Finding / Evidence records, plus authoritative passing scores for the three release-gating eval types (after the demo's remediation)." },
+        { n: 7,  label: "Trigger release-gate failure",
+                 narration: "The Release Gate Engine evaluates 10 gates (RG-001..RG-010). PII leakage, prompt injection, tool authz, and evidence-completeness gates fail — production release is blocked." },
+        { n: 8,  label: "Release decision = HOLD",
+                 narration: "With an open CRITICAL finding, the engine returns R-Hold-P0-Open. The decision plus rule fired plus rationale are surfaced to the governance reviewer." },
+        { n: 9,  label: "Show remediation plan",
+                 narration: "Each open finding has an owner, SLA, and remediation step. The plan is what David Kumar's team executes before re-assessment." },
+        { n: 10, label: "Attach evidence",
+                 narration: "The reviewer attaches the now-available evidence: RAG_CONFIG manifest from the re-ingested corpus, fresh Macie scan, remediation-verification artifact, and CRO/CISO conditional approval record." },
+        { n: 11, label: "Mark findings remediated",
+                 narration: "The CRITICAL prompt-injection finding is CLOSED. The HIGH unauthorized-tool-call and RAG-quarantine findings are MARKED_REMEDIATED. The remaining HIGH findings stay open under HITL." },
+        { n: 12, label: "Re-run assessment (v2)",
+                 narration: "With the CRITICAL closed, evidence attached, and passing evals in place, the engine produces a new assessment. HITL on release_payment is still in force, so the engine applies R-Conditional-P1-with-HITL." },
+        { n: 13, label: "Decision = Conditional Pilot",
+                 narration: "The release decision flips HOLD → CONDITIONAL_PILOT with explicit conditions (continued HITL on high-risk actions, weekly eval re-runs). The before/after delta is what auditors and the CRO need to sign off." },
+    ];
+
+    let state = { completed_steps: [], v1_assessment: null, v2_assessment: null };
+    let currentStep = 1;
+    let lastResult = null;
+
+    async function loadState() {
+        const r = await fetch('/api/demo/state');
+        state = await r.json();
+        document.getElementById('systemSubtitle').textContent =
+            `${state.system_name} (${state.system_id}) — Live demo against the real assessment engine.`;
+        renderStepper();
+        renderPanel();
+    }
+
+    function renderStepper() {
+        const html = STEPS.map(s => {
+            const done = state.completed_steps.includes(s.n);
+            const active = s.n === currentStep;
+            const cls = [done ? 'done' : '', active ? 'active' : ''].filter(Boolean).join(' ');
+            return `
+                <div class="step-item ${cls}" data-step="${s.n}">
+                    <div class="step-num">${done ? '✓' : s.n}</div>
+                    <div class="step-label">${s.label}</div>
+                </div>
+            `;
+        }).join('');
+        const el = document.getElementById('stepper');
+        el.innerHTML = `<div class="stepper-title">13-step walkthrough</div>` + html;
+        el.querySelectorAll('.step-item').forEach(node => {
+            node.addEventListener('click', () => {
+                currentStep = Number(node.dataset.step);
+                lastResult = null;
+                renderStepper();
+                renderPanel();
+            });
+        });
+    }
+
+    function renderPanel() {
+        const s = STEPS.find(x => x.n === currentStep);
+        if (!s) return;
+        const done = state.completed_steps.includes(s.n);
+        const panel = document.getElementById('panel');
+        panel.innerHTML = `
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Step ${s.n}. ${s.label}</h2>
+                    <span class="badge ${done ? 'badge-pass' : 'badge-neutral'}">
+                        ${done ? 'Completed' : 'Pending'}
+                    </span>
+                </div>
+                <div class="panel-narration">${s.narration}</div>
+                <div class="actions">
+                    <button class="btn btn-sm btn-primary" id="executeBtn">
+                        ${done ? 'Re-Run Step' : 'Execute Step'}
+                    </button>
+                    <button class="btn btn-sm" id="openPageBtn" disabled>Open Linked Page</button>
+                </div>
+                <div id="resultArea"></div>
+            </div>
+        `;
+        document.getElementById('executeBtn').addEventListener('click', executeStep);
+        const openBtn = document.getElementById('openPageBtn');
+        if (lastResult && lastResult.deep_link) {
+            openBtn.disabled = false;
+            openBtn.addEventListener('click', () => { window.location.href = lastResult.deep_link; });
+        }
+        if (lastResult) renderResult(lastResult);
+    }
+
+    async function executeStep() {
+        const btn = document.getElementById('executeBtn');
+        btn.disabled = true;
+        btn.textContent = 'Running…';
+        try {
+            const r = await fetch(`/api/demo/step/${currentStep}`, { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) {
+                alert('Step failed: ' + (d.detail || JSON.stringify(d)));
+                return;
+            }
+            lastResult = d;
+            await loadState();
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function renderResult(d) {
+        const area = document.getElementById('resultArea');
+        if (!area) return;
+        let html = '<div class="result-block">';
+
+        if (d.step === 1 && d.system) {
+            const sys = d.system;
+            html += `
+                <div class="kv">
+                    <div class="k">System</div><div class="v">${sys.name}</div>
+                    <div class="k">Domain</div><div class="v">${sys.domain}</div>
+                    <div class="k">Model</div><div class="v">${sys.model_provider}</div>
+                    <div class="k">Autonomy</div><div class="v">${sys.autonomy_level}</div>
+                    <div class="k">User population</div><div class="v">${sys.user_population}</div>
+                    <div class="k">Data classes</div><div class="v"><div class="pill-list">${sys.data_classes.map(d => `<span class="pill">${d}</span>`).join('')}</div></div>
+                    <div class="k">Regulatory</div><div class="v"><div class="pill-list">${sys.regulatory_exposure.map(r => `<span class="pill">${r}</span>`).join('')}</div></div>
+                    <div class="k">AWS services</div><div class="v"><div class="pill-list">${sys.aws_services.map(a => `<span class="pill">${a}</span>`).join('')}</div></div>
+                    <div class="k">Tools</div><div class="v"><div class="pill-list">${sys.tools.map(t => `<span class="pill ${t.side_effect ? 'fail' : ''}">${t.name}${t.side_effect ? ' (side-effect)' : ''}</span>`).join('')}</div></div>
+                </div>`;
+        } else if (d.step === 2) {
+            html += `
+                <div class="kv">
+                    <div class="k">Inherent risk</div><div class="v"><span class="badge badge-critical">${d.risk_level}</span></div>
+                    <div class="k">Rules fired</div><div class="v"><div class="pill-list">${d.rules_fired.map(r => `<span class="pill">${r}</span>`).join('')}</div></div>
+                </div>
+                <ul style="margin-top:0.75rem;font-size:12px;color:var(--text-secondary);">
+                    ${d.rationale.map(r => `<li>${r}</li>`).join('')}
+                </ul>`;
+        } else if (d.step === 3) {
+            html += `
+                <div class="kv">
+                    <div class="k">Applicable controls</div><div class="v">${d.applicable_count}</div>
+                    <div class="k">Required (P0/P1)</div><div class="v">${d.required_count}</div>
+                </div>
+                <div style="margin-top:0.75rem; font-size:12px;">
+                    ${d.required.slice(0, 10).map(c => `
+                        <div style="display:flex;gap:0.5rem;padding:4px 0;border-bottom:1px dotted var(--border);">
+                            <span class="badge ${c.priority === 'P0' ? 'badge-critical' : 'badge-high'}">${c.priority}</span>
+                            <strong>${c.control_id}</strong>
+                            <span style="color:var(--text-secondary);">${c.title}</span>
+                            <span style="margin-left:auto;color:var(--text-tertiary);font-size:11px;">${c.frameworks.join(', ')}</span>
+                        </div>
+                    `).join('')}
+                    ${d.required.length > 10 ? `<div style="color:var(--text-tertiary);margin-top:0.5rem;">… +${d.required.length - 10} more</div>` : ''}
+                </div>`;
+        } else if (d.step === 4 || d.step === 12) {
+            html += `
+                <div class="kv">
+                    <div class="k">Overall score</div><div class="v">${d.overall_score} / 100</div>
+                    <div class="k">Residual risk</div><div class="v"><span class="badge ${d.residual_risk === 'LOW' ? 'badge-pass' : 'badge-' + d.residual_risk.toLowerCase()}">${d.residual_risk}</span></div>
+                    <div class="k">Release decision</div><div class="v">${decisionBadge(d.release_decision)}</div>
+                    <div class="k">Rule fired</div><div class="v" style="font-family:var(--font-mono);font-size:12px;">${d.rule_fired}</div>
+                    <div class="k">Evidence completeness</div><div class="v">${Math.round((d.evidence_completeness||0) * 100)}%</div>
+                    <div class="k">Failed controls</div><div class="v"><div class="pill-list">${(d.failed_controls||[]).map(f => `<span class="pill fail">${f}</span>`).join('') || '<span class="pill ok">none</span>'}</div></div>
+                </div>
+                <div style="margin-top:0.75rem; font-size:12px; color:var(--text-secondary);"><em>${d.rationale}</em></div>`;
+        } else if (d.step === 5) {
+            html += `
+                <div class="kv">
+                    <div class="k">Open CRITICAL</div><div class="v">${d.open_critical}</div>
+                    <div class="k">Open HIGH</div><div class="v">${d.open_high}</div>
+                    <div class="k">Open MEDIUM</div><div class="v">${d.open_medium}</div>
+                </div>
+                ${renderFindingList(d.findings.CRITICAL, 'CRITICAL')}
+                ${renderFindingList(d.findings.HIGH, 'HIGH')}
+                ${renderFindingList(d.findings.MEDIUM, 'MEDIUM')}
+            `;
+        } else if (d.step === 6) {
+            html += `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:0.5rem;">Connector runs:</div>
+                <div class="pill-list">${d.connector_runs.map(r => `<span class="pill ok">${r.connector}: ${r.evals}E / ${r.findings}F / ${r.evidence}Ev</span>`).join('')}</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:0.875rem;margin-bottom:0.5rem;">Authoritative evals written:</div>
+                <div class="pill-list">${d.authoritative_evals.map(e => `<span class="pill ok">${e.type}: ${e.score.toFixed(3)} (≥ ${e.threshold}) ${e.status}</span>`).join('')}</div>`;
+        } else if (d.step === 7) {
+            const r = d.summary;
+            html += `
+                <div class="kv">
+                    <div class="k">Overall gate status</div><div class="v">${r.overall_status ? `<span class="badge ${r.overall_status === 'PASS' ? 'badge-pass' : 'badge-critical'}">${r.overall_status}</span>` : '—'}</div>
+                    <div class="k">Gates evaluated</div><div class="v">${(r.gates || []).length}</div>
+                </div>
+                <div style="margin-top:0.75rem;">
+                    ${(r.gates || []).map(g => `
+                        <div style="display:flex;align-items:center;gap:0.5rem;padding:4px 0;border-bottom:1px dotted var(--border);font-size:12px;">
+                            <span class="badge ${g.status === 'PASS' ? 'badge-pass' : g.status === 'WARNING' ? 'badge-medium' : g.status === 'NOT_APPLICABLE' ? 'badge-neutral' : 'badge-critical'}">${g.status}</span>
+                            <strong>${g.gate_id}</strong>
+                            <span style="color:var(--text-secondary);">${g.gate_name}</span>
+                            ${g.failed_reason ? `<span style="margin-left:auto;color:var(--text-tertiary);">${g.failed_reason}</span>` : ''}
+                        </div>
+                    `).join('')}
+                </div>`;
+        } else if (d.step === 8) {
+            html += `
+                <div class="kv">
+                    <div class="k">Decision</div><div class="v">${decisionBadge(d.decision)}</div>
+                    <div class="k">Rule fired</div><div class="v" style="font-family:var(--font-mono);">${d.rule_fired}</div>
+                    <div class="k">Overall score</div><div class="v">${d.overall_score} / 100</div>
+                </div>
+                <div style="margin-top:0.75rem; font-size:12px; color:var(--text-secondary);"><em>${d.rationale}</em></div>`;
+        } else if (d.step === 9) {
+            html += `<div class="kv"><div class="k">Open findings</div><div class="v">${d.open_count}</div></div>`;
+            html += '<div style="margin-top:0.75rem;font-size:12px;">';
+            d.items.forEach(it => {
+                html += `<div style="padding:6px 0;border-bottom:1px dotted var(--border);">
+                    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:2px;">
+                        ${severityBadge(it.severity)}
+                        <strong>${it.finding_id}</strong>
+                        <span style="color:var(--text-secondary);">${it.title}</span>
+                        <span style="margin-left:auto;color:var(--text-tertiary);font-size:11px;">SLA: ${it.sla_due}</span>
+                    </div>
+                    <div style="color:var(--text-tertiary);">→ ${it.remediation}</div>
+                </div>`;
+            });
+            html += '</div>';
+        } else if (d.step === 10) {
+            html += `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:0.5rem;">${d.attached.length} evidence records attached:</div>`;
+            d.attached.forEach(e => {
+                html += `<div style="padding:4px 0;border-bottom:1px dotted var(--border);font-size:12px;">
+                    <strong>${e.id}</strong> <span class="pill">${e.type}</span>
+                    <div style="color:var(--text-secondary);margin-top:2px;">${e.summary}</div>
+                </div>`;
+            });
+        } else if (d.step === 11) {
+            html += `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:0.5rem;">Workflow events applied:</div>`;
+            d.applied.forEach(a => {
+                html += `<div style="padding:4px 0;font-size:12px;">
+                    <strong>${a.finding_id}</strong> →
+                    <span class="pill ${a.error ? 'fail' : 'ok'}">${a.event}</span>
+                    ${a.error ? `<span style="color:var(--red);">${a.error}</span>` : `<span style="color:var(--text-tertiary);">@ ${a.ts}</span>`}
+                </div>`;
+            });
+        } else if (d.step === 13) {
+            if (d.delta) {
+                html += `<div class="delta-row">
+                    <div class="delta-card before">
+                        <div class="label">Before remediation (v1)</div>
+                        <div>${decisionBadge(d.delta.before.decision)}</div>
+                        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-tertiary);margin-top:4px;">${d.delta.before.rule_fired}</div>
+                        <div style="margin-top:6px;font-size:12px;">Score ${d.delta.before.score} · Evidence ${Math.round(d.delta.before.evidence_completeness * 100)}%</div>
+                    </div>
+                    <div class="delta-card after">
+                        <div class="label">After remediation (v2)</div>
+                        <div>${decisionBadge(d.delta.after.decision)}</div>
+                        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-tertiary);margin-top:4px;">${d.delta.after.rule_fired}</div>
+                        <div style="margin-top:6px;font-size:12px;">Score ${d.delta.after.score} · Evidence ${Math.round(d.delta.after.evidence_completeness * 100)}%</div>
+                    </div>
+                </div>`;
+            }
+            if (d.v2_conditions && d.v2_conditions.length) {
+                html += `<div style="margin-top:0.875rem;font-size:12px;color:var(--text-secondary);"><strong style="color:var(--text-primary);">Pilot conditions:</strong><ul style="margin:4px 0 0 1rem;">${d.v2_conditions.map(c => `<li>${c}</li>`).join('')}</ul></div>`;
+            }
+        }
+
+        html += '</div>';
+
+        // Show raw JSON for debug
+        html += `<details style="margin-top:0.75rem;"><summary style="font-size:11px;color:var(--text-tertiary);cursor:pointer;">Raw response</summary><pre class="json">${JSON.stringify(d, null, 2)}</pre></details>`;
+        area.innerHTML = html;
+    }
+
+    function renderFindingList(arr, label) {
+        if (!arr || !arr.length) return '';
+        return `<div style="margin-top:0.5rem;font-size:12px;"><div style="color:var(--text-tertiary);margin-bottom:2px;">${label}:</div>
+            ${arr.map(f => `<div style="padding:2px 0;"><strong>${f.id}</strong> — ${f.title} <span style="color:var(--text-tertiary);">(${f.control_id})</span></div>`).join('')}
+        </div>`;
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+        if (!confirm('Reset the demo? This wipes all demo overlay state.')) return;
+        const r = await fetch('/api/demo/reset', { method: 'POST' });
+        if (!r.ok) { alert('Reset failed'); return; }
+        currentStep = 1;
+        lastResult = null;
+        await loadState();
+    });
+
+    document.getElementById('runAllBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('runAllBtn');
+        btn.disabled = true; btn.textContent = 'Running…';
+        try {
+            for (let n = 1; n <= 13; n++) {
+                currentStep = n;
+                renderStepper();
+                const r = await fetch(`/api/demo/step/${n}`, { method: 'POST' });
+                const d = await r.json();
+                if (!r.ok) { alert(`Step ${n} failed: ` + (d.detail || JSON.stringify(d))); break; }
+                lastResult = d;
+                await loadState();
+            }
+        } finally {
+            btn.disabled = false; btn.textContent = 'Run All Steps';
+        }
+    });
+
+    loadState();
+    </script>
+</body>
+</html>

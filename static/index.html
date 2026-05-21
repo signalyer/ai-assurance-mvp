@@ -15,12 +15,12 @@
             <div class="page-header">
                 <div>
                     <div class="page-title">AI Assurance Command Center</div>
-                    <div class="page-subtitle">Enterprise AI Risk Operations</div>
+                    <div class="page-subtitle">Can each AI system safely operate in production? Live release posture across the regulated-FS AI portfolio.</div>
                 </div>
                 <div class="page-actions">
-                    <span class="page-meta">Last updated: May 19, 2026 10:45 AM</span>
-                    <button class="btn">Executive Report</button>
-                    <button class="btn btn-primary">+ Add AI System</button>
+                    <span class="page-meta" id="lastUpdated">Last updated: —</span>
+                    <a class="btn" href="/reports">Executive Report</a>
+                    <a class="btn btn-primary" href="/ai-systems/new">+ Register AI System</a>
                 </div>
             </div>
 
@@ -147,10 +147,23 @@
             renderKPIs(d);
         }
 
+        function setLastUpdated(iso) {
+            if (!iso) return;
+            const dt = new Date(iso);
+            const fmt = dt.toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit',
+            });
+            const el = document.getElementById('lastUpdated');
+            if (el) el.textContent = `Last computed: ${fmt}`;
+        }
+
         function renderKPIs(d) {
+            setLastUpdated(d.generated_at);
             const cards = [
                 {
                     label: 'Enterprise AI Risk Score',
+                    tipId: 'kpi.enterprise_ai_risk_score',
                     value: d.enterprise_ai_risk_score,
                     suffix: '',
                     sublabel: d.risk_level,
@@ -160,7 +173,8 @@
                     gauge: { score: d.enterprise_ai_risk_score, color: '#f59e0b' },
                 },
                 {
-                    label: 'AI Systems Reviewed',
+                    label: 'AI Systems Governed',
+                    tipId: 'kpi.ai_systems_governed',
                     value: d.ai_systems_reviewed,
                     icon: '◢',
                     iconCls: 'info',
@@ -168,6 +182,7 @@
                 },
                 {
                     label: 'Production AI Systems',
+                    tipId: 'kpi.production_ai_systems',
                     value: d.production_ai_systems,
                     icon: '▣',
                     iconCls: 'pass',
@@ -175,6 +190,7 @@
                 },
                 {
                     label: 'High-Risk Findings',
+                    tipId: 'kpi.high_risk_findings',
                     value: d.high_risk_findings,
                     valueColor: 'critical',
                     icon: '⚠',
@@ -183,6 +199,7 @@
                 },
                 {
                     label: 'Release Holds',
+                    tipId: 'kpi.release_holds',
                     value: d.release_holds,
                     valueColor: 'critical',
                     icon: '🔒',
@@ -191,6 +208,7 @@
                 },
                 {
                     label: 'Runtime Incidents',
+                    tipId: 'kpi.runtime_incidents',
                     value: d.runtime_incidents_24h,
                     icon: '◈',
                     iconCls: 'high',
@@ -198,6 +216,7 @@
                 },
                 {
                     label: 'Policy Violations',
+                    tipId: 'kpi.policy_violations',
                     value: d.policy_violations_24h,
                     icon: '⛔',
                     iconCls: 'medium',
@@ -205,6 +224,7 @@
                 },
                 {
                     label: 'Evidence Completeness',
+                    tipId: 'kpi.evidence_completeness',
                     value: d.evidence_completeness,
                     suffix: '%',
                     valueColor: 'pass',
@@ -228,7 +248,7 @@
                     <div>
                         <div class="kpi-header">
                             <div class="kpi-icon ${c.iconCls || ''}">${c.icon || ''}</div>
-                            <div class="kpi-label">${c.label}</div>
+                            <div class="kpi-label">${c.label}${c.tipId ? ` <span class="info-tip" data-tip-id="${c.tipId}" tabindex="0">?</span>` : ''}</div>
                         </div>
                         <div class="kpi-value-row">
                             <div class="kpi-value ${c.valueColor || ''}">${c.value}${c.suffix || ''}</div>
@@ -308,15 +328,17 @@
             const r = await fetch('/api/grc/homepage/critical-findings');
             const d = await r.json();
 
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+                c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
             document.getElementById('criticalFindings').innerHTML = d.findings.map(f => `
                 <div class="finding-item">
                     <div class="finding-icon ${f.severity === 'P0' ? 'critical' : 'high'}"></div>
                     <div>
-                        <div class="finding-title">${f.title}</div>
-                        <div class="finding-system">${f.system}</div>
+                        <div class="finding-title">${esc(f.title)}</div>
+                        <div class="finding-system">${esc(f.system)} · ${esc(f.control_id || '—')} · ${esc(f.framework || '—')}</div>
                     </div>
                     <div>${severityBadge(f.severity)}</div>
-                    <div class="finding-meta">${f.time_ago}</div>
+                    <div class="finding-meta">${esc(f.time_ago)}</div>
                 </div>
             `).join('');
         }
@@ -349,29 +371,17 @@
         }
 
         async function loadThreatChart() {
-            const r = await fetch('/api/grc/kpis');
+            const r = await fetch('/api/grc/homepage/threat-series');
             const d = await r.json();
 
-            // Generate 7-day time series with realistic noise
-            function genSeries(target, variance) {
-                const arr = [];
-                for (let i = 0; i < 7; i++) {
-                    const t = i / 6;
-                    const base = target * (0.6 + t * 0.7);
-                    arr.push(Math.max(0, Math.round(base + (Math.random() - 0.5) * variance)));
-                }
-                arr[6] = target; // Last point is the actual count
-                return arr;
-            }
-
             const series = [
-                { name: 'Prompt Injection', data: genSeries(d.runtime_activity.prompt_injection, 8), color: '#ef4444' },
-                { name: 'Blocked Tool Calls', data: genSeries(d.runtime_activity.blocked_tool_calls, 6), color: '#f59e0b' },
-                { name: 'Policy Violations', data: genSeries(d.runtime_activity.policy_violations, 4), color: '#eab308' },
-                { name: 'DLP Detections', data: genSeries(d.runtime_activity.dlp_detections, 3), color: '#a855f7' },
+                { name: 'Prompt Injection',  data: d.series.prompt_injection,   color: '#ef4444' },
+                { name: 'Blocked Tool Calls', data: d.series.blocked_tool_calls, color: '#f59e0b' },
+                { name: 'Policy Violations', data: d.series.policy_violations,  color: '#eab308' },
+                { name: 'DLP Detections',    data: d.series.dlp_detections,     color: '#a855f7' },
             ];
 
-            const xLabels = ['May 13', 'May 14', 'May 15', 'May 16', 'May 17', 'May 18', 'May 19'];
+            const xLabels = d.x_labels;
 
             document.getElementById('threatChart').innerHTML = `
                 ${renderLineChart(series, { width: 600, height: 180, xLabels })}
@@ -421,15 +431,25 @@
 
             const tbody = document.querySelector('#eventsTable tbody');
             tbody.innerHTML = d.events.map(e => {
-                const sevCls = e.severity === 'HIGH' ? 'badge-high' : e.severity === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+                const sevCls = e.severity === 'CRITICAL' ? 'badge-critical'
+                             : e.severity === 'HIGH' ? 'badge-high'
+                             : e.severity === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+                const tsLabel = e.timestamp
+                    ? new Date(e.timestamp).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })
+                    : e.time;
+                const ctrl = e.linked_control ? ` <span class="pill" style="background:var(--bg-deep);border:1px solid var(--border);padding:1px 6px;border-radius:10px;font-size:10px;color:var(--text-secondary);">${e.linked_control}</span>` : '';
+                const rowHref = `/runtime?system_id=${encodeURIComponent(e.ai_system_id || '')}`;
+                const evidenceCell = e.evidence_id
+                    ? `<a href="/evidence" onclick="event.stopPropagation()" class="card-link" style="color: var(--accent);">${e.evidence_id}</a>`
+                    : '<span class="text-tertiary">—</span>';
                 return `
-                <tr>
-                    <td class="text-secondary text-sm">May 19, 2026 ${e.time}</td>
+                <tr onclick="window.location='${rowHref}'" style="cursor: pointer;">
+                    <td class="text-secondary text-sm">${tsLabel}</td>
                     <td class="cell-primary">${e.system}</td>
-                    <td class="text-secondary">${e.event_type}</td>
+                    <td class="text-secondary">${e.event_type}${ctrl}</td>
                     <td><span class="badge ${sevCls}">${e.severity[0] + e.severity.slice(1).toLowerCase()}</span></td>
                     <td>${actionBadge(e.action)}</td>
-                    <td><a href="#" class="card-link" style="color: var(--accent);">View</a></td>
+                    <td>${evidenceCell}</td>
                 </tr>
             `;
             }).join('');
@@ -458,13 +478,19 @@
             document.getElementById('nextActions').innerHTML = d.actions.map(a => {
                 const ic = iconMap[a.priority] || { icon: '◷', cls: 'warn' };
                 const dueInfo = dueMap[a.priority] || { cls: 'normal', label: a.due };
+                // Route the row by ref_id shape: F-... / FIND-... → /findings; ai-sys-... → /ai-systems; WV-... → /release-gates
+                const ref = (a.ref_ids && a.ref_ids[0]) || '';
+                let href = '/findings';
+                if (ref.startsWith('ai-sys-')) href = `/ai-systems?id=${encodeURIComponent(ref)}`;
+                else if (ref.startsWith('WV-')) href = '/release-gates';
+                else if (ref) href = `/findings?id=${encodeURIComponent(ref)}`;
                 return `
-                    <div class="list-row">
+                    <a class="list-row" href="${href}" style="text-decoration: none; color: inherit;">
                         <div class="list-row-icon ${ic.cls}">${ic.icon}</div>
                         <div class="list-row-text">${a.title}</div>
                         <span class="priority-badge ${dueInfo.cls}">${dueInfo.label}</span>
                         <span class="list-row-arrow">›</span>
-                    </div>
+                    </a>
                 `;
             }).join('');
         }

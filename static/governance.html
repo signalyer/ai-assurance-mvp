@@ -5,80 +5,37 @@
     <title>Governance — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .function-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1.25rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .function-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-        }
-
-        .function-card.high::before { background: var(--pass); }
-        .function-card.medium::before { background: var(--medium); }
-        .function-card.low::before { background: var(--critical); }
-
-        .function-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .function-name {
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: -0.01em;
-        }
-
-        .function-score {
-            font-size: 28px;
-            font-weight: 700;
-            font-feature-settings: 'tnum';
-        }
-
-        .gap-list {
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .gap-item {
-            font-size: 12px;
-            color: var(--text-secondary);
-            padding: 0.5rem 0;
-            display: flex;
-            gap: 0.5rem;
-            align-items: start;
-        }
-
-        .gap-item::before {
-            content: '•';
-            color: var(--critical);
-            font-weight: 700;
-        }
-
-        .risk-area-row {
+        .item-row {
             display: grid;
-            grid-template-columns: 80px 1fr 100px 100px;
-            gap: 0.75rem;
-            align-items: center;
-            padding: 0.625rem 0.75rem;
+            grid-template-columns: 240px 1fr 110px 110px 110px 90px;
+            gap: 0.875rem; align-items: center;
+            padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+            cursor: pointer; font-size: 13px;
+        }
+        .item-row:last-child { border-bottom: none; }
+        .item-row:hover { background: var(--bg-card-hover); }
+        .item-row.bad  { border-left: 3px solid var(--critical); }
+        .item-row.warn { border-left: 3px solid var(--medium); }
+        .item-row.good { border-left: 3px solid var(--pass); }
+        .item-row.gap  { border-left: 3px solid var(--border-strong); opacity: 0.85; }
+
+        .drill {
+            background: var(--bg-elevated);
             border-bottom: 1px solid var(--border);
+            padding: 1rem 1.25rem;
         }
+        .drill h4 { margin: 0 0 0.5rem 0; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+        .drill .row { display: grid; grid-template-columns: 90px 1fr 90px 90px; gap: 0.5rem; padding: 4px 0; font-size: 12px; }
+        .drill .reco { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+        .drill .finding { font-size: 12px; padding: 4px 0; display: grid; grid-template-columns: 80px 1fr 70px 80px; gap: 0.5rem; }
 
-        .risk-area-row:last-child { border-bottom: none; }
-
-        .risk-area-row:hover {
-            background: var(--bg-card-hover);
+        .coverage-fill {
+            height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden;
         }
+        .coverage-fill > div { height: 100%; }
+        .coverage-fill > div.good { background: var(--pass); }
+        .coverage-fill > div.warn { background: var(--medium); }
+        .coverage-fill > div.bad  { background: var(--critical); }
     </style>
 </head>
 <body>
@@ -88,223 +45,213 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Governance</div>
-                <div class="page-subtitle">NIST AI Risk Management Framework + AI 600-1 GenAI Profile posture</div>
+                <div class="page-subtitle">NIST AI RMF and AI 600-1 GenAI Profile — coverage derived from live controls, findings, and evidence</div>
             </div>
             <div class="page-actions">
-                <button class="btn btn-sm">Export Posture</button>
-                <button class="btn btn-sm btn-primary">Run Assessment</button>
+                <select class="filter-select" id="scopeSelect">
+                    <option value="ALL">All AI Systems</option>
+                </select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
             </div>
         </div>
 
         <div class="tabs">
             <button class="tab active" data-tab="rmf">NIST AI RMF</button>
-            <button class="tab" data-tab="ai600">AI 600-1 GenAI Profile</button>
-            <button class="tab" data-tab="approvals">Approvals & Workflow</button>
+            <button class="tab" data-tab="600">NIST AI 600-1 GenAI Profile</button>
         </div>
 
-        <!-- NIST AI RMF -->
-        <div id="rmfTab">
-            <div class="kpi-row" id="rmfKpi"></div>
-            <div class="grid-2" id="rmfFunctions"></div>
-        </div>
-
-        <!-- AI 600-1 -->
-        <div id="ai600Tab" style="display: none;">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div>
-                        <div class="card-title">NIST AI 600-1 — GenAI Profile</div>
-                        <div class="card-subtitle">Overall coverage across 12 risk areas specific to generative AI</div>
-                    </div>
-                    <div id="ai600Overall"></div>
-                </div>
-                <div id="ai600Areas"></div>
-            </div>
-        </div>
-
-        <!-- Approvals -->
-        <div id="approvalsTab" style="display: none;">
-            <div class="grid-2">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Ownership Matrix</div>
-                    </div>
-                    <table class="data-table">
-                        <thead><tr><th>Role</th><th>Owner</th><th>Systems</th></tr></thead>
-                        <tbody>
-                            <tr><td>Head of AI Governance</td><td>Sarah Mitchell</td><td>5</td></tr>
-                            <tr><td>Chief Risk Officer</td><td>Marcus Chen</td><td>5</td></tr>
-                            <tr><td>CISO</td><td>Elena Vasquez</td><td>5</td></tr>
-                            <tr><td>Model Risk Management</td><td>David Kim</td><td>5</td></tr>
-                            <tr><td>AppSec Lead</td><td>Priya Sharma</td><td>5</td></tr>
-                            <tr><td>Internal Audit Lead</td><td>Robert Lee</td><td>5</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Pending Approvals</div>
-                    </div>
-                    <div style="padding: 0.75rem 1rem; border: 1px solid var(--medium-border); background: var(--medium-bg); border-radius: 6px; margin-bottom: 0.5rem;">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <div class="text-sm font-bold">KYC Agent — Conditional Pilot Extension</div>
-                                <div class="text-xs text-secondary mt-1">Approver: Karen Liu · Submitted 2026-05-17</div>
-                            </div>
-                            <span class="badge badge-medium">PENDING</span>
-                        </div>
-                    </div>
-                    <div style="padding: 0.75rem 1rem; border: 1px solid var(--high-border); background: var(--high-bg); border-radius: 6px; margin-bottom: 0.5rem;">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <div class="text-sm font-bold">Payments Agent — Hold → Pilot Request</div>
-                                <div class="text-xs text-secondary mt-1">Approver: Marcus Chen (CRO) · Submitted 2026-05-15</div>
-                            </div>
-                            <span class="badge badge-high">REVIEW</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Exceptions & Waivers</div>
-                    </div>
-                    <table class="data-table">
-                        <thead><tr><th>Waiver ID</th><th>Policy</th><th>Owner</th><th>Expires</th></tr></thead>
-                        <tbody>
-                            <tr>
-                                <td class="font-mono">WV-2026-018</td>
-                                <td>AI-009 (audit logs)</td>
-                                <td>Aisha Hassan</td>
-                                <td class="text-medium">2026-06-15</td>
-                            </tr>
-                            <tr>
-                                <td class="font-mono">WV-2026-014</td>
-                                <td>AI-005 (tool allowlist)</td>
-                                <td>James Wong</td>
-                                <td class="text-medium">2026-06-22</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Policy Compliance Summary</div>
-                    </div>
-                    <div id="policyCompliance"></div>
-                </div>
-            </div>
-        </div>
+        <div id="rmfPanel"></div>
+        <div id="g600Panel" style="display: none;"></div>
     </div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/governance');
+    initPage('/governance');
 
-        async function loadRMF() {
-            const r = await fetch('/api/grc/governance/nist-ai-rmf');
-            const d = await r.json();
+    const STATE = { scope: 'ALL', currentFw: 'NIST_AI_RMF' };
+    let OPEN = new Set();
 
-            const overall = Math.round(d.frameworks.reduce((s, f) => s + f.score, 0) / d.frameworks.length);
-            const totalControls = d.frameworks.reduce((s, f) => s + f.required_controls, 0);
-            const passing = d.frameworks.reduce((s, f) => s + f.passing_controls, 0);
-            const failing = d.frameworks.reduce((s, f) => s + f.failing_controls, 0);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-            document.getElementById('rmfKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon ${overall >= 80 ? 'pass' : overall >= 70 ? 'medium' : 'critical'}">◐</div><div class="kpi-label">Overall RMF Score</div></div><div class="kpi-value ${overall >= 80 ? 'pass' : ''}">${overall}%</div><div class="kpi-trend">enterprise posture</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Required Controls</div></div><div class="kpi-value">${totalControls}</div><div class="kpi-trend">across 4 functions</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">${Math.round(passing/totalControls*100)}% of controls</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Failing</div></div><div class="kpi-value critical">${failing}</div><div class="kpi-trend">remediation needed</div></div>
-            `;
+    function classifyCoverage(item) {
+        if (item.mapped_controls.length === 0) return 'gap';
+        if (item.coverage_pct >= 80) return 'good';
+        if (item.coverage_pct >= 50) return 'warn';
+        return 'bad';
+    }
 
-            document.getElementById('rmfFunctions').innerHTML = d.frameworks.map(f => {
-                const tier = f.score >= 80 ? 'high' : f.score >= 70 ? 'medium' : 'low';
-                return `
-                    <div class="function-card ${tier}">
-                        <div class="function-header">
-                            <div>
-                                <div class="function-name">${f.function}</div>
-                                <div class="text-xs text-secondary mt-1">${f.passing_controls}/${f.required_controls} controls passing</div>
-                            </div>
-                            <div class="function-score ${tier === 'high' ? 'text-pass' : tier === 'low' ? 'text-critical' : 'text-medium'}">${f.score}%</div>
-                        </div>
-                        <div class="progress">
-                            <div class="progress-fill ${tier === 'high' ? '' : tier === 'low' ? 'fail' : 'warn'}" style="width: ${f.score}%"></div>
-                        </div>
-                        <div class="flex justify-between mt-2 text-xs text-secondary">
-                            <span>Evidence: ${(f.evidence_completeness*100).toFixed(0)}%</span>
-                            <span class="text-critical">${f.failing_controls} failing</span>
-                        </div>
-                        ${f.key_gaps && f.key_gaps.length > 0 ? `
-                            <div class="gap-list">
-                                <div class="text-xs text-secondary mb-2" style="text-transform: uppercase; font-weight: 600;">Key Gaps</div>
-                                ${f.key_gaps.map(g => `<div class="gap-item">${g}</div>`).join('')}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('');
-        }
+    function controlStatusBadge(s) {
+        const m = { PASS:'badge-pass', FAIL:'badge-critical', NO_EVIDENCE:'badge-medium', PARTIAL:'badge-medium', NOT_APPLICABLE:'badge-neutral' };
+        return `<span class="badge ${m[s] || 'badge-neutral'}">${s.replace(/_/g, ' ')}</span>`;
+    }
 
-        async function loadAI600() {
-            const r = await fetch('/api/grc/governance/ai-600-1');
-            const d = await r.json();
+    function priorityBadge(p) {
+        const m = { P0:'badge-critical', P1:'badge-high', P2:'badge-medium', P3:'badge-neutral' };
+        return `<span class="badge ${m[p] || 'badge-neutral'}">${p}</span>`;
+    }
 
-            document.getElementById('ai600Overall').innerHTML = `
-                <div class="text-2xl font-bold ${d.overall_coverage >= 0.8 ? 'text-pass' : 'text-medium'}">${(d.overall_coverage*100).toFixed(0)}%</div>
-            `;
+    function severityBadge(s) {
+        const m = { CRITICAL:'badge-critical', HIGH:'badge-high', MEDIUM:'badge-medium', LOW:'badge-low' };
+        return `<span class="badge ${m[s] || 'badge-neutral'}">${s}</span>`;
+    }
 
-            document.getElementById('ai600Areas').innerHTML = d.risk_areas.map(r => {
-                const cls = r.status === 'PASS' ? 'badge-pass' : r.status === 'PARTIAL' ? 'badge-medium' : 'badge-critical';
-                const barCls = r.status === 'PASS' ? '' : r.status === 'PARTIAL' ? 'warn' : 'fail';
-                return `
-                    <div class="risk-area-row">
-                        <span class="font-mono text-xs text-tertiary">${r.id}</span>
-                        <div>
-                            <div class="text-sm">${r.name}</div>
-                            <div class="progress mt-1"><div class="progress-fill ${barCls}" style="width: ${r.coverage*100}%"></div></div>
-                        </div>
-                        <span class="text-sm font-bold">${(r.coverage*100).toFixed(0)}%</span>
-                        <span class="badge ${cls}">${r.status}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function loadPolicyCompliance() {
-            const r = await fetch('/api/grc/policies');
-            const d = await r.json();
-            document.getElementById('policyCompliance').innerHTML = d.policies.slice(0, 5).map(p => {
-                const total = p.compliant_systems + p.non_compliant_systems;
-                const rate = total > 0 ? (p.compliant_systems / total * 100) : 0;
-                return `
-                    <div class="flex justify-between items-center mb-2">
-                        <div>
-                            <span class="font-mono text-xs">${p.id}</span>
-                            <span class="text-sm ml-2">${p.requirement.substring(0, 50)}…</span>
-                        </div>
-                        <span class="text-sm ${rate >= 80 ? 'text-pass' : 'text-critical'}">${p.compliant_systems}/${total}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        document.querySelectorAll('.tab').forEach(t => {
-            t.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                ['rmfTab', 'ai600Tab', 'approvalsTab'].forEach(id => {
-                    document.getElementById(id).style.display = 'none';
-                });
-                document.getElementById(t.dataset.tab + 'Tab').style.display = 'block';
-            });
+    async function loadScope() {
+        const r = await fetch('/api/grc/ai-systems');
+        const d = await r.json();
+        const sel = document.getElementById('scopeSelect');
+        d.systems.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id; opt.textContent = s.name;
+            sel.appendChild(opt);
         });
+        sel.addEventListener('change', () => { STATE.scope = sel.value; OPEN.clear(); render(); });
+    }
 
-        loadRMF();
-        loadAI600();
-        loadPolicyCompliance();
+    async function fetchOverview(fw) {
+        const r = await fetch(`/api/grc/framework/${fw}/overview?scope=${encodeURIComponent(STATE.scope)}`);
+        return r.json();
+    }
+
+    function kpiRow(items) {
+        const total = items.length;
+        const noControls = items.filter(i => i.mapped_controls.length === 0).length;
+        const good = items.filter(i => i.coverage_pct >= 80 && i.mapped_controls.length > 0).length;
+        const failing = items.filter(i => i.coverage_pct < 50 && i.mapped_controls.length > 0).length;
+        const findings = items.reduce((s, i) => s + i.related_findings.length, 0);
+        const avg = items.filter(i => i.mapped_controls.length > 0)
+                         .reduce((s, i) => s + i.coverage_pct, 0) / Math.max(1, total - noControls);
+        return `
+            <div class="kpi-row">
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Items</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">${noControls} unmapped</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Avg Coverage</div></div><div class="kpi-value ${avg >= 80 ? 'pass' : ''}">${Math.round(avg)}%</div><div class="kpi-trend">where mapped</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">●</div><div class="kpi-label">Items Passing</div></div><div class="kpi-value pass">${good}</div><div class="kpi-trend">>= 80% control pass</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${findings}</div><div class="kpi-trend">tied to this framework</div></div>
+            </div>`;
+    }
+
+    function renderItem(item) {
+        const cls = classifyCoverage(item);
+        const isOpen = OPEN.has(item.item_id);
+        const covCls = cls === 'good' ? 'good' : cls === 'warn' ? 'warn' : 'bad';
+        return `
+            <div class="item-row ${cls}" onclick="toggleItem('${item.item_id}')">
+                <div>
+                    <div class="text-sm font-bold">${esc(item.display_name)}</div>
+                    <div class="text-xs text-tertiary mt-1">${esc(item.recommended_owner)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-secondary mb-1">${esc(item.description)}</div>
+                    <div class="coverage-fill"><div class="${covCls}" style="width: ${item.coverage_pct}%"></div></div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Controls</div>
+                    <div class="text-sm font-bold">${item.mapped_controls.length}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Coverage</div>
+                    <div class="text-sm font-bold">${item.coverage_pct}%</div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Findings</div>
+                    <div class="text-sm font-bold ${item.related_findings.length > 0 ? 'text-critical' : ''}">${item.related_findings.length}</div>
+                </div>
+                <div class="text-right text-xs text-tertiary">${isOpen ? '▾' : '▸'}</div>
+            </div>
+            ${isOpen ? renderDrill(item) : ''}
+        `;
+    }
+
+    function renderDrill(item) {
+        return `
+            <div class="drill">
+                <h4>Mapped Controls</h4>
+                ${item.mapped_controls.length === 0
+                  ? `<div class="text-xs text-tertiary">No controls mapped to this item — coverage gap.</div>`
+                  : item.mapped_controls.map(c => `
+                    <div class="row">
+                        <span class="font-mono text-xs">${c.control_id}</span>
+                        <span>${esc(c.title)}</span>
+                        <span>${priorityBadge(c.priority)}</span>
+                        <span>${controlStatusBadge(c.status)}</span>
+                    </div>
+                `).join('')}
+
+                <h4 style="margin-top: 0.875rem;">Release Gates Affected</h4>
+                ${item.release_gates_affected.length === 0
+                  ? `<div class="text-xs text-tertiary">No release gates reference this item's controls.</div>`
+                  : `<div class="flex gap-1" style="flex-wrap: wrap;">${item.release_gates_affected.map(g => `<a class="framework-badge" href="/release-gates" style="cursor:pointer;">${g}</a>`).join('')}</div>`
+                }
+
+                <h4 style="margin-top: 0.875rem;">Related Findings (${item.related_findings.length})</h4>
+                ${item.related_findings.length === 0
+                  ? `<div class="text-xs text-tertiary">No open findings.</div>`
+                  : item.related_findings.slice(0, 8).map(f => `
+                    <div class="finding">
+                        <a class="font-mono text-xs" href="/findings?id=${f.id}" style="cursor:pointer;">${f.id}</a>
+                        <span>${esc(f.title)}</span>
+                        <span>${severityBadge(f.severity)}</span>
+                        <span class="text-xs text-tertiary">${f.system_id}</span>
+                    </div>
+                `).join('')}
+
+                <h4 style="margin-top: 0.875rem;">Evidence Completeness</h4>
+                <div class="row">
+                    <span></span>
+                    <div class="coverage-fill"><div class="${item.evidence_completeness >= 0.85 ? 'good' : item.evidence_completeness >= 0.5 ? 'warn' : 'bad'}" style="width: ${item.evidence_completeness * 100}%"></div></div>
+                    <span class="text-sm font-bold">${Math.round(item.evidence_completeness * 100)}%</span>
+                    <span></span>
+                </div>
+
+                <h4 style="margin-top: 0.875rem;">Recommended Remediation</h4>
+                ${item.recommended_remediation.length === 0
+                  ? `<div class="text-xs text-tertiary">None — all mapped controls pass.</div>`
+                  : item.recommended_remediation.slice(0, 8).map(r => `<div class="reco">• ${esc(r)}</div>`).join('')
+                }
+            </div>
+        `;
+    }
+
+    async function renderFramework(fw, mountId) {
+        const d = await fetchOverview(fw);
+        document.getElementById(mountId).innerHTML = kpiRow(d.items) +
+            `<div class="card" style="padding: 0; overflow: hidden;">
+                <div class="card-header" style="padding: 1rem 1.25rem;">
+                    <div>
+                        <div class="card-title">${fw === 'NIST_AI_RMF' ? 'NIST AI Risk Management Framework' : 'NIST AI 600-1 — GenAI Profile'}</div>
+                        <div class="card-subtitle">${fw === 'NIST_AI_RMF' ? 'Govern / Map / Measure / Manage' : '9 risk areas'} · scope: ${STATE.scope}</div>
+                    </div>
+                </div>
+                <div class="item-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); cursor: default;">
+                    <div>Item / Owner</div><div>Description / Coverage</div><div>Controls</div><div>Coverage</div><div>Findings</div><div></div>
+                </div>
+                ${d.items.map(renderItem).join('')}
+             </div>`;
+    }
+
+    async function render() {
+        await renderFramework('NIST_AI_RMF', 'rmfPanel');
+        await renderFramework('NIST_AI_600_1', 'g600Panel');
+    }
+
+    function toggleItem(id) {
+        if (OPEN.has(id)) OPEN.delete(id);
+        else OPEN.add(id);
+        render();
+    }
+
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            document.getElementById('rmfPanel').style.display = t.dataset.tab === 'rmf' ? 'block' : 'none';
+            document.getElementById('g600Panel').style.display = t.dataset.tab === '600' ? 'block' : 'none';
+        });
+    });
+    document.getElementById('refreshBtn').addEventListener('click', render);
+    window.toggleItem = toggleItem;
+
+    loadScope().then(render);
     </script>
 </body>
 </html>

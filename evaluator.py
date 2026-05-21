@@ -1,17 +1,34 @@
-"""DeepEval suite — five metrics, one public function."""
+"""DeepEval suite — five metrics, one public function.
+
+deepeval pulls torch/transformers (~800MB) and is only needed at evaluate-time.
+Imports are lazy so dashboard.py can load without the eval stack installed.
+"""
 
 import os
 import re
 from typing import Optional
 from dotenv import load_dotenv
-from deepeval.metrics import (
-    HallucinationMetric,
-    AnswerRelevancyMetric,
-    ToxicityMetric,
-    FaithfulnessMetric,
-    PIILeakageMetric,
-)
-from deepeval.test_case import LLMTestCase
+
+
+def _deepeval():
+    """Import deepeval lazily — only when actually running an evaluation."""
+    from deepeval.metrics import (
+        HallucinationMetric,
+        AnswerRelevancyMetric,
+        ToxicityMetric,
+        FaithfulnessMetric,
+        PIILeakageMetric,
+    )
+    from deepeval.test_case import LLMTestCase
+    return {
+        "HallucinationMetric": HallucinationMetric,
+        "AnswerRelevancyMetric": AnswerRelevancyMetric,
+        "ToxicityMetric": ToxicityMetric,
+        "FaithfulnessMetric": FaithfulnessMetric,
+        "PIILeakageMetric": PIILeakageMetric,
+        "LLMTestCase": LLMTestCase,
+    }
+
 
 load_dotenv()
 
@@ -74,6 +91,14 @@ def evaluate_response(
     """
     if context is None:
         context = []
+
+    _de = _deepeval()
+    LLMTestCase = _de["LLMTestCase"]
+    AnswerRelevancyMetric = _de["AnswerRelevancyMetric"]
+    ToxicityMetric = _de["ToxicityMetric"]
+    HallucinationMetric = _de["HallucinationMetric"]
+    FaithfulnessMetric = _de["FaithfulnessMetric"]
+    PIILeakageMetric = _de["PIILeakageMetric"]  # noqa: F841 — used by other paths
 
     model = _get_eval_model()
     results = {}

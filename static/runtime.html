@@ -2,261 +2,433 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Runtime — AI Assurance</title>
+    <title>Runtime Governance — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .rt-event {
+        .ev-row {
             display: grid;
-            grid-template-columns: 110px 90px 1fr auto;
-            gap: 1rem;
-            align-items: center;
-            padding: 0.875rem 1rem;
-            border-bottom: 1px solid var(--border);
-            transition: background 0.1s;
+            grid-template-columns: 110px 130px 1fr 130px 90px 110px 100px 70px;
+            gap: 0.625rem; align-items: center;
+            padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
+            font-size: 12px; cursor: default;
         }
-        .rt-event:hover { background: var(--bg-card-hover); cursor: pointer; }
-        .rt-event:last-child { border-bottom: none; }
-        .rt-event.critical { border-left: 3px solid var(--critical); }
-        .rt-event.high { border-left: 3px solid var(--high); }
-        .rt-event.medium { border-left: 3px solid var(--medium); }
-        .rt-event.info { border-left: 3px solid var(--info); }
+        .ev-row:last-child { border-bottom: none; }
+        .ev-row.head { background: var(--bg-elevated); font-size: 10px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; }
+        .ev-row.CRITICAL { border-left: 3px solid var(--critical); }
+        .ev-row.HIGH     { border-left: 3px solid var(--high); }
+        .ev-row.MEDIUM   { border-left: 3px solid var(--medium); }
+        .ev-row.LOW      { border-left: 3px solid var(--pass); }
+        .ev-row.INFO     { border-left: 3px solid var(--border-strong); }
 
-        .rt-time {
-            font-size: 11px;
-            color: var(--text-tertiary);
-            font-family: 'Monaco', 'Consolas', monospace;
+        .src-pill {
+            display: inline-block; padding: 1px 6px; border-radius: 4px;
+            font-size: 10px; font-weight: 600; background: var(--accent-bg); color: var(--accent);
         }
+        .action-pill {
+            display: inline-block; padding: 1px 6px; border-radius: 4px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+        }
+        .action-blocked  { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .action-masked   { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(99,102,241,0.3); }
+        .action-refused  { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
+        .action-escalated { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
+        .action-halted   { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border); }
+        .action-queued   { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(99,102,241,0.3); }
+        .action-logged   { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-strong); }
+        .action-ingested { background: var(--high-bg); color: var(--high); border: 1px solid var(--high-border); }
+        .action-throttled { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
+        .action-flagged  { background: var(--medium-bg); color: var(--medium); border: 1px solid var(--medium-border); }
 
-        .rt-event-type {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 2px;
+        .sys-state-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem; display: grid;
+            grid-template-columns: 1fr 110px 130px 1fr;
+            gap: 0.625rem; align-items: center; margin-bottom: 0.5rem;
         }
+        .sys-state-card.killed { border-color: var(--critical-border); background: var(--critical-bg); }
+        .sys-state-card.heightened { border-color: var(--medium-border); }
+        .light { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .light.green { background: var(--pass); }
+        .light.red   { background: var(--critical); }
+        .light.amber { background: var(--medium); }
 
-        .rt-event-desc {
-            font-size: 12px;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-
-        .rt-event-system {
-            font-size: 11px;
-            color: var(--text-tertiary);
-            margin-top: 4px;
-        }
-
-        .approval-card {
-            padding: 1rem;
-            background: var(--bg-input);
-            border: 1px solid var(--medium-border);
-            border-radius: 6px;
-            margin-bottom: 0.75rem;
-        }
-
-        .kill-switch {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            margin-bottom: 0.5rem;
-            background: var(--bg-input);
-        }
-
-        .kill-switch-status {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--pass);
-            box-shadow: 0 0 8px var(--pass);
-        }
-
-        .live-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--pass);
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--pass);
-            border-radius: 50%;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
-        }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 8px; padding: 1.25rem; width: 540px; max-width: 90vw; }
     </style>
 </head>
 <body>
-<div class="app">
-    <div id="sidebar"></div>
-    <div class="main">
-        <div id="topbar"></div>
-        <div class="page">
+    <div id="topbar"></div>
 
-            <div class="page-header">
-                <div>
-                    <div class="page-title">Runtime Operations</div>
-                    <div class="page-subtitle">Live AI policy enforcement, incident response, and human approval queue</div>
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Runtime Governance &amp; Telemetry</div>
+                <div class="page-subtitle">Live event stream from Langfuse, AWS, guardrails, and policy gateways · system kill switches, approvals, incidents</div>
+            </div>
+            <div class="page-actions">
+                <select class="filter-select" id="scopeSelect"><option value="ALL">All AI Systems</option></select>
+                <select class="filter-select" id="sourceSelect"><option value="">All Sources</option></select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
+            </div>
+        </div>
+
+        <div class="kpi-row" id="kpis"></div>
+
+        <div class="grid-2">
+            <div>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Connector Status</div>
+                            <div class="card-subtitle">Each connector is a stub today — wire a real SDK to enable</div>
+                        </div>
+                    </div>
+                    <div id="connectors"></div>
                 </div>
-                <div class="page-actions">
-                    <span class="live-indicator"><span class="live-dot"></span>Live</span>
-                    <button class="btn">Configure Alerts</button>
-                    <button class="btn btn-primary">Emergency Stop All</button>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">System Runtime State</div>
+                            <div class="card-subtitle">Kill switch, monitoring level, enable/disable per AI system</div>
+                        </div>
+                    </div>
+                    <div id="states"></div>
                 </div>
             </div>
 
-            <div class="kpi-row" id="rtKpi"></div>
+            <div>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Human Approval Queue</div>
+                            <div class="card-subtitle">Actions awaiting human approval. TTL-bounded, auto-expire.</div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="openApprovalModal()">+ Request</button>
+                    </div>
+                    <div id="approvals" style="padding: 0 1rem 1rem 1rem;"></div>
+                </div>
 
-            <div class="grid-2col-bottom">
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <div class="card-title">Live Event Stream</div>
-                            <div class="text-xs text-tertiary mt-1">Last 1 hour · auto-refreshing</div>
-                        </div>
-                        <div class="filter-bar" style="margin: 0;">
-                            <select class="filter-select" id="severityFilter" style="min-width: 120px;">
-                                <option value="">All severities</option>
-                                <option value="CRITICAL">Critical</option>
-                                <option value="HIGH">High</option>
-                                <option value="MEDIUM">Medium</option>
-                                <option value="INFO">Info</option>
-                            </select>
+                            <div class="card-title">Active Incidents</div>
+                            <div class="card-subtitle">Create from any event row in the stream</div>
                         </div>
                     </div>
-                    <div id="eventStream"></div>
-                </div>
-
-                <div>
-                    <div class="card mb-3">
-                        <div class="card-header">
-                            <div class="card-title">Human Approval Queue</div>
-                            <span class="badge badge-medium">3 pending</span>
-                        </div>
-                        <div class="approval-card">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-sm font-bold">Payment Release</span>
-                                <span class="badge badge-medium">PENDING</span>
-                            </div>
-                            <div class="text-sm text-secondary mb-2">$87,500 transfer requires VP approval ($50K+ threshold)</div>
-                            <div class="text-xs text-tertiary">Approver: Sarah Chen · Payments Exception Review Agent</div>
-                            <div class="flex gap-2 mt-3">
-                                <button class="btn btn-sm btn-primary">Approve</button>
-                                <button class="btn btn-sm">Deny</button>
-                                <button class="btn btn-sm">Investigate</button>
-                            </div>
-                        </div>
-                        <div class="approval-card">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-sm font-bold">KYC Override</span>
-                                <span class="badge badge-medium">PENDING</span>
-                            </div>
-                            <div class="text-sm text-secondary mb-2">Document discrepancy detected — Senior Compliance Officer review</div>
-                            <div class="text-xs text-tertiary">Approver: Tom Mitchell · KYC Document Review Agent</div>
-                        </div>
-                        <div class="approval-card">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-sm font-bold">AML Investigation Close</span>
-                                <span class="badge badge-medium">PENDING</span>
-                            </div>
-                            <div class="text-sm text-secondary mb-2">High-confidence false positive close — analyst approval needed</div>
-                            <div class="text-xs text-tertiary">Approver: Priya Patel · AML Investigation Assistant</div>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">Kill Switch Status</div>
-                            <span class="live-indicator"><span class="live-dot"></span>All systems normal</span>
-                        </div>
-                        <div id="killSwitches"></div>
-                    </div>
+                    <div id="incidents"></div>
                 </div>
             </div>
+        </div>
 
+        <div class="card" style="padding: 0; overflow: hidden; margin-top: 1rem;">
+            <div class="card-header" style="padding: 1rem 1.25rem;">
+                <div>
+                    <div class="card-title">Runtime Event Stream</div>
+                    <div class="card-subtitle">Latest first — click an event to create an incident</div>
+                </div>
+            </div>
+            <div class="ev-row head">
+                <div>Timestamp</div><div>Source</div><div>Event / Details</div>
+                <div>System</div><div>Severity</div><div>Action</div><div>Policy / Control</div><div>Evidence</div>
+            </div>
+            <div id="events"></div>
         </div>
     </div>
-</div>
+
+    <!-- Generic modal -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <h3 id="modalTitle" style="margin: 0 0 0.5rem 0;">Action</h3>
+            <div class="text-xs text-secondary mb-3" id="modalSub"></div>
+            <div id="modalForm"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+                <button class="btn btn-sm" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="modalSubmit">Submit</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/runtime');
+    initPage('/runtime');
 
-        async function loadKPIs() {
-            const r = await fetch('/api/grc/kpis');
-            const d = await r.json();
-            document.getElementById('rtKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▣</div><div class="kpi-label">Active Incidents</div></div><div class="kpi-value high">${d.runtime_incidents_24h}</div><div class="kpi-trend">${d.runtime_trend}</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocked Prompt Injection</div></div><div class="kpi-value">${d.runtime_activity.prompt_injection}</div><div class="kpi-trend">last 7 days</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▦</div><div class="kpi-label">Blocked Tool Calls</div></div><div class="kpi-value">${d.runtime_activity.blocked_tool_calls}</div><div class="kpi-trend">last 7 days</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">⛔</div><div class="kpi-label">Policy Violations</div></div><div class="kpi-value">${d.policy_violations_24h}</div><div class="kpi-trend">${d.policy_violations_trend}</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon accent">◈</div><div class="kpi-label">DLP Detections</div></div><div class="kpi-value">${d.runtime_activity.dlp_detections}</div><div class="kpi-trend">last 7 days</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Approval Queue</div></div><div class="kpi-value">3</div><div class="kpi-trend">3 pending</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">⟲</div><div class="kpi-label">Agent Recursions</div></div><div class="kpi-value">2</div><div class="kpi-trend">last 24 hours</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Kill Switches Active</div></div><div class="kpi-value pass">5</div><div class="kpi-trend">all systems</div></div>
-            `;
-        }
+    const STATE = { scope: 'ALL', source: '' };
+    const SOURCES = ['Langfuse','AWS CloudTrail','AWS Security Hub','AWS GuardDuty','AWS Macie','AWS Bedrock Guardrails','NeMo Guardrails','Lakera (placeholder)','Custom Tool Gateway','Custom AI Gateway','Internal'];
 
-        let ALL_EVENTS = [];
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-        async function loadEvents() {
-            const r = await fetch('/api/grc/runtime/events?limit=50');
-            const d = await r.json();
-            ALL_EVENTS = d.events;
-            renderEvents();
-        }
+    function buildSourceFilter() {
+        const sel = document.getElementById('sourceSelect');
+        SOURCES.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+    }
 
-        function renderEvents() {
-            const sev = document.getElementById('severityFilter').value;
-            const events = sev ? ALL_EVENTS.filter(e => e.severity === sev) : ALL_EVENTS;
-            document.getElementById('eventStream').innerHTML = events.map(e => `
-                <div class="rt-event ${e.severity.toLowerCase()}">
-                    <div class="rt-time">${timeAgo(e.timestamp)}<br><span style="color: var(--text-tertiary); font-size: 10px;">${new Date(e.timestamp).toLocaleTimeString()}</span></div>
-                    <div>${severityBadge(e.severity)}</div>
-                    <div>
-                        <div class="rt-event-type">${e.event_type.replace(/_/g, ' ')}</div>
-                        <div class="rt-event-desc">${e.description}</div>
-                        <div class="rt-event-system">${e.system_name}</div>
+    async function loadScope() {
+        const r = await fetch('/api/grc/ai-systems');
+        const d = await r.json();
+        const sel = document.getElementById('scopeSelect');
+        d.systems.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
+    }
+
+    async function loadAll() { await Promise.all([loadKpis(), loadConnectors(), loadStates(), loadApprovals(), loadIncidents(), loadEvents()]); }
+
+    async function loadKpis() {
+        const ev = (await fetch('/api/grc/runtime/v2/events?limit=500').then(r => r.json())).events;
+        const ap = (await fetch('/api/grc/runtime/v2/approvals').then(r => r.json())).approvals;
+        const inc = (await fetch('/api/grc/runtime/v2/incidents').then(r => r.json())).incidents;
+        const states = (await fetch('/api/grc/runtime/v2/state').then(r => r.json())).states;
+        const blocked = ev.filter(e => ['blocked','refused','halted','masked'].includes(e.action_taken)).length;
+        const pii = ev.filter(e => e.event_type === 'PII_LEAK_BLOCKED').length;
+        const injection = ev.filter(e => e.event_type === 'PROMPT_INJECTION_BLOCKED' || e.event_type === 'JAILBREAK_ATTEMPT').length;
+        const killed = states.filter(s => s.kill_switch_engaged).length;
+        const pendingApp = ap.filter(a => a.status === 'PENDING').length;
+        const openInc = inc.filter(i => i.status === 'OPEN' || i.status === 'INVESTIGATING').length;
+        document.getElementById('kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▤</div><div class="kpi-label">Events (24h sample)</div></div><div class="kpi-value">${ev.length}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocked / Refused</div></div><div class="kpi-value critical">${blocked}</div><div class="kpi-trend">DLP, guardrails, authz</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">⏱</div><div class="kpi-label">Pending Approvals</div></div><div class="kpi-value">${pendingApp}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">●</div><div class="kpi-label">Active Incidents</div></div><div class="kpi-value critical">${openInc}</div><div class="kpi-trend">${killed} kill switch engaged</div></div>
+        `;
+    }
+
+    async function loadConnectors() {
+        const d = (await fetch('/api/grc/runtime/v2/connectors').then(r => r.json())).connectors;
+        document.getElementById('connectors').innerHTML = d.map(c => `
+            <div style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr 80px 90px; gap: 0.5rem; align-items: center;">
+                <div>
+                    <div class="text-sm font-bold">${esc(c.source)}</div>
+                    <div class="text-xs text-tertiary">${esc(c.implementation)}</div>
+                </div>
+                <div class="text-xs text-tertiary text-right">${c.event_count} events</div>
+                <div class="text-right">
+                    <span class="badge ${c.event_count > 0 ? 'badge-pass' : 'badge-neutral'}">${c.event_count > 0 ? 'connected' : 'idle'}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function loadStates() {
+        const d = (await fetch('/api/grc/runtime/v2/state').then(r => r.json())).states;
+        document.getElementById('states').innerHTML = d.map(s => {
+            const cls = s.kill_switch_engaged ? 'killed' : s.monitoring_level === 'HEIGHTENED' ? 'heightened' : '';
+            const lightCls = s.kill_switch_engaged ? 'red' : s.enabled ? 'green' : 'amber';
+            return `
+            <div class="sys-state-card ${cls}">
+                <div>
+                    <div class="text-sm font-bold"><span class="light ${lightCls}"></span>${esc(s.ai_system_name)}</div>
+                    <div class="text-xs text-tertiary">${s.ai_system_id}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-secondary">Status</div>
+                    <div class="text-sm font-bold">${s.kill_switch_engaged ? 'KILLED' : (s.enabled ? 'Enabled' : 'Disabled')}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-secondary">Monitoring</div>
+                    <div class="text-sm">${s.monitoring_level}</div>
+                </div>
+                <div class="text-right" style="display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap;">
+                    ${s.kill_switch_engaged
+                       ? `<button class="btn btn-sm" onclick="openStateModal('${s.ai_system_id}','reset')">Reset Kill</button>`
+                       : `<button class="btn btn-sm" onclick="openStateModal('${s.ai_system_id}','kill')">Kill Switch</button>`}
+                    <button class="btn btn-sm" onclick="openStateModal('${s.ai_system_id}','monitoring')">Monitoring</button>
+                    <button class="btn btn-sm" onclick="openStateModal('${s.ai_system_id}','enable')">${s.enabled ? 'Disable' : 'Enable'}</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function loadApprovals() {
+        const d = (await fetch('/api/grc/runtime/v2/approvals').then(r => r.json())).approvals;
+        document.getElementById('approvals').innerHTML = d.length === 0
+            ? '<div class="text-xs text-tertiary" style="padding: 0.5rem 0;">No approval requests.</div>'
+            : d.slice(0, 8).map(a => `
+                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+                    <div class="flex justify-between items-center">
+                        <span class="font-mono text-xs">${esc(a.id)}</span>
+                        <span class="badge ${a.status === 'PENDING' ? 'badge-medium' : a.status === 'APPROVED' ? 'badge-pass' : a.status === 'REJECTED' ? 'badge-critical' : 'badge-neutral'}">${a.status}</span>
                     </div>
-                    <div class="text-xs">
-                        <div class="text-tertiary mb-1">Action</div>
-                        <div class="font-bold text-primary">${e.action_taken.split('.')[0]}</div>
-                    </div>
+                    <div class="text-sm mt-1">${esc(a.action_description)}</div>
+                    <div class="text-xs text-tertiary mt-1">${esc(a.ai_system_id)} · req ${esc(a.requested_by)} · expires ${esc(a.expires_at.slice(0,19))}</div>
+                    ${a.status === 'PENDING' ? `<div class="flex gap-1 mt-1">
+                        <button class="btn btn-sm" onclick="resolveApproval('${a.id}','APPROVED')">Approve</button>
+                        <button class="btn btn-sm" onclick="resolveApproval('${a.id}','REJECTED')">Reject</button>
+                    </div>` : a.approver ? `<div class="text-xs text-tertiary mt-1">${esc(a.status === 'APPROVED' ? 'Approved by ' : 'Rejected by ')}${esc(a.approver)}${a.note ? ' — ' + esc(a.note) : ''}</div>` : ''}
                 </div>
             `).join('');
-        }
+    }
 
-        async function loadKillSwitches() {
-            const r = await fetch('/api/grc/ai-systems');
-            const d = await r.json();
-            document.getElementById('killSwitches').innerHTML = d.systems.map(s => `
-                <div class="kill-switch">
-                    <div class="kill-switch-status"></div>
-                    <div style="flex: 1;">
-                        <div class="text-sm font-bold">${s.name}</div>
-                        <div class="text-xs text-tertiary">${s.runtime_status} · last verified 1h ago</div>
+    async function loadIncidents() {
+        const d = (await fetch('/api/grc/runtime/v2/incidents').then(r => r.json())).incidents;
+        document.getElementById('incidents').innerHTML = d.length === 0
+            ? '<div class="text-xs text-tertiary" style="padding: 0.875rem 1rem;">No incidents.</div>'
+            : d.slice(0, 8).map(i => `
+                <div style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--border);">
+                    <div class="flex justify-between items-center">
+                        <span class="font-mono text-xs font-bold">${esc(i.id)}</span>
+                        <span class="badge ${i.status === 'OPEN' ? 'badge-critical' : i.status === 'INVESTIGATING' ? 'badge-high' : i.status === 'MITIGATED' ? 'badge-medium' : 'badge-pass'}">${i.status}</span>
                     </div>
-                    <button class="btn btn-sm">Test</button>
+                    <div class="text-sm mt-1">${esc(i.summary)}</div>
+                    <div class="text-xs text-tertiary mt-1">${esc(i.ai_system_id)} · owner ${esc(i.owner)} · created ${esc(i.created_at.slice(0,19))}${i.from_event_id ? ' · from ' + esc(i.from_event_id) : ''}</div>
+                    ${i.status !== 'CLOSED' ? `<div class="flex gap-1 mt-1">
+                        ${i.status === 'OPEN' ? `<button class="btn btn-sm" onclick="updateIncident('${i.id}','INVESTIGATING')">Investigate</button>` : ''}
+                        ${i.status === 'INVESTIGATING' ? `<button class="btn btn-sm" onclick="updateIncident('${i.id}','MITIGATED')">Mitigate</button>` : ''}
+                        ${i.status === 'MITIGATED' ? `<button class="btn btn-sm" onclick="updateIncident('${i.id}','CLOSED')">Close</button>` : ''}
+                    </div>` : ''}
                 </div>
             `).join('');
-        }
+    }
 
-        document.getElementById('severityFilter').addEventListener('change', renderEvents);
+    async function loadEvents() {
+        const qs = new URLSearchParams();
+        qs.set('scope', STATE.scope);
+        if (STATE.source) qs.set('source', STATE.source);
+        qs.set('limit', '60');
+        const d = (await fetch('/api/grc/runtime/v2/events?' + qs.toString()).then(r => r.json())).events;
+        document.getElementById('events').innerHTML = d.map(e => `
+            <div class="ev-row ${e.severity}" onclick="openIncidentFromEvent('${e.id}','${e.ai_system_id}','${e.severity}','${esc(e.details).slice(0,80).replace(/'/g, '&#39;')}')">
+                <div class="text-xs text-tertiary">${(e.timestamp || '').slice(11, 19)}<br><span class="text-tertiary">${(e.timestamp || '').slice(0, 10)}</span></div>
+                <div><span class="src-pill">${esc(e.source)}</span></div>
+                <div>
+                    <div class="text-sm font-bold">${esc(e.event_type.replace(/_/g, ' '))}</div>
+                    <div class="text-xs text-tertiary">${esc(e.details)}</div>
+                </div>
+                <div class="text-xs">${esc(e.ai_system_id)}</div>
+                <div><span class="badge ${e.severity === 'CRITICAL' ? 'badge-critical' : e.severity === 'HIGH' ? 'badge-high' : e.severity === 'MEDIUM' ? 'badge-medium' : 'badge-neutral'}">${e.severity}</span></div>
+                <div><span class="action-pill action-${e.action_taken}">${esc(e.action_taken)}</span></div>
+                <div class="text-xs">
+                    ${e.policy_triggered ? `<span class="framework-badge">${esc(e.policy_triggered)}</span>` : '—'}
+                    ${e.linked_framework ? `<div class="text-tertiary mt-1" style="font-size: 10px;">${esc(e.linked_framework)}</div>` : ''}
+                </div>
+                <div class="text-xs text-tertiary text-right">${e.evidence_id ? `<a href="/evidence" style="color: var(--accent);">${esc(e.evidence_id)}</a>` : '—'}</div>
+            </div>
+        `).join('') || '<div class="empty-state" style="padding: 1.5rem;">No events match.</div>';
+    }
 
-        loadKPIs();
-        loadEvents();
-        loadKillSwitches();
+    // === State action modals ===
+    let MODAL_CTX = null;
+    function openStateModal(sid, kind) {
+        MODAL_CTX = { type: 'state', sid, kind };
+        const title = { kill: 'Trigger Kill Switch', reset: 'Reset Kill Switch', monitoring: 'Set Monitoring Level', enable: 'Toggle Enabled' }[kind];
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalSub').textContent = sid;
+        let html = `<div class="form-grid" style="grid-template-columns:1fr;">
+            <div class="form-field"><label class="form-label">Actor</label><input class="form-input" id="f-actor"></div>`;
+        if (kind === 'kill') html += `<div class="form-field"><label class="form-label">Reason</label><textarea class="form-textarea" id="f-reason"></textarea></div>`;
+        if (kind === 'monitoring') html += `<div class="form-field"><label class="form-label">Level</label><select class="form-select" id="f-level"><option>STANDARD</option><option>HEIGHTENED</option><option>INCIDENT</option></select></div>`;
+        if (kind === 'enable') html += `<div class="form-field"><label class="form-label">Reason (optional)</label><input class="form-input" id="f-reason"></div>`;
+        if (kind === 'reset') html += `<div class="form-field"><label class="form-label">Reason (optional)</label><input class="form-input" id="f-reason"></div>`;
+        html += `</div>`;
+        document.getElementById('modalForm').innerHTML = html;
+        document.getElementById('modal').classList.add('open');
+    }
+    function openApprovalModal() {
+        MODAL_CTX = { type: 'approval' };
+        document.getElementById('modalTitle').textContent = 'Request Human Approval';
+        document.getElementById('modalSub').textContent = 'Action pending human review';
+        document.getElementById('modalForm').innerHTML = `<div class="form-grid" style="grid-template-columns:1fr;">
+            <div class="form-field"><label class="form-label">AI System</label><select class="form-select" id="f-sys"></select></div>
+            <div class="form-field"><label class="form-label">Action Description</label><textarea class="form-textarea" id="f-desc"></textarea></div>
+            <div class="form-field"><label class="form-label">Requested By</label><input class="form-input" id="f-by"></div>
+            <div class="form-field"><label class="form-label">TTL (minutes)</label><input class="form-input" type="number" id="f-ttl" value="60"></div>
+        </div>`;
+        document.getElementById('modal').classList.add('open');
+        // Populate sys select from scope dropdown
+        const sysSel = document.getElementById('f-sys');
+        document.querySelectorAll('#scopeSelect option').forEach(o => {
+            if (o.value === 'ALL') return;
+            const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.textContent; sysSel.appendChild(opt);
+        });
+    }
+    function openIncidentFromEvent(eventId, sysId, sev, snippet) {
+        MODAL_CTX = { type: 'incident', eventId, sysId };
+        document.getElementById('modalTitle').textContent = 'Create Incident from Event';
+        document.getElementById('modalSub').textContent = eventId + ' — ' + snippet;
+        document.getElementById('modalForm').innerHTML = `<div class="form-grid" style="grid-template-columns:1fr;">
+            <div class="form-field"><label class="form-label">Summary</label><textarea class="form-textarea" id="f-summary">${esc(snippet)}</textarea></div>
+            <div class="form-field"><label class="form-label">Severity</label><select class="form-select" id="f-sev"><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></div>
+            <div class="form-field"><label class="form-label">Owner</label><input class="form-input" id="f-owner"></div>
+            <div class="form-field"><label class="form-label">Actor</label><input class="form-input" id="f-actor"></div>
+        </div>`;
+        const sev_sel = document.getElementById('f-sev');
+        Array.from(sev_sel.options).forEach(o => { if (o.value === sev) o.selected = true; });
+        document.getElementById('modal').classList.add('open');
+    }
 
-        setInterval(loadEvents, 15000);
+    function closeModal() {
+        MODAL_CTX = null;
+        document.getElementById('modal').classList.remove('open');
+    }
+
+    document.getElementById('modalSubmit').addEventListener('click', async () => {
+        if (!MODAL_CTX) return;
+        const v = id => document.getElementById(id) ? document.getElementById(id).value : '';
+        let resp;
+        try {
+            if (MODAL_CTX.type === 'state') {
+                const sid = MODAL_CTX.sid, kind = MODAL_CTX.kind, actor = v('f-actor').trim();
+                if (!actor) { alert('Actor required.'); return; }
+                if (kind === 'kill') {
+                    resp = await fetch(`/api/grc/runtime/v2/state/${sid}/kill-switch`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ actor, reason: v('f-reason') }) });
+                } else if (kind === 'reset') {
+                    resp = await fetch(`/api/grc/runtime/v2/state/${sid}/reset-kill-switch`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ actor, reason: v('f-reason') }) });
+                } else if (kind === 'monitoring') {
+                    resp = await fetch(`/api/grc/runtime/v2/state/${sid}/monitoring`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ actor, level: v('f-level') }) });
+                } else if (kind === 'enable') {
+                    const states = (await fetch('/api/grc/runtime/v2/state').then(r => r.json())).states;
+                    const cur = states.find(s => s.ai_system_id === sid);
+                    const newEnabled = !cur.enabled;
+                    resp = await fetch(`/api/grc/runtime/v2/state/${sid}/enabled`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ actor, enabled: newEnabled, reason: v('f-reason') }) });
+                }
+            } else if (MODAL_CTX.type === 'approval') {
+                resp = await fetch('/api/grc/runtime/v2/approvals', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ ai_system_id: v('f-sys'), action_description: v('f-desc'), requested_by: v('f-by'), ttl_minutes: parseInt(v('f-ttl') || '60') }) });
+            } else if (MODAL_CTX.type === 'incident') {
+                resp = await fetch('/api/grc/runtime/v2/incidents', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ ai_system_id: MODAL_CTX.sysId, severity: v('f-sev'), summary: v('f-summary'),
+                                           owner: v('f-owner'), actor: v('f-actor'), from_event_id: MODAL_CTX.eventId }) });
+            }
+            const d = await resp.json();
+            if (!resp.ok) { alert('Failed: ' + (d.detail || JSON.stringify(d))); return; }
+            closeModal();
+            loadAll();
+        } catch (e) { alert('Error: ' + e.message); }
+    });
+
+    async function resolveApproval(id, decision) {
+        const approver = prompt('Approver name:');
+        if (!approver) return;
+        const note = prompt('Note (optional):') || null;
+        const r = await fetch(`/api/grc/runtime/v2/approvals/${id}/resolve`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ decision, approver, note }) });
+        const d = await r.json();
+        if (!r.ok) { alert('Failed: ' + (d.detail || JSON.stringify(d))); return; }
+        loadAll();
+    }
+
+    async function updateIncident(id, new_status) {
+        const actor = prompt('Actor name:');
+        if (!actor) return;
+        const note = prompt('Note (optional):') || null;
+        const r = await fetch(`/api/grc/runtime/v2/incidents/${id}/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ new_status, actor, note }) });
+        const d = await r.json();
+        if (!r.ok) { alert('Failed: ' + (d.detail || JSON.stringify(d))); return; }
+        loadAll();
+    }
+
+    document.getElementById('scopeSelect').addEventListener('change', e => { STATE.scope = e.target.value; loadEvents(); });
+    document.getElementById('sourceSelect').addEventListener('change', e => { STATE.source = e.target.value; loadEvents(); });
+    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+
+    window.openStateModal = openStateModal;
+    window.openApprovalModal = openApprovalModal;
+    window.openIncidentFromEvent = openIncidentFromEvent;
+    window.closeModal = closeModal;
+    window.resolveApproval = resolveApproval;
+    window.updateIncident = updateIncident;
+
+    buildSourceFilter();
+    loadScope().then(loadAll);
     </script>
 </body>
 </html>

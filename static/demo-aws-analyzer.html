@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AWS Analyzer Demo — AI Assurance Platform</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .aw-hero {
+            background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(56,189,248,0.06));
+            border: 1px solid rgba(99,102,241,0.25); border-radius: 10px;
+            padding: 1rem 1.25rem; margin-bottom: 0.875rem;
+        }
+        .aw-hero h1 { font-size: 20px; margin: 0 0 4px; color: var(--text-primary); }
+        .aw-hero .sub { font-size: 12px; color: var(--text-secondary); }
+
+        .aw-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; }
+        @media (max-width: 1000px) { .aw-layout { grid-template-columns: 1fr; } }
+
+        .aw-stepper {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px;
+            align-self: flex-start;
+        }
+        .aw-step-pill {
+            display: block; width: 100%; text-align: left;
+            background: transparent; color: var(--text-secondary);
+            border: 0; padding: 7px 10px; border-radius: 5px;
+            font-size: 12px; cursor: pointer; line-height: 1.4;
+            font-family: inherit;
+        }
+        .aw-step-pill:hover { background: var(--bg-deep); color: var(--text-primary); }
+        .aw-step-pill.active { background: rgba(99,102,241,0.18); color: #c7d2fe; border-left: 3px solid #6366f1; padding-left: 7px; }
+        .aw-step-pill .num {
+            display: inline-block; width: 22px; font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary);
+        }
+        .aw-step-pill .ttl { font-weight: 600; }
+        .aw-step-pill .desc { font-size: 10px; color: var(--text-tertiary); margin-top: 1px; padding-left: 22px; }
+
+        .aw-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 1rem 1.25rem; margin-bottom: 0.875rem;
+        }
+        .aw-card h2 { font-size: 15px; margin: 0 0 4px; color: var(--text-primary); }
+        .aw-card .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); }
+        .aw-card .meta { font-size: 11px; color: var(--text-tertiary); margin-bottom: 8px; }
+        .aw-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 8px 0; }
+
+        .aw-callout {
+            background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.30);
+            border-left: 3px solid #6366f1; border-radius: 5px;
+            padding: 9px 12px; margin: 10px 0; font-size: 12px; color: var(--text-secondary); line-height: 1.55;
+        }
+        .aw-callout.warn { background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.35); border-left-color: #f87171; color: #fecaca; }
+        .aw-callout.ok   { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.30); border-left-color: #4ade80; color: #86efac; }
+        .aw-callout b { color: var(--text-primary); }
+
+        .aw-kv { display: grid; grid-template-columns: 200px 1fr; gap: 4px 12px; font-size: 12px; }
+        .aw-kv dt { color: var(--text-tertiary); }
+        .aw-kv dd { color: var(--text-secondary); margin: 0; }
+
+        .aw-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+        .aw-pane {
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 6px;
+            padding: 9px 12px;
+        }
+        .aw-pane h4 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin: 0 0 6px; }
+        .aw-pane.allow h4 { color: #86efac; }
+        .aw-pane.block h4 { color: #fca5a5; }
+        .aw-pane ul { margin: 0; padding-left: 1.1rem; font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+
+        table.aw-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+        table.aw-table th, table.aw-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+        table.aw-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); }
+        table.aw-table .mono { font-family: var(--font-mono); }
+
+        .pill-sev { display: inline-block; padding: 1px 6px; border-radius: 3px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+        .pill-sev.P0   { background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.5); color: #fca5a5; }
+        .pill-sev.P1   { background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.5); color: #fcd34d; }
+        .pill-sev.P2   { background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.5); color: #7dd3fc; }
+        .pill-sev.P3   { background: rgba(148,163,184,0.15); border: 1px solid rgba(148,163,184,0.5); color: #cbd5e1; }
+        .pill-stat { display: inline-block; padding: 1px 6px; border-radius: 3px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+        .pill-stat.PASS { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.5); color: #86efac; }
+        .pill-stat.FAIL { background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.5); color: #fca5a5; }
+        .pill-stat.OPEN { background: rgba(248,113,113,0.10); border: 1px solid rgba(248,113,113,0.40); color: #fca5a5; }
+        .pill-stat.REMEDIATED, .pill-stat.RISK_ACCEPTED { background: rgba(148,163,184,0.10); border: 1px solid rgba(148,163,184,0.30); color: #cbd5e1; }
+
+        .aw-score-bar {
+            height: 8px; border-radius: 4px;
+            background: linear-gradient(to right, #4ade80 0%, #4ade80 20%, #fbbf24 20%, #fbbf24 45%, #f97316 45%, #f97316 75%, #f87171 75%, #f87171 100%);
+            position: relative; margin: 6px 0;
+        }
+        .aw-score-bar .marker {
+            position: absolute; top: -2px; width: 4px; height: 12px;
+            background: var(--text-primary); border-radius: 2px;
+        }
+        .aw-score-bar-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-tertiary); font-family: var(--font-mono); }
+
+        .aw-heatmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+        .aw-heat-cell {
+            padding: 6px 8px; border-radius: 4px; font-size: 10px;
+        }
+        .aw-heat-cell .dim { color: var(--text-tertiary); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .aw-heat-cell .lvl { font-weight: 700; font-family: var(--font-mono); font-size: 11px; margin-top: 2px; }
+        .aw-heat-cell.LOW       { background: rgba(74,222,128,0.10); border: 1px solid rgba(74,222,128,0.40); color: #86efac; }
+        .aw-heat-cell.MODERATE  { background: rgba(251,191,36,0.10); border: 1px solid rgba(251,191,36,0.40); color: #fcd34d; }
+        .aw-heat-cell.HIGH      { background: rgba(249,115,22,0.10); border: 1px solid rgba(249,115,22,0.40); color: #fdba74; }
+        .aw-heat-cell.CRITICAL  { background: rgba(248,113,113,0.10); border: 1px solid rgba(248,113,113,0.40); color: #fca5a5; }
+
+        .aw-rules-fired { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+        .aw-rule-row {
+            display: flex; gap: 8px; align-items: flex-start;
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 5px;
+            padding: 6px 9px; font-size: 11px;
+        }
+        .aw-rule-row .rid { font-family: var(--font-mono); font-weight: 700; color: var(--text-primary); min-width: 28px; }
+        .aw-rule-row .w   { font-family: var(--font-mono); color: #fcd34d; min-width: 32px; }
+        .aw-rule-row .why { color: var(--text-secondary); }
+
+        .aw-pre {
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 5px;
+            padding: 10px; font-family: var(--font-mono); font-size: 10px;
+            color: var(--text-secondary); overflow-x: auto; white-space: pre;
+            line-height: 1.45; margin: 6px 0;
+        }
+        .aw-flex { display: flex; gap: 6px; flex-wrap: wrap; }
+        .aw-chip {
+            display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-family: var(--font-mono);
+            background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-secondary);
+        }
+
+        .aw-nav-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 1rem; }
+        .aw-btn {
+            background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-secondary);
+            padding: 7px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit; font-weight: 600;
+        }
+        .aw-btn:hover { color: var(--text-primary); border-color: rgba(99,102,241,0.45); }
+        .aw-btn.primary { background: rgba(99,102,241,0.85); color: white; border-color: rgba(99,102,241,1); }
+        .aw-btn.primary:hover { background: rgba(99,102,241,1); }
+
+        .aw-doc-frame {
+            border: 1px solid var(--border); border-radius: 6px; background: white;
+            width: 100%; height: 70vh; min-height: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">AWS Deployment Architecture &amp; Security Posture Analyzer</div>
+                <div class="page-subtitle">Walkthrough — how the 10-step AI Assurance flow was applied to this workload, screen by screen.</div>
+            </div>
+        </div>
+
+        <section class="aw-hero">
+            <h1>End-to-end walkthrough</h1>
+            <div class="sub">
+                <b>Customer:</b> Acme Bank Payments Platform &nbsp;·&nbsp;
+                <b>AI System:</b> Payments AWS Architecture Analyzer &nbsp;·&nbsp;
+                <b>Assessment:</b> <span style="font-family:var(--font-mono);">asmt-aws-001</span>
+            </div>
+            <div class="sub" style="margin-top:4px;">Each step below shows what was filled in, why, and what the platform decided.</div>
+        </section>
+
+        <div class="aw-layout">
+            <aside class="aw-stepper" id="stepNav"></aside>
+            <main id="stepContent"></main>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    let DEMO = null;
+    let CURRENT_STEP = 0;
+
+    const STEPS = [
+        { key: 'workload',  title: '1. AI Workload',           desc: 'Pick what the AI is doing' },
+        { key: 'intake',    title: '2. Intake',                desc: 'Operational metadata' },
+        { key: 'risk',      title: '3. Risk Classification',   desc: '10 rules, weighted score' },
+        { key: 'controls',  title: '4. Required Controls',     desc: 'NIST + AI-001..010 + CIS' },
+        { key: 'evals',     title: '5. Evals',                 desc: 'Determinism · prompt-injection · sanitizer' },
+        { key: 'findings',  title: '6. Findings',              desc: 'From eval failures' },
+        { key: 'gates',     title: '7. Release Gates',         desc: 'HOLD vs CONDITIONAL_PILOT' },
+        { key: 'evidence',  title: '8. Evidence',              desc: 'Graph hash, audit trail, signatures' },
+        { key: 'runtime',   title: '9. Runtime Monitoring',    desc: 'Bedrock + IAM + drift events' },
+        { key: 'reassess',  title: '10. Reassessment',         desc: 'Triggers + cadence' },
+        { key: 'agent',     title: '11. The Agent',            desc: 'Inputs → graph → diagram → narrative' },
+        { key: 'document',  title: '12. Final Document',       desc: 'The assembled deliverable' },
+    ];
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function $(id) { return document.getElementById(id); }
+
+    function renderStepNav() {
+        $('stepNav').innerHTML = STEPS.map((s, i) => `
+            <button class="aw-step-pill ${i === CURRENT_STEP ? 'active' : ''}" data-step="${i}">
+                <div><span class="num">${i + 1}.</span><span class="ttl">${esc(s.title.split('. ')[1])}</span></div>
+                <div class="desc">${esc(s.desc)}</div>
+            </button>`).join('');
+        document.querySelectorAll('.aw-step-pill').forEach(el => {
+            el.addEventListener('click', () => goTo(parseInt(el.getAttribute('data-step'), 10)));
+        });
+    }
+
+    function goTo(i) {
+        CURRENT_STEP = Math.max(0, Math.min(STEPS.length - 1, i));
+        renderStepNav();
+        renderStep();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function navRow() {
+        const prev = CURRENT_STEP > 0 ? `<button class="aw-btn" onclick="goTo(${CURRENT_STEP - 1})">‹ Previous</button>` : '<span></span>';
+        const next = CURRENT_STEP < STEPS.length - 1 ? `<button class="aw-btn primary" onclick="goTo(${CURRENT_STEP + 1})">Continue ›</button>` : '<span></span>';
+        return `<div class="aw-nav-row">${prev}${next}</div>`;
+    }
+
+    // ===== Per-step renderers =====
+    function renderWorkload() {
+        const i = DEMO.intake;
+        return `
+            <div class="aw-card">
+                <h2>Step 1 — AI Workload</h2>
+                <div class="meta">The workload is the root object. Selecting it locks the policy envelope for every downstream step.</div>
+                <div class="aw-callout">
+                    <b>What was filled:</b> The user selected <b>AWS Deployment Logical Architecture &amp; Security Posture Analyzer</b> as the workload type.
+                </div>
+                <p><b>Why this workload?</b> The team needs to read AWS deployment metadata (IAM, VPC, Security Hub) and produce a signed architecture-analysis document. No other workload type matches that allow/block envelope.</p>
+                <p><b>What the platform locked in immediately:</b></p>
+                <div class="aw-grid">
+                    <div class="aw-pane allow"><h4>Allowed</h4>
+                        <ul><li>Read AWS Config, Terraform, IAM, VPC, Security Hub</li><li>Generate architecture diagram + analysis document</li></ul>
+                    </div>
+                    <div class="aw-pane block"><h4>Blocked</h4>
+                        <ul><li>Modify any AWS resource</li><li>Send raw customer deployment data to external LLMs</li><li>Access raw secrets / customer data</li></ul>
+                    </div>
+                </div>
+                <div class="aw-callout warn">
+                    <b>Policy envelope (always-on for this workload):</b> Raw AWS deployment metadata must be processed only inside AWS Bedrock, customer VPC models, local models, deterministic parsers, or approved in-boundary analysis workers. <b>OpenAI and Anthropic are BLOCKED for raw deployment data.</b>
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderIntake() {
+        const i = DEMO.intake;
+        return `
+            <div class="aw-card">
+                <h2>Step 2 — Intake</h2>
+                <div class="meta">Operational metadata for the registered AI system. Drives downstream classification + control selection.</div>
+
+                <div class="aw-callout">
+                    <b>What was filled:</b> Business + technical owners, AWS scope, deployment patterns, runtime characteristics, governance flags.
+                </div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Business Context</h3>
+                <dl class="aw-kv">
+                    <dt>AI System Name</dt><dd>${esc(i.ai_system_name)}</dd>
+                    <dt>Description</dt><dd>${esc(i.business_description)}</dd>
+                    <dt>Business Owner</dt><dd>${esc(i.business_owner)} — ${esc(i.business_owner_title)}</dd>
+                    <dt>Technical Owner</dt><dd>${esc(i.technical_owner)} — ${esc(i.technical_owner_title)}</dd>
+                    <dt>Domain</dt><dd>${esc(i.domain)}</dd>
+                    <dt>Business Unit</dt><dd>${esc(i.business_unit)}</dd>
+                    <dt>Customer Environment</dt><dd>${esc(i.customer_environment)}</dd>
+                    <dt>User Population</dt><dd>${esc(i.user_population)}</dd>
+                    <dt>Customer Impact</dt><dd>${esc(i.customer_impact)}</dd>
+                    <dt>Regulatory Exposure</dt><dd>${esc(i.regulatory_exposure)}</dd>
+                </dl>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">AWS Deployment Scope</h3>
+                <dl class="aw-kv">
+                    <dt>AWS Accounts</dt><dd>${i.aws_accounts}</dd>
+                    <dt>AWS Regions</dt><dd>${i.aws_regions.join(', ')}</dd>
+                    <dt>Deployment Patterns</dt><dd>${i.deployment_patterns.join(', ')}</dd>
+                    <dt>Internet Exposure</dt><dd>${esc(i.internet_exposure)}</dd>
+                    <dt>External Connectivity</dt><dd>${i.external_connectivity.join(', ')}</dd>
+                </dl>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">AI Runtime Characteristics</h3>
+                <div class="aw-flex">
+                    <span class="aw-chip">RAG: ${i.uses_rag}</span>
+                    <span class="aw-chip">Tools: ${i.uses_tools}</span>
+                    <span class="aw-chip">Multi-Agent: ${i.uses_multi_agent}</span>
+                    <span class="aw-chip">Memory: ${i.uses_memory}</span>
+                    <span class="aw-chip">Customer Data: ${i.customer_data_present}</span>
+                    <span class="aw-chip" style="border-color:rgba(248,113,113,0.50); color:#fca5a5;">Restricted Data: ${i.restricted_data_present}</span>
+                </div>
+
+                <div class="aw-callout">
+                    <b>Why these values?</b> Sarah and David are the business + technical owners actually accountable for this analyzer; the workload runs against 12 accounts in 2 regions in Multi-Account/Hub-and-Spoke topology (true for Acme Bank's payments stack); RAG is on because the analyzer retrieves prior architecture artifacts; tools are on because the analyzer invokes parsers and topology extractors; <b>restricted_data_present = true</b> because IAM policies and security findings ARE restricted data.
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderRisk() {
+        const r = DEMO.risk_classification;
+        const score = r.overall_risk_score;
+        const markerLeft = score + '%';
+        const dims = [
+            ['governance_sensitivity', 'Governance'],
+            ['security_sensitivity', 'Security'],
+            ['operational_impact', 'Operational'],
+            ['customer_exposure', 'Customer Exposure'],
+            ['external_connectivity_risk', 'External Conn.'],
+            ['autonomy_risk', 'Autonomy'],
+            ['data_sensitivity', 'Data'],
+            ['architecture_sensitivity', 'Architecture'],
+            ['model_risk', 'Model'],
+        ];
+        const heatmap = dims.map(([k, lbl]) => `
+            <div class="aw-heat-cell ${r[k]}"><div class="dim">${lbl}</div><div class="lvl">${r[k]}</div></div>
+        `).join('');
+        const rules = r.rules_fired.map(rule => `
+            <div class="aw-rule-row">
+                <span class="rid">${rule.id}</span>
+                <span class="w">+${rule.weight}</span>
+                <span class="why"><b>${esc(rule.title)}</b> — ${esc(rule.rationale)}<br>
+                    <span style="color:var(--text-tertiary); font-family:var(--font-mono); font-size:10px;">triggered by: ${esc(rule.triggered_by)}</span>
+                </span>
+            </div>`).join('');
+        return `
+            <div class="aw-card">
+                <h2>Step 3 — Risk Classification</h2>
+                <div class="meta">Deterministic. No LLM. Same intake → same classification.</div>
+
+                <div style="display:flex; gap:1rem; align-items:flex-end; margin-bottom: 8px;">
+                    <div>
+                        <div class="lbl">Overall Risk Score</div>
+                        <div style="font-size:32px; font-weight:700; color:#fca5a5; font-family:var(--font-mono);">${score} / 100</div>
+                        <div style="font-size:11px; color:#fca5a5; font-weight:700;">${esc(r.inherent_risk_level)}</div>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="aw-score-bar"><div class="marker" style="left:${markerLeft};"></div></div>
+                        <div class="aw-score-bar-labels"><span>0 LOW</span><span>21 MOD</span><span>46 HIGH</span><span>76 CRIT</span><span>100</span></div>
+                    </div>
+                </div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary);">Sensitivity heatmap (9 dimensions)</h3>
+                <div class="aw-heatmap">${heatmap}</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Rules fired (9 of 10 — R10 not fired, uses_memory=false)</h3>
+                <div class="aw-rules-fired">${rules}</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Required reviewers</h3>
+                <div class="aw-flex">${r.required_reviewers.map(rv => `<span class="aw-chip" style="border-color:rgba(99,102,241,0.45); color:#c7d2fe;">${esc(rv)}</span>`).join('')}</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Provider routing</h3>
+                <div class="aw-callout warn">
+                    <b>Provider restrictions: ${esc(r.provider_restrictions)}</b> — Raw AWS deployment metadata may only be processed by AWS Bedrock, local/VPC models, or deterministic parsers. OpenAI and Anthropic are <b>BLOCKED</b> for raw data.
+                </div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Audit-grade rationale</h3>
+                <div class="aw-pre" style="white-space:pre-wrap; font-family:inherit; font-size:12px;">${esc(r.rationale)}</div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderControls() {
+        const c = DEMO.required_controls;
+        return `
+            <div class="aw-card">
+                <h2>Step 4 — Required Controls</h2>
+                <div class="meta">Selected from NIST AI RMF, OWASP LLM Top 10, FS Overlay (AI-001..010), and CIS AWS Foundations — driven by the rules that fired in Step 3.</div>
+
+                <table class="aw-table">
+                    <thead><tr><th>Control</th><th>Framework</th><th>Priority</th><th>Owner</th><th>Status</th><th>Evidence</th></tr></thead>
+                    <tbody>${c.map(x => `
+                        <tr>
+                            <td><span class="mono">${esc(x.id)}</span><div style="font-size:11px; color:var(--text-secondary);">${esc(x.title)}</div></td>
+                            <td class="mono">${esc(x.framework)}</td>
+                            <td><span class="pill-sev ${esc(x.priority)}">${esc(x.priority)}</span></td>
+                            <td>${esc(x.owner)}</td>
+                            <td><span class="pill-stat ${esc(x.status)}">${esc(x.status)}</span></td>
+                            <td style="color:var(--text-tertiary); font-size:11px;">${esc(x.evidence)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <div class="aw-callout">
+                    <b>Why these controls?</b> Each control was added because a Step-3 rule fired or because the workload type requires it. E.g. <span class="mono">LLM01</span> (prompt injection) is required because tool-using agents are in scope (R1); <span class="mono">AI-001</span> (provider routing) is required because the workload's external_llm_policy is restrictive (R6); <span class="mono">CIS-AWS-3.1</span> is required because of Multi-Account scope (R8).
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderEvals() {
+        const pack = DEMO.eval_pack;
+        return `
+            <div class="aw-card">
+                <h2>Step 5 — Eval Pack</h2>
+                <div class="meta">Eval pack <span class="mono">${esc(pack.pack_id)}</span> — runs against the analyzer outputs to verify each Step-4 control's pass criteria.</div>
+
+                ${pack.categories.map(cat => `
+                    <div style="background:var(--bg-deep); border:1px solid var(--border); border-radius:6px; padding:10px 12px; margin-bottom:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                            <div>
+                                <div style="font-size:13px; font-weight:700; color:var(--text-primary);">${esc(cat.title)}</div>
+                                <div style="font-size:11px; color:var(--text-tertiary); margin-top:2px;">${esc(cat.description)}</div>
+                            </div>
+                            <span class="pill-stat ${esc(cat.status)}">${esc(cat.status)}</span>
+                        </div>
+                        <div class="aw-flex" style="margin-top:6px;">
+                            <span class="aw-chip">${cat.cases_passed}/${cat.cases_run} cases passed</span>
+                            <span class="aw-chip">Pass rate: ${esc(cat.pass_rate)}</span>
+                            <span class="aw-chip">Threshold: ${esc(cat.pass_threshold)}</span>
+                        </div>
+                        ${cat.failing_cases && cat.failing_cases.length ? `
+                            <div class="aw-callout warn" style="margin-top:6px;">
+                                <b>Failing cases:</b>
+                                <ul style="margin:4px 0 0 1.2rem;">${cat.failing_cases.map(f => '<li>' + esc(f) + '</li>').join('')}</ul>
+                            </div>` : ''}
+                    </div>`).join('')}
+
+                <div class="aw-callout">
+                    <b>Why these eval categories?</b> Parser determinism proves the agent gives the same answer every time (auditability). Prompt injection and ARN spoofing test the boundary between data and instructions. Sanitizer leak detection proves the policy "no account IDs in external-LLM payloads" is enforced — the highest-stakes test for this workload.
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderFindings() {
+        const f = DEMO.findings;
+        return `
+            <div class="aw-card">
+                <h2>Step 6 — Findings</h2>
+                <div class="meta">Generated automatically from eval failures and control gaps. SLA per severity. Each finding traces to a control + eval case.</div>
+                <table class="aw-table">
+                    <thead><tr><th>ID</th><th>Severity</th><th>Status</th><th>Title</th><th>Control</th><th>Eval Case</th><th>SLA</th></tr></thead>
+                    <tbody>${f.map(x => `
+                        <tr>
+                            <td class="mono">${esc(x.id)}</td>
+                            <td><span class="pill-sev ${esc(x.severity)}">${esc(x.severity)}</span></td>
+                            <td><span class="pill-stat ${esc(x.status)}">${esc(x.status)}</span></td>
+                            <td>${esc(x.title)}<div style="font-size:11px; color:var(--text-tertiary); margin-top:2px;">${esc(x.description)}</div></td>
+                            <td class="mono">${esc(x.control)}</td>
+                            <td class="mono">${esc(x.eval_case)}</td>
+                            <td style="font-size:11px;">${x.sla_days}d<br><span style="color:var(--text-tertiary);">opened ${esc(x.opened_at)}</span></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+                <div class="aw-callout">
+                    <b>Why these findings?</b> FIN-002 (P0) and FIN-001 (P1) are derived directly from failing eval cases SL-042 and PI-007. FIN-003 was the CloudTrail drift in the new us-west-2 account — remediated within 48h. FIN-004 was risk-accepted because evidence retention is policy, not technical, and the 90-day cadence already triggers reassessment.
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderGates() {
+        const g = DEMO.release_gates;
+        const d = DEMO.release_decision;
+        return `
+            <div class="aw-card">
+                <h2>Step 7 — Release Gates</h2>
+                <div class="meta">Each gate is a machine-evaluable expression over the prior steps' data. All must pass before the workload can move to pilot or production.</div>
+
+                <table class="aw-table">
+                    <thead><tr><th>Gate</th><th>Expression</th><th>Actual</th><th>Result</th></tr></thead>
+                    <tbody>${g.map(x => `
+                        <tr>
+                            <td class="mono">${esc(x.id)}<div style="font-size:11px; color:var(--text-secondary);">${esc(x.title)}</div></td>
+                            <td class="mono" style="font-size:10px; color:var(--text-tertiary);">${esc(x.expr)}</td>
+                            <td>${esc(x.actual)}</td>
+                            <td><span class="pill-stat ${x.passed ? 'PASS' : 'FAIL'}">${x.passed ? 'PASS' : 'FAIL'}</span></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <div class="aw-callout warn">
+                    <b>Release Decision: ${esc(d.decision)}</b> — ${esc(d.reason)}
+                </div>
+                <h3 style="font-size:12px; color:var(--text-secondary);">Path to Conditional Pilot</h3>
+                <ul style="font-size:12px; color:var(--text-secondary); line-height:1.6;">${d.path_to_conditional_pilot.map(s => '<li>' + esc(s) + '</li>').join('')}</ul>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderEvidence() {
+        const e = DEMO.evidence;
+        return `
+            <div class="aw-card">
+                <h2>Step 8 — Evidence Package</h2>
+                <div class="meta">Package <span class="mono">${esc(e.package_id)}</span> — every artifact needed to defend this assessment in audit. <b>${e.completeness_pct}%</b> complete (${e.required_types_present}/${e.required_types_present + e.required_types_missing} required types).</div>
+
+                <table class="aw-table">
+                    <thead><tr><th>Type</th><th>Name</th><th>Hash (sha256, first 16 hex)</th><th>Size</th><th>Captured</th></tr></thead>
+                    <tbody>${e.items.map(it => `
+                        <tr>
+                            <td class="mono">${esc(it.type)}</td>
+                            <td>${esc(it.name)}</td>
+                            <td class="mono" style="color:var(--text-tertiary);">${esc(it.hash)}</td>
+                            <td class="mono">${it.size_kb}KB</td>
+                            <td class="mono" style="color:var(--text-tertiary); font-size:10px;">${esc(it.captured_at)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <div class="aw-callout ok">
+                    <b>Why these 10 items?</b> Together they let any auditor reproduce the analysis: the graph hash + parser log proves determinism; the sanitizer diff proves the boundary; the Bedrock audit proves provider routing; the signatures prove human-in-the-loop; the eval results prove control validation; the CloudTrail export proves no out-of-band IAM access.
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderRuntime() {
+        const ev = DEMO.runtime_events;
+        const st = DEMO.runtime_stats;
+        return `
+            <div class="aw-card">
+                <h2>Step 9 — Runtime Monitoring</h2>
+                <div class="meta">7-day window. Every action the analyzer takes against AWS is logged + monitored. Provider routing is policy-enforced at runtime.</div>
+
+                <div class="aw-flex" style="margin-bottom:8px;">
+                    <span class="aw-chip">Bedrock invocations: <b>${st.bedrock_invocations}</b></span>
+                    <span class="aw-chip">IAM reads: <b>${st.iam_read_events}</b></span>
+                    <span class="aw-chip" style="border-color:rgba(74,222,128,0.45); color:#86efac;">External LLM w/ raw data: <b>${st.external_llm_attempts_with_raw_data}</b></span>
+                    <span class="aw-chip" style="border-color:rgba(251,191,36,0.45); color:#fcd34d;">Alerts open: <b>${st.alerts_open}</b></span>
+                    <span class="aw-chip">Drift events: <b>${st.drift_events}</b></span>
+                </div>
+
+                <table class="aw-table">
+                    <thead><tr><th>Time (UTC)</th><th>Category</th><th>Severity</th><th>Detail</th></tr></thead>
+                    <tbody>${ev.map(e => `
+                        <tr>
+                            <td class="mono" style="font-size:10px;">${esc(e.ts)}</td>
+                            <td class="mono">${esc(e.category)}</td>
+                            <td>${esc(e.severity)}</td>
+                            <td style="font-size:11px;">${esc(e.detail)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <div class="aw-callout ok">
+                    <b>Provider routing held the line:</b> 0 external LLM calls were made with raw deployment data. One attempt was blocked and rerouted through the sanitized path (event of 2026-05-16). One drift event auto-queued a reassessment.
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderReassess() {
+        const r = DEMO.reassessment;
+        return `
+            <div class="aw-card">
+                <h2>Step 10 — Reassessment</h2>
+                <div class="meta">When the workload must be re-classified, re-evaluated, and re-approved.</div>
+
+                <dl class="aw-kv">
+                    <dt>Last assessment</dt><dd>${esc(r.last_assessment_at)}</dd>
+                    <dt>Next scheduled</dt><dd>${esc(r.next_scheduled_at)}</dd>
+                    <dt>Cadence</dt><dd>${esc(r.cadence)}</dd>
+                </dl>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Triggers</h3>
+                <table class="aw-table">
+                    <thead><tr><th>Type</th><th>Description</th><th>Active</th></tr></thead>
+                    <tbody>${r.triggers.map(t => `
+                        <tr>
+                            <td class="mono">${esc(t.type)}</td>
+                            <td style="font-size:11px;">${esc(t.description)}</td>
+                            <td>${t.active ? '<span class="pill-stat PASS">YES</span>' : 'no'}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">Last trigger fired</h3>
+                <div class="aw-callout warn">
+                    <b>${esc(r.last_trigger.type)}</b> — ${esc(r.last_trigger.detail)} (${esc(r.last_trigger.fired_at)}) — status: <b>${esc(r.last_trigger.status)}</b>
+                </div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderAgent() {
+        const a = DEMO.aws_input;
+        const g = DEMO.architecture_graph;
+        const s = DEMO.sanitizer_demo;
+        return `
+            <div class="aw-card">
+                <h2>Step 11 — The Agent in Motion</h2>
+                <div class="meta">All deterministic. Raw deployment metadata never leaves the customer trust boundary.</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary);">A. Input — what the agent ingested</h3>
+                <dl class="aw-kv">
+                    <dt>AWS accounts</dt><dd>${a.accounts_in_scope}</dd>
+                    <dt>Regions</dt><dd>${a.regions.join(', ')}</dd>
+                    <dt>Topology</dt><dd>${esc(a.topology)}</dd>
+                    <dt>Primary services</dt><dd>${a.primary_services.join(' · ')}</dd>
+                    <dt>IAM roles</dt><dd>${a.iam_roles_total}</dd>
+                    <dt>VPCs</dt><dd>${a.vpcs_total}</dd>
+                    <dt>Security groups</dt><dd>${a.security_groups_total}</dd>
+                    <dt>Security Hub findings</dt><dd>${a.security_hub_findings.CRITICAL} CRIT · ${a.security_hub_findings.HIGH} HIGH · ${a.security_hub_findings.MEDIUM} MED</dd>
+                    <dt>Config snapshot age</dt><dd>${a.config_snapshot_age_hours} hours</dd>
+                </dl>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">B. Deterministic parsing — architecture graph</h3>
+                <div class="aw-callout">
+                    <b>Graph hash:</b> <span class="mono">${esc(g.graph_hash)}</span> · <b>${g.components_count}</b> components · <b>${g.trust_boundaries_count}</b> trust boundaries · <b>${g.data_flows_count}</b> data flows · <b>${g.iam_trust_edges}</b> IAM trust edges.<br>
+                    <b>Parsers used (no LLM):</b> Config-snapshot parser → Network graph builder → IAM trust resolver → Data-flow inferrer → Trust-boundary detector.
+                </div>
+                <table class="aw-table">
+                    <thead><tr><th>Component (sample)</th><th>Type</th><th>Account (tokenized)</th><th>Note</th></tr></thead>
+                    <tbody>${g.components_sample.map(c => `
+                        <tr>
+                            <td class="mono">${esc(c.id)}</td>
+                            <td>${esc(c.type)}</td>
+                            <td class="mono">${esc(c.account_token)}</td>
+                            <td style="font-size:11px;${c.concern ? 'color:#fca5a5;' : ''}">${c.public ? 'public' : ''} ${c.kms_encryption_context === false ? '· no KMS encryption-context' : ''} ${c.vpc_endpoint === false ? '· no VPC endpoint' : ''} ${c.model ? '· ' + esc(c.model) : ''}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">C. Diagram (deterministic Mermaid render)</h3>
+                <div class="aw-pre">${esc(DEMO.diagram_mermaid)}</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">D. Sanitizer — boundary proof</h3>
+                <div class="aw-grid">
+                    <div class="aw-pane block"><h4>Before (in-boundary only)</h4>
+                        <ul style="font-family:var(--font-mono); font-size:10px;">
+                        ${Object.entries(s.before).map(([k, v]) => `<li><b>${esc(k)}:</b> ${esc(v)}</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div class="aw-pane allow"><h4>After (safe to send out, if needed)</h4>
+                        <ul style="font-family:var(--font-mono); font-size:10px;">
+                        ${Object.entries(s.after_sanitized).map(([k, v]) => `<li><b>${esc(k)}:</b> ${esc(v)}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+                <div class="meta" style="margin-top:6px;">${s.tokens_generated} tokens generated. ${esc(s.boundary_note)}</div>
+
+                <h3 style="font-size:12px; color:var(--text-secondary); margin-top:1rem;">E. Narrative draft (Bedrock — in-boundary)</h3>
+                <div class="aw-pre" style="white-space:pre-wrap; font-family:inherit; font-size:12px; max-height:300px; overflow-y:auto;">${esc(DEMO.narrative_draft)}</div>
+            </div>
+            ${navRow()}`;
+    }
+
+    function renderDocument() {
+        return `
+            <div class="aw-card">
+                <h2>Step 12 — Final Document</h2>
+                <div class="meta">The assembled architecture analysis document — the deliverable. Signed by AI Governance, Cloud Security, Internal Audit.</div>
+
+                <div class="aw-callout ok">
+                    <b>Single output:</b> <span class="mono">architecture-analysis-acme-bank-payments-2026-05-14.pdf</span> (1842 KB) · SHA-256 <span class="mono">abcdef0123456789</span>
+                </div>
+
+                <p style="font-size:12px;">Open in a new tab:
+                    <a href="/api/aws-demo/document" target="_blank" style="color:#a5b4fc;">/api/aws-demo/document ›</a>
+                </p>
+
+                <iframe src="/api/aws-demo/document" class="aw-doc-frame" title="Architecture Analysis Document"></iframe>
+            </div>
+            ${navRow()}`;
+    }
+
+    const RENDERERS = {
+        workload:  renderWorkload,
+        intake:    renderIntake,
+        risk:      renderRisk,
+        controls:  renderControls,
+        evals:     renderEvals,
+        findings:  renderFindings,
+        gates:     renderGates,
+        evidence:  renderEvidence,
+        runtime:   renderRuntime,
+        reassess:  renderReassess,
+        agent:     renderAgent,
+        document:  renderDocument,
+    };
+
+    function renderStep() {
+        const stepKey = STEPS[CURRENT_STEP].key;
+        $('stepContent').innerHTML = RENDERERS[stepKey]();
+    }
+
+    async function boot() {
+        const r = await fetch('/api/aws-demo');
+        DEMO = await r.json();
+        renderStepNav();
+        renderStep();
+    }
+
+    initPage('/demo-aws-analyzer');
+    boot();
+    </script>
+</body>
+</html>

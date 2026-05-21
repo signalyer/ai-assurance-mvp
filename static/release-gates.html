@@ -5,77 +5,63 @@
     <title>Release Gates — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .gate-system {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            overflow: hidden;
+        .sys-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            margin-bottom: 0.75rem; overflow: hidden;
         }
-
-        .gate-system-header {
-            padding: 1rem 1.25rem;
-            background: var(--bg-elevated);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border);
+        .sys-card-header {
+            padding: 0.875rem 1rem; display: grid;
+            grid-template-columns: 1fr 220px 130px 110px;
+            gap: 0.875rem; align-items: center;
+            border-bottom: 1px solid var(--border); cursor: pointer;
         }
-
-        .gate-list {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1px;
+        .sys-card-header:hover { background: var(--bg-card-hover); }
+        .sys-card.expanded .sys-card-header { background: var(--bg-elevated); }
+        .gate-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px;
             background: var(--border);
         }
-
-        .gate-result {
-            background: var(--bg-card);
-            padding: 0.75rem 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.75rem;
+        .gate-tile {
+            background: var(--bg-card); padding: 0.75rem 1rem;
+            display: grid; grid-template-columns: 80px 1fr 100px; gap: 0.75rem;
+            align-items: start;
         }
+        .gate-tile.PASS    { border-left: 3px solid var(--pass); }
+        .gate-tile.FAIL    { border-left: 3px solid var(--critical); }
+        .gate-tile.WARNING { border-left: 3px solid var(--medium); }
+        .gate-tile.NOT_APPLICABLE { border-left: 3px solid var(--border-strong); opacity: 0.55; }
 
-        .gate-result-info {
-            flex: 1;
-            min-width: 0;
-        }
+        .gate-id { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
+        .gate-name { font-size: 13px; font-weight: 600; }
+        .gate-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+        .gate-reason { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .gate-remediation { font-size: 11px; color: var(--text-secondary); margin-top: 4px; font-style: italic; }
+        .gate-mappings { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 4px; }
+        .gate-mappings .framework-badge { font-size: 10px; }
+        .gate-action { text-align: right; }
+        .gate-action button { font-size: 11px; padding: 0.25rem 0.5rem; }
 
-        .gate-name {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-primary);
+        .reco-banner {
+            padding: 0.875rem 1rem; display: flex; gap: 1rem; align-items: center;
+            border-bottom: 1px solid var(--border);
         }
+        .reco-banner.APPROVED         { background: var(--pass-bg); }
+        .reco-banner.CONDITIONAL_PILOT { background: var(--medium-bg); }
+        .reco-banner.HOLD             { background: var(--high-bg); }
+        .reco-banner.REJECT           { background: var(--critical-bg); }
 
-        .gate-actual {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 2px;
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100;
+            display: none; align-items: center; justify-content: center;
         }
-
-        .gate-icon-pass {
-            color: var(--pass);
-            font-size: 14px;
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--bg-elevated); border: 1px solid var(--border-strong);
+            border-radius: 8px; padding: 1.25rem; width: 520px; max-width: 90vw;
         }
-
-        .gate-icon-fail {
-            color: var(--critical);
-            font-size: 14px;
-        }
-
-        .rule-card {
-            padding: 0.75rem 1rem;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            margin-bottom: 0.5rem;
-        }
-
-        @media (max-width: 900px) {
-            .gate-list { grid-template-columns: 1fr; }
-        }
+        .modal h3 { margin: 0 0 0.5rem 0; font-size: 16px; }
+        .modal .form-grid { grid-template-columns: 1fr; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     </style>
 </head>
 <body>
@@ -85,138 +71,362 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Release Gates</div>
-                <div class="page-subtitle">Automated release decision engine — production blocked when gates fail</div>
+                <div class="page-subtitle">Automated release decision engine — 10 deterministic gates per system</div>
             </div>
             <div class="page-actions">
-                <button class="btn btn-sm">Configure Gates</button>
-                <button class="btn btn-sm btn-primary">Run All Gates</button>
+                <button class="btn btn-sm" id="targetBtn">Target: PILOT</button>
+                <button class="btn btn-sm btn-primary" id="refreshBtn">Re-evaluate</button>
+                <button class="btn btn-sm" id="explainReleaseBtn" title="Route the held-system's gate report through the Assurance Model">Explain release decision</button>
             </div>
         </div>
 
         <div class="tabs">
-            <button class="tab active" data-tab="results">Per-System Results</button>
-            <button class="tab" data-tab="rules">Gate Rule Library</button>
+            <button class="tab active" data-tab="systems">Per-System Results</button>
+            <button class="tab" data-tab="catalog">Gate Rule Library</button>
+            <button class="tab" data-tab="exceptions">Exceptions &amp; Waivers</button>
         </div>
 
-        <div id="resultsTab">
-            <div class="kpi-row" id="gatesKpi"></div>
-            <div id="gateResults"></div>
+        <div id="systemsTab">
+            <div class="kpi-row" id="kpis"></div>
+            <div id="systems"></div>
         </div>
 
-        <div id="rulesTab" style="display: none;">
+        <div id="catalogTab" style="display: none;">
             <div class="card">
                 <div class="card-header">
                     <div>
-                        <div class="card-title">Release Gate Rules</div>
-                        <div class="card-subtitle">10 rules — block production deployment when violated</div>
+                        <div class="card-title">Release Gate Catalog</div>
+                        <div class="card-subtitle">10 gates with their mapped controls, frameworks, and evidence types</div>
                     </div>
                 </div>
-                <div id="rulesList"></div>
+                <div id="catalogList"></div>
+            </div>
+        </div>
+
+        <div id="exceptionsTab" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Active Exceptions / Waivers</div>
+                        <div class="card-subtitle">Time-bounded waivers covering failed gates. Auto-expire per AI-039.</div>
+                    </div>
+                </div>
+                <div id="exceptionsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Approve Exception modal -->
+    <div class="modal-overlay" id="exModal">
+        <div class="modal">
+            <h3>Approve Exception</h3>
+            <div class="text-xs text-secondary mb-3" id="exModalSubtitle"></div>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label class="form-label">Reason</label>
+                    <textarea class="form-textarea" id="exReason" placeholder="Why is this waiver appropriate? What is the compensating control?"></textarea>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Risk Acceptor (Name)</label>
+                    <input class="form-input" id="exAcceptor" placeholder="e.g. Marcus Chen">
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Role</label>
+                    <select class="form-select" id="exRole">
+                        <option>AI_GOVERNANCE</option>
+                        <option>CRO</option>
+                        <option>CISO</option>
+                        <option>MODEL_RISK</option>
+                        <option>APPSEC</option>
+                        <option>INTERNAL_AUDIT</option>
+                        <option>BUSINESS_OWNER</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Expires (max 90 days)</label>
+                    <input class="form-input" type="date" id="exExpires">
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Compensating Controls (one per line)</label>
+                    <textarea class="form-textarea" id="exCompensating" placeholder="e.g. 100% HITL on all decisions"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-sm" onclick="closeExModal()">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="exSubmit">Approve Waiver</button>
             </div>
         </div>
     </div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/release-gates');
+    initPage('/release-gates');
 
-        async function loadResults() {
-            const r = await fetch('/api/grc/release-gates/results');
-            const d = await r.json();
+    let TARGET = 'PILOT';
+    let SUMMARY = [];
+    let DETAILS = {};     // system_id -> latest full report
+    let EXPANDED = new Set();
 
-            // KPIs
-            const total = d.results.length;
-            const passed = d.results.filter(g => g.overall_status === 'PASSED').length;
-            const conditional = d.results.filter(g => g.overall_status === 'CONDITIONAL').length;
-            const blocked = d.results.filter(g => g.overall_status === 'FAILED').length;
+    function gateStatusBadge(s) {
+        const map = { PASS: 'badge-pass', FAIL: 'badge-critical', WARNING: 'badge-medium', NOT_APPLICABLE: 'badge-neutral' };
+        return `<span class="badge ${map[s] || 'badge-neutral'}">${s.replace(/_/g, ' ')}</span>`;
+    }
 
-            document.getElementById('gatesKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▣</div><div class="kpi-label">Total Systems</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">in release pipeline</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Approved</div></div><div class="kpi-value pass">${passed}</div><div class="kpi-trend">production ready</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Conditional</div></div><div class="kpi-value">${conditional}</div><div class="kpi-trend">pilot with conditions</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Blocked / Hold</div></div><div class="kpi-value critical">${blocked}</div><div class="kpi-trend">remediation required</div></div>
+    function decisionBadgeCls(d) {
+        return d === 'APPROVED' ? 'badge-pass' :
+               d === 'CONDITIONAL_PILOT' ? 'badge-medium' :
+               d === 'REJECT' ? 'badge-critical' : 'badge-high';
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    async function loadAll() {
+        const r = await fetch('/api/grc/release-gates/v2/systems');
+        const d = await r.json();
+        SUMMARY = d.systems;
+        renderKpis();
+        renderSystems();
+    }
+
+    function renderKpis() {
+        const total = SUMMARY.length;
+        const approved = SUMMARY.filter(s => s.release_decision === 'APPROVED').length;
+        const cond = SUMMARY.filter(s => s.release_decision === 'CONDITIONAL_PILOT').length;
+        const hold = SUMMARY.filter(s => s.release_decision === 'HOLD' || s.release_decision === 'REJECT').length;
+        document.getElementById('kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▣</div><div class="kpi-label">Systems</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">in pipeline</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Approved</div></div><div class="kpi-value pass">${approved}</div><div class="kpi-trend">all gates pass</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Conditional Pilot</div></div><div class="kpi-value">${cond}</div><div class="kpi-trend">pilot with conditions</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Hold / Reject</div></div><div class="kpi-value critical">${hold}</div><div class="kpi-trend">blocking failures</div></div>
+        `;
+    }
+
+    function renderSystems() {
+        const container = document.getElementById('systems');
+        container.innerHTML = SUMMARY.map(s => {
+            const expanded = EXPANDED.has(s.ai_system_id);
+            return `
+            <div class="sys-card ${expanded ? 'expanded' : ''}" data-sid="${s.ai_system_id}">
+                <div class="sys-card-header" onclick="toggleSystem('${s.ai_system_id}')">
+                    <div>
+                        <div class="text-sm font-bold">${escapeHtml(s.ai_system_name)}</div>
+                        <div class="text-xs text-secondary mt-1">${s.ai_system_id} · ${escapeHtml(s.domain)} · ${s.runtime_status}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-secondary">Gates</div>
+                        <div class="text-sm">${s.pass_count} pass · ${s.fail_count} fail · ${s.warning_count} warn</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-secondary">Evidence</div>
+                        <div class="text-sm font-bold">${Math.round(s.evidence_completeness * 100)}%</div>
+                    </div>
+                    <div class="text-right">
+                        <span class="badge ${decisionBadgeCls(s.release_decision)}">${s.release_decision.replace(/_/g, ' ')}</span>
+                    </div>
+                </div>
+                <div class="gate-detail" id="detail-${s.ai_system_id}" style="display: ${expanded ? 'block' : 'none'};"></div>
+            </div>
             `;
+        }).join('');
+        // Auto-load detail for already-expanded systems
+        EXPANDED.forEach(sid => loadDetail(sid));
+    }
 
-            // Per-system results
-            const container = document.getElementById('gateResults');
-            container.innerHTML = d.results.map(g => {
-                const passedCount = g.gates.filter(x => x.passed).length;
-                const total = g.gates.length;
-                const cls = g.overall_status === 'PASSED' ? 'pass' : g.overall_status === 'CONDITIONAL' ? 'warn' : 'fail';
-
-                return `
-                    <div class="gate-system">
-                        <div class="gate-system-header">
-                            <div>
-                                <div class="text-sm font-bold">${g.system_name}</div>
-                                <div class="text-xs text-secondary mt-1">
-                                    Approver: ${g.approver} · Decision: ${g.decision_date} · ${passedCount}/${total} gates passing
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <div style="width: 200px;">
-                                    <div class="progress"><div class="progress-fill ${cls}" style="width: ${passedCount/total*100}%"></div></div>
-                                </div>
-                                ${decisionBadge(g.decision)}
-                            </div>
-                        </div>
-                        <div class="gate-list">
-                            ${g.gates.map(gate => `
-                                <div class="gate-result">
-                                    <div class="gate-result-info">
-                                        <div class="gate-name">
-                                            <span class="font-mono text-tertiary">${gate.id}</span> ·
-                                            ${getGateName(gate.id)}
-                                        </div>
-                                        <div class="gate-actual">${gate.actual}${gate.note ? ' — ' + gate.note : ''}</div>
-                                    </div>
-                                    <span class="${gate.passed ? 'gate-icon-pass' : 'gate-icon-fail'}">${gate.passed ? '✓' : '✗'}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+    async function toggleSystem(sid) {
+        if (EXPANDED.has(sid)) {
+            EXPANDED.delete(sid);
+        } else {
+            EXPANDED.add(sid);
         }
+        renderSystems();
+    }
 
-        let GATE_RULES = [];
-        function getGateName(id) {
-            const r = GATE_RULES.find(x => x.id === id);
-            return r ? r.name : id;
-        }
-
-        async function loadRules() {
-            const r = await fetch('/api/grc/release-gates/rules');
-            const d = await r.json();
-            GATE_RULES = d.rules;
-
-            document.getElementById('rulesList').innerHTML = d.rules.map(rule => `
-                <div class="rule-card">
-                    <div class="flex justify-between items-center mb-2">
+    async function loadDetail(sid) {
+        const target = `/api/grc/release-gates/v2/system/${sid}?target=${TARGET}`;
+        const r = await fetch(target);
+        const d = await r.json();
+        DETAILS[sid] = d;
+        const el = document.getElementById('detail-' + sid);
+        if (!el) return;
+        el.innerHTML = `
+            <div class="reco-banner ${d.release_decision}">
+                <span class="badge ${decisionBadgeCls(d.release_decision)}">${d.release_decision.replace(/_/g, ' ')}</span>
+                <div class="text-sm">${escapeHtml(d.release_rationale)}</div>
+            </div>
+            <div class="gate-grid">
+                ${d.gates.map(g => `
+                    <div class="gate-tile ${g.status}">
                         <div>
-                            <div class="flex gap-2 items-center">
-                                <span class="font-mono text-sm font-bold">${rule.id}</span>
-                                <span class="badge ${rule.severity === 'BLOCK' ? 'badge-critical' : 'badge-medium'}">${rule.severity}</span>
+                            <div class="gate-id">${g.gate_id}</div>
+                            ${gateStatusBadge(g.status)}
+                        </div>
+                        <div>
+                            <div class="gate-name">${escapeHtml(g.name)}</div>
+                            <div class="gate-meta">
+                                Controls: ${g.mapped_controls.join(', ') || '—'} ·
+                                Blocking: ${g.blocking ? 'yes' : 'no'}
+                                ${g.exception_id ? ' · Waiver ' + g.exception_id : ''}
                             </div>
-                            <div class="text-sm mt-1">${rule.name}</div>
+                            ${g.failed_reason ? `<div class="gate-reason">${escapeHtml(g.failed_reason)}</div>` : ''}
+                            ${g.remediation_required && g.remediation_required.length ? `
+                                <ul class="gate-remediation" style="margin: 4px 0 0 16px; padding: 0;">
+                                    ${g.remediation_required.slice(0, 3).map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+                                </ul>` : ''}
+                            <div class="gate-mappings">
+                                ${g.mapped_frameworks.map(f => `<span class="framework-badge">${f.replace(/_/g, ' ')}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div class="gate-action">
+                            ${g.status === 'FAIL' && !g.exception_id ? `<button class="btn" onclick="openExModal('${sid}', '${g.gate_id}', '${escapeHtml(g.name)}')">Approve Exception</button>` : ''}
                         </div>
                     </div>
-                    <div class="text-xs text-secondary font-mono">${rule.rule}</div>
+                `).join('')}
+            </div>
+            <div class="text-xs text-secondary" style="padding: 0.5rem 1rem;">
+                Evaluated for target=<b>${d.target_environment}</b> at ${d.generated_at}
+            </div>
+        `;
+    }
+
+    async function loadCatalog() {
+        const r = await fetch('/api/grc/release-gates/v2/catalog');
+        const d = await r.json();
+        document.getElementById('catalogList').innerHTML = d.gates.map(g => `
+            <div style="padding: 0.875rem 1rem; border-bottom: 1px solid var(--border);">
+                <div class="flex justify-between items-center mb-1">
+                    <div>
+                        <span class="font-mono font-bold text-sm">${g.gate_id}</span>
+                        <span class="text-sm font-bold ml-2">${escapeHtml(g.name)}</span>
+                    </div>
+                    <span class="badge ${g.default_blocking ? 'badge-critical' : 'badge-medium'}">${g.default_blocking ? 'BLOCKING' : 'WARNING'}</span>
+                </div>
+                <div class="text-sm text-secondary">${escapeHtml(g.rule_text)}</div>
+                <div class="text-xs text-tertiary mt-1">Mapped controls: ${g.mapped_controls.join(', ') || '(direct rule)'}</div>
+                <div class="gate-mappings">
+                    ${g.mapped_frameworks.map(f => `<span class="framework-badge">${f.replace(/_/g, ' ')}</span>`).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function loadExceptions() {
+        const r = await fetch('/api/grc/release-gates/v2/exceptions');
+        const d = await r.json();
+        document.getElementById('exceptionsList').innerHTML = d.exceptions.length === 0
+            ? '<div class="empty-state">No active exceptions.</div>'
+            : d.exceptions.map(e => `
+                <div style="padding: 0.875rem 1rem; border-bottom: 1px solid var(--border);">
+                    <div class="flex justify-between items-center mb-1">
+                        <div>
+                            <span class="font-mono text-sm font-bold">${e.id}</span>
+                            <span class="text-xs text-secondary ml-2">${e.gate_id} · ${e.ai_system_id}</span>
+                        </div>
+                        <span class="badge ${e.status === 'APPROVED' ? 'badge-medium' : 'badge-neutral'}">${e.status} · expires ${e.expires_at}</span>
+                    </div>
+                    <div class="text-sm">${escapeHtml(e.reason)}</div>
+                    <div class="text-xs text-tertiary mt-1">Acceptor: ${e.risk_acceptor} (${e.risk_acceptor_role})</div>
+                    ${e.compensating_controls && e.compensating_controls.length ? `
+                        <ul class="text-xs text-secondary" style="margin: 4px 0 0 1rem;">
+                            ${e.compensating_controls.map(c => `<li>${escapeHtml(c)}</li>`).join('')}
+                        </ul>` : ''}
                 </div>
             `).join('');
-        }
+    }
 
-        document.querySelectorAll('.tab').forEach(t => {
-            t.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                const tab = t.dataset.tab;
-                document.getElementById('resultsTab').style.display = tab === 'results' ? 'block' : 'none';
-                document.getElementById('rulesTab').style.display = tab === 'rules' ? 'block' : 'none';
-            });
+    // === Tab switching ===
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            const tab = t.dataset.tab;
+            document.getElementById('systemsTab').style.display = tab === 'systems' ? 'block' : 'none';
+            document.getElementById('catalogTab').style.display = tab === 'catalog' ? 'block' : 'none';
+            document.getElementById('exceptionsTab').style.display = tab === 'exceptions' ? 'block' : 'none';
+            if (tab === 'catalog') loadCatalog();
+            if (tab === 'exceptions') loadExceptions();
         });
+    });
 
-        loadRules().then(loadResults);
+    // === Target toggle ===
+    document.getElementById('targetBtn').addEventListener('click', () => {
+        TARGET = TARGET === 'PILOT' ? 'PRODUCTION' : 'PILOT';
+        document.getElementById('targetBtn').textContent = 'Target: ' + TARGET;
+        EXPANDED.clear();
+        loadAll();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+    document.getElementById('explainReleaseBtn').addEventListener('click', async () => {
+        // Use the highest-severity held system in the current SUMMARY for the explanation.
+        const held = (SUMMARY || []).filter(s => s.release_decision === 'HOLD' || s.release_decision === 'REJECT');
+        const target = held[0] || SUMMARY[0];
+        if (!target) return alert('No system to explain.');
+        let container = document.getElementById('assistResp');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'assistResp';
+            const kpis = document.getElementById('kpis') || document.querySelector('.page');
+            kpis.parentNode.insertBefore(container, kpis.nextSibling);
+        }
+        await callAssuranceModel('explain-release', {
+            ai_system_id: target.ai_system_id,
+            data_classes: ['sanitized_eval_trace'],
+            payload: { system_id: target.ai_system_id, system_name: target.ai_system_name },
+            user: 'governance-ui',
+        }, 'assistResp');
+    });
+
+    // === Exception modal ===
+    let exContext = { sid: '', gate_id: '' };
+    function openExModal(sid, gate_id, gate_name) {
+        exContext = { sid, gate_id };
+        document.getElementById('exModalSubtitle').innerHTML =
+            `<b>${sid}</b> · ${gate_id} — ${gate_name}`;
+        document.getElementById('exReason').value = '';
+        document.getElementById('exAcceptor').value = '';
+        document.getElementById('exCompensating').value = '';
+        // Default expiration: today + 30 days
+        const d = new Date(); d.setDate(d.getDate() + 30);
+        document.getElementById('exExpires').value = d.toISOString().slice(0, 10);
+        document.getElementById('exModal').classList.add('open');
+    }
+    function closeExModal() {
+        document.getElementById('exModal').classList.remove('open');
+    }
+    document.getElementById('exSubmit').addEventListener('click', async () => {
+        const reason = document.getElementById('exReason').value.trim();
+        const acceptor = document.getElementById('exAcceptor').value.trim();
+        const role = document.getElementById('exRole').value;
+        const expires = document.getElementById('exExpires').value;
+        const comp = document.getElementById('exCompensating').value
+            .split('\n').map(s => s.trim()).filter(Boolean);
+        if (!reason || !acceptor || !expires) {
+            alert('Reason, risk acceptor, and expiration are required.');
+            return;
+        }
+        const r = await fetch('/api/grc/release-gates/v2/exception', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ai_system_id: exContext.sid, gate_id: exContext.gate_id,
+                reason, risk_acceptor: acceptor, risk_acceptor_role: role,
+                expires_at: expires, compensating_controls: comp,
+            }),
+        });
+        const d = await r.json();
+        if (!r.ok) { alert('Failed: ' + (d.detail || JSON.stringify(d))); return; }
+        closeExModal();
+        loadDetail(exContext.sid);
+        loadAll();
+    });
+    window.openExModal = openExModal;
+    window.closeExModal = closeExModal;
+    window.toggleSystem = toggleSystem;
+
+    loadAll();
     </script>
 </body>
 </html>

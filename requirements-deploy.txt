@@ -1,0 +1,25 @@
+# Production deployment requirements (slim, for Azure App Service Linux).
+# Local dev uses requirements.txt (full set, including ML eval libs).
+# Keep both in sync for the runtime dashboard's actual dependencies.
+
+# Web framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+gunicorn>=21.2.0
+pydantic>=2.0.0
+python-multipart>=0.0.9
+
+# LLM clients (used by api/assurance_model.py)
+anthropic>=0.40.0
+openai>=1.0.0
+
+# Auth (login gate)
+bcrypt>=4.1.0
+itsdangerous>=2.1.2
+
+# Config
+python-dotenv>=1.0.0
+
+# Utilities
+python-dateutil>=2.8.0
+tzdata>=2024.1

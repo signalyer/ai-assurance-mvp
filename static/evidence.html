@@ -2,183 +2,257 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Evidence — AI Assurance</title>
+    <title>Evidence Repository — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
+        .sec-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem; overflow: hidden; }
+        .sec-header {
+            padding: 0.875rem 1rem; display: grid; grid-template-columns: 1fr 100px 60px;
+            gap: 0.875rem; align-items: center; cursor: pointer; border-bottom: 1px solid var(--border);
+        }
+        .sec-header:hover { background: var(--bg-card-hover); }
+        .sec-card.open .sec-header { background: var(--bg-elevated); }
+
         .ev-row {
             display: grid;
-            grid-template-columns: 110px 130px 1fr auto 80px 90px;
-            gap: 0.75rem;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 12.5px;
-            cursor: pointer;
+            grid-template-columns: 130px 1fr 130px 100px 130px;
+            gap: 0.875rem; align-items: start;
+            padding: 0.625rem 1rem; border-bottom: 1px solid var(--border); font-size: 12px;
         }
-        .ev-row:hover { background: var(--bg-card-hover); }
         .ev-row:last-child { border-bottom: none; }
+        .ev-row:hover { background: var(--bg-card-hover); }
 
-        .ev-type-icon {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.2rem 0.5rem;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            font-size: 11px;
-            color: var(--text-secondary);
+        .ev-id { font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+        .ev-type {
+            display: inline-block; padding: 1px 6px; border-radius: 4px;
+            font-size: 10px; font-weight: 600; text-transform: uppercase;
+            background: var(--accent-bg); color: var(--accent); letter-spacing: 0.04em;
         }
+        .ev-summary { font-size: 12px; color: var(--text-primary); margin-top: 2px; }
+        .ev-mappings { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 4px; }
+        .hash-line { font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); margin-top: 2px; }
 
-        .ev-format {
-            padding: 0.125rem 0.4rem;
-            background: var(--bg-input);
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--text-tertiary);
-            font-family: 'Monaco', monospace;
+        .axis-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+        .axis-tab {
+            padding: 0.5rem 0.875rem; background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 6px; font-size: 12px; cursor: pointer; color: var(--text-secondary);
         }
+        .axis-tab.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 
-        .ev-section {
-            display: grid;
-            grid-template-columns: 110px 130px 1fr auto 80px 90px;
-            gap: 0.75rem;
-            padding: 0.5rem 1rem;
-            font-size: 10.5px;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            font-weight: 600;
-            border-bottom: 1px solid var(--border-strong);
-            background: var(--bg-elevated);
+        .comp-row {
+            display: grid; grid-template-columns: 1fr 110px 100px 60px;
+            gap: 0.875rem; align-items: center;
+            padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); font-size: 12px;
+        }
+        .comp-row:last-child { border-bottom: none; }
+        .comp-row .bar { height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; }
+        .comp-row .bar > div { height: 100%; }
+        .comp-row .bar > div.good { background: var(--pass); }
+        .comp-row .bar > div.warn { background: var(--medium); }
+        .comp-row .bar > div.bad  { background: var(--critical); }
+
+        .missing-pill {
+            display: inline-block; padding: 1px 6px; border-radius: 4px;
+            background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical-border);
+            font-family: var(--font-mono); font-size: 10px; margin: 2px 4px 2px 0;
         }
     </style>
 </head>
 <body>
-<div class="app">
-    <div id="sidebar"></div>
-    <div class="main">
-        <div id="topbar"></div>
-        <div class="page">
+    <div id="topbar"></div>
 
-            <div class="page-header">
-                <div>
-                    <div class="page-title">Evidence Repository</div>
-                    <div class="page-subtitle">Audit-ready evidence supporting AI system risk, security, and compliance posture</div>
-                </div>
-                <div class="page-actions">
-                    <button class="btn">Export Index</button>
-                    <button class="btn btn-primary">Upload Evidence</button>
-                </div>
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Evidence Repository</div>
+                <div class="page-subtitle">Audit-ready evidence indexed by section, with completeness across systems, frameworks, control domains, and release gates</div>
             </div>
-
-            <div class="kpi-row" id="evKpi" style="grid-template-columns: repeat(4, 1fr);"></div>
-
-            <div class="filter-bar">
-                <input type="text" class="filter-input" placeholder="Search evidence ID, title, system..." id="searchInput">
-                <select class="filter-select" id="typeFilter">
-                    <option value="">All types</option>
+            <div class="page-actions">
+                <select class="filter-select" id="scopeSelect">
+                    <option value="ALL">All AI Systems</option>
                 </select>
-                <select class="filter-select" id="systemFilter">
-                    <option value="">All systems</option>
-                </select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
+                <button class="btn btn-sm" id="summarizeEvidenceBtn" title="Sanitized evidence metadata only — never raw artifact content">Summarize evidence</button>
             </div>
-
-            <div class="card" style="padding: 0; overflow: hidden;">
-                <div class="ev-section">
-                    <div>ID</div>
-                    <div>Type</div>
-                    <div>Title</div>
-                    <div>System</div>
-                    <div>Format</div>
-                    <div>Created</div>
-                </div>
-                <div id="evidenceList"></div>
-            </div>
-
         </div>
+        <div id="assistResp"></div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Evidence Completeness</div>
+                        <div class="card-subtitle">required evidence present / required evidence expected</div>
+                    </div>
+                </div>
+                <div class="axis-tabs">
+                    <div class="axis-tab active" data-axis="ai_system">By AI System</div>
+                    <div class="axis-tab" data-axis="framework">By Framework</div>
+                    <div class="axis-tab" data-axis="domain">By Control Domain</div>
+                    <div class="axis-tab" data-axis="release_gate">By Release Gate</div>
+                </div>
+                <div id="completeness"></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Coverage Gaps</div>
+                        <div class="card-subtitle">Specific evidence requirements not yet satisfied for the current axis</div>
+                    </div>
+                </div>
+                <div id="gaps" style="padding: 0.5rem 1rem;"></div>
+            </div>
+        </div>
+
+        <div id="sections" style="margin-top: 1rem;"></div>
     </div>
-</div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/evidence');
-        let ALL_EV = [];
-        let ALL_SYS = [];
+    initPage('/evidence');
 
-        async function load() {
-            const [er, sr] = await Promise.all([
-                fetch('/api/grc/evidence'),
-                fetch('/api/grc/ai-systems'),
-            ]);
-            const ed = await er.json();
-            const sd = await sr.json();
-            ALL_EV = ed.evidence;
-            ALL_SYS = sd.systems;
+    const STATE = { scope: 'ALL', axis: 'ai_system' };
+    const OPEN_SECTIONS = new Set(['assessment', 'eval']);   // initially-open sections
+    let CURRENT_ROWS = [];
 
-            // Populate filters
-            const types = [...new Set(ALL_EV.map(e => e.type))].sort();
-            document.getElementById('typeFilter').innerHTML += types.map(t => `<option value="${t}">${t}</option>`).join('');
-            document.getElementById('systemFilter').innerHTML += ALL_SYS.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-            renderKpis();
-            render();
-        }
+    const covCls = p => p >= 90 ? 'good' : p >= 60 ? 'warn' : 'bad';
+    const covText = p => p >= 90 ? 'text-pass' : p >= 60 ? 'text-medium' : 'text-critical';
 
-        function renderKpis() {
-            const byType = {};
-            ALL_EV.forEach(e => { byType[e.type] = (byType[e.type] || 0) + 1; });
-            const total = ALL_EV.length;
-            const recent = ALL_EV.filter(e => {
-                const days = (new Date() - new Date(e.created)) / (1000 * 60 * 60 * 24);
-                return days <= 7;
-            }).length;
-
-            document.getElementById('evKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">📁</div><div class="kpi-label">Total Evidence Items</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">${recent} added last 7 days</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon accent">📊</div><div class="kpi-label">Eval Reports</div></div><div class="kpi-value">${byType['Eval Report'] || 0}</div><div class="kpi-trend">benchmark + threshold</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">🛡</div><div class="kpi-label">Red Team / Adversarial</div></div><div class="kpi-value">${(byType['Red Team Report'] || 0) + (byType['Adversarial Test'] || 0)}</div><div class="kpi-trend">penetration tests</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Audit Coverage</div></div><div class="kpi-value pass">91%</div><div class="kpi-trend">enterprise avg</div></div>
-            `;
-        }
-
-        function render() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
-            const type = document.getElementById('typeFilter').value;
-            const sys = document.getElementById('systemFilter').value;
-
-            const filtered = ALL_EV.filter(e =>
-                (!search || e.id.toLowerCase().includes(search) || e.title.toLowerCase().includes(search) || e.system_name.toLowerCase().includes(search)) &&
-                (!type || e.type === type) &&
-                (!sys || e.system_id === sys)
-            );
-
-            if (filtered.length === 0) {
-                document.getElementById('evidenceList').innerHTML = '<div class="empty-state">No evidence matches filters</div>';
-                return;
-            }
-
-            document.getElementById('evidenceList').innerHTML = filtered.map(e => `
-                <div class="ev-row">
-                    <div class="font-mono text-xs">${e.id}</div>
-                    <div><span class="ev-type-icon">${e.type}</span></div>
-                    <div>
-                        <div class="cell-primary">${e.title}</div>
-                        <div class="text-xs text-tertiary mt-1">${e.author}${e.linked_findings && e.linked_findings.length ? ' · Linked: ' + e.linked_findings.join(', ') : ''}</div>
-                    </div>
-                    <div class="text-secondary text-xs">${e.system_name}</div>
-                    <div><span class="ev-format">${e.format}</span></div>
-                    <div class="text-tertiary text-xs">${e.created}</div>
-                </div>
-            `).join('');
-        }
-
-        ['searchInput', 'typeFilter', 'systemFilter'].forEach(id => {
-            document.getElementById(id).addEventListener('input', render);
+    async function loadScope() {
+        const r = await fetch('/api/grc/ai-systems');
+        const d = await r.json();
+        const sel = document.getElementById('scopeSelect');
+        d.systems.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id; o.textContent = s.name; sel.appendChild(o);
         });
+        sel.addEventListener('change', () => { STATE.scope = sel.value; refresh(); });
+    }
 
-        load();
+    async function loadCompleteness() {
+        const r = await fetch(`/api/grc/evidence/v2/completeness?axis=${STATE.axis}&scope=${encodeURIComponent(STATE.scope)}`);
+        const d = await r.json();
+        CURRENT_ROWS = d.rows;
+        document.getElementById('completeness').innerHTML = d.rows.map(row => `
+            <div class="comp-row">
+                <div>
+                    <div class="text-sm">${esc(row.label)}</div>
+                    <div class="bar" style="margin-top: 4px;"><div class="${covCls(row.pct)}" style="width: ${row.pct}%"></div></div>
+                </div>
+                <div class="text-xs text-secondary">${row.present} / ${row.required}</div>
+                <div class="text-sm font-bold ${covText(row.pct)}">${row.pct}%</div>
+                <div class="text-xs text-tertiary text-right">${row.missing.length ? row.missing.length + ' gap' + (row.missing.length === 1 ? '' : 's') : '—'}</div>
+            </div>
+        `).join('');
+        renderGaps();
+    }
+
+    function renderGaps() {
+        const all = CURRENT_ROWS.flatMap(r => r.missing.map(m => ({ row: r.label, gap: m })));
+        if (all.length === 0) {
+            document.getElementById('gaps').innerHTML = '<div class="text-sm text-pass">All required evidence is present for the current axis and scope.</div>';
+            return;
+        }
+        // Group by row label
+        const grouped = {};
+        all.forEach(g => { (grouped[g.row] = grouped[g.row] || []).push(g.gap); });
+        document.getElementById('gaps').innerHTML = Object.entries(grouped).slice(0, 8).map(([label, gaps]) => `
+            <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+                <div class="text-sm font-bold">${esc(label)}</div>
+                <div class="mt-1">${gaps.slice(0, 10).map(g => `<span class="missing-pill">${esc(g)}</span>`).join('')}
+                ${gaps.length > 10 ? `<span class="text-xs text-tertiary">+ ${gaps.length - 10} more</span>` : ''}</div>
+            </div>
+        `).join('');
+    }
+
+    async function loadSections() {
+        const r = await fetch(`/api/grc/evidence/v2/sectioned?scope=${encodeURIComponent(STATE.scope)}`);
+        const d = await r.json();
+        document.getElementById('sections').innerHTML = d.sections.map(s => {
+            const open = OPEN_SECTIONS.has(s.section_id);
+            return `
+            <div class="sec-card ${open ? 'open' : ''}" data-sec="${s.section_id}">
+                <div class="sec-header" onclick="toggleSection('${s.section_id}')">
+                    <div>
+                        <div class="text-sm font-bold">${esc(s.section_name)}</div>
+                        <div class="text-xs text-tertiary mt-1">${s.type_filter.slice(0, 6).map(t => t.replace(/_/g, ' ')).join(' · ')}${s.type_filter.length > 6 ? ' · …' : ''}</div>
+                    </div>
+                    <div class="text-right text-sm font-bold ${s.count === 0 ? 'text-tertiary' : ''}">${s.count}</div>
+                    <div class="text-right text-tertiary">${open ? '▾' : '▸'}</div>
+                </div>
+                ${open ? renderSectionBody(s) : ''}
+            </div>`;
+        }).join('');
+    }
+
+    function renderSectionBody(s) {
+        if (s.items.length === 0) {
+            return `<div style="padding: 1rem;" class="text-sm text-tertiary">No evidence in this section${STATE.scope !== 'ALL' ? ' for the selected system' : ''}.</div>`;
+        }
+        const header = `
+            <div class="ev-row" style="background: var(--bg-elevated); font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary);">
+                <div>Evidence ID / Type</div><div>Summary / Hash</div><div>System / Source</div><div>Collected</div><div>Linkage</div>
+            </div>`;
+        return header + s.items.map(r => `
+            <div class="ev-row">
+                <div>
+                    <div class="ev-id">${esc(r.id)}</div>
+                    <span class="ev-type">${esc(r.evidence_type_pretty)}</span>
+                    ${r.immutable ? '<div class="text-xs text-pass mt-1">● immutable</div>' : ''}
+                </div>
+                <div>
+                    <div class="ev-summary">${esc(r.summary)}</div>
+                    ${r.hash ? `<div class="hash-line">${esc(r.hash)}</div>` : ''}
+                    ${r.uri ? `<div class="text-xs"><a href="${esc(r.uri)}" target="_blank" style="color: var(--accent);">${esc(r.uri.length > 60 ? r.uri.slice(0, 57) + '…' : r.uri)}</a></div>` : ''}
+                </div>
+                <div>
+                    <div class="text-xs">${esc(r.ai_system_name)}</div>
+                    <div class="text-xs text-tertiary">${esc(r.source)}</div>
+                </div>
+                <div class="text-xs text-tertiary">${(r.collected_at || '').slice(0, 10)}</div>
+                <div>
+                    ${r.linked_control_ids.length ? `<div class="ev-mappings">${r.linked_control_ids.slice(0, 4).map(c => `<span class="framework-badge">${esc(c)}</span>`).join('')}</div>` : ''}
+                    ${r.linked_finding_ids.length ? `<div class="ev-mappings">${r.linked_finding_ids.slice(0, 3).map(f => `<a class="framework-badge" href="/findings?id=${f}" style="cursor:pointer;">${esc(f)}</a>`).join('')}</div>` : ''}
+                    ${r.assessment_id ? `<div class="text-xs text-tertiary mt-1">${esc(r.assessment_id)}</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function toggleSection(id) {
+        if (OPEN_SECTIONS.has(id)) OPEN_SECTIONS.delete(id);
+        else OPEN_SECTIONS.add(id);
+        loadSections();
+    }
+
+    document.querySelectorAll('.axis-tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.axis-tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            STATE.axis = t.dataset.axis;
+            loadCompleteness();
+        });
+    });
+
+    function refresh() {
+        loadCompleteness();
+        loadSections();
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', refresh);
+    document.getElementById('summarizeEvidenceBtn').addEventListener('click', async () => {
+        await callAssuranceModel('summarize-evidence', {
+            data_classes: ['redacted_evidence', 'sanitized_eval_trace'],
+            payload: { scope: 'portfolio' },
+            user: 'governance-ui',
+        }, 'assistResp');
+    });
+    window.toggleSection = toggleSection;
+
+    loadScope().then(refresh);
     </script>
 </body>
 </html>

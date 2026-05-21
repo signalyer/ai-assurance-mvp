@@ -45,3 +45,17 @@ htmlcov/
 # Logs
 *.log
 logs/
+
+# Local agent state
+.claude/
+
+# User attachments
+*.pdf
+
+# Build artifacts
+deploy/app.zip
+deploy/*.zip
+deploy/jar.txt
+
+# Azure Functions
+local.settings.json

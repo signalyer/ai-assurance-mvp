@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Assurance Providers — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .ap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+        .ap-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.875rem 1rem; }
+        .ap-card h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin: 0 0 0.5rem; }
+        .ap-card-body { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+        .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-secondary); }
+        .pill.ok    { color: var(--green, #4ade80); border-color: rgba(74,222,128,0.3); }
+        .pill.bad   { color: var(--red,   #f87171); border-color: rgba(248,113,113,0.3); }
+        .pill.warn  { color: var(--amber, #fbbf24); border-color: rgba(251,191,36,0.3); }
+        .pill.muted { color: var(--text-tertiary); }
+        .pill-list { display: flex; flex-wrap: wrap; gap: 4px; }
+        .provider-row {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem;
+            display: grid; grid-template-columns: 1fr 130px 160px 160px;
+            gap: 1rem; align-items: start;
+        }
+        .provider-name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+        .provider-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; font-family: var(--font-mono); }
+        .key-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+        .key-row code { background: var(--bg-deep); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
+        .provider-cell-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-tertiary); margin-bottom: 4px; }
+        .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 0.5rem; }
+        .audit-table th, .audit-table td {
+            border-bottom: 1px solid var(--border); padding: 6px 8px;
+            text-align: left; vertical-align: top;
+        }
+        .audit-table th { font-size: 10px; text-transform: uppercase; color: var(--text-tertiary); letter-spacing: 0.06em; }
+        .warning-banner {
+            background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.3);
+            border-radius: 8px; padding: 0.625rem 0.875rem; margin-bottom: 0.875rem;
+            font-size: 12px; color: var(--amber, #fbbf24);
+        }
+        .flow-diagram {
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
+            padding: 1rem; overflow: auto;
+        }
+        .flow-step {
+            display: inline-block; padding: 8px 12px; margin: 4px; border-radius: 6px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            font-size: 12px; color: var(--text-primary); min-width: 140px; text-align: center;
+        }
+        .flow-step.start  { border-left: 3px solid var(--accent, #6366f1); }
+        .flow-step.policy { border-left: 3px solid var(--amber, #fbbf24); }
+        .flow-step.model  { border-left: 3px solid var(--green, #4ade80); }
+        .flow-step.audit  { border-left: 3px solid var(--text-tertiary); }
+        .flow-arrow { color: var(--text-tertiary); margin: 0 4px; font-family: var(--font-mono); }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Assurance Model Providers</div>
+                <div class="page-subtitle">AI supply-chain governance for the models the platform uses to evaluate, judge, summarize, and explain — separate from production runtime models.</div>
+            </div>
+        </div>
+
+        <div class="warning-banner">
+            <strong>Assurance ≠ production inference.</strong>
+            These providers are governed for evaluation, summarization, and governance Q&A.
+            Restricted data (PII / NPI / PCI / payment / AML-KYC / credit) requires AWS Bedrock or Local/VPC unless an exception is approved.
+            All model-assisted analysis is logged.
+        </div>
+
+        <!-- 8 KPI / context cards -->
+        <div class="ap-grid" id="cards" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 0.875rem;">
+            <div class="ap-card"><h3>Provider Status</h3><div class="ap-card-body" id="kpiStatus">—</div></div>
+            <div class="ap-card"><h3>Trust Boundary</h3><div class="ap-card-body" id="kpiTrust">—</div></div>
+            <div class="ap-card"><h3>Allowed Data Classes</h3><div class="ap-card-body" id="kpiData">—</div></div>
+            <div class="ap-card"><h3>Allowed Use Cases</h3><div class="ap-card-body" id="kpiUseCases">—</div></div>
+            <div class="ap-card"><h3>Blocked Use Cases</h3><div class="ap-card-body" id="kpiBlockedUC">—</div></div>
+            <div class="ap-card"><h3>Cost Controls</h3><div class="ap-card-body" id="kpiCost">—</div></div>
+            <div class="ap-card"><h3>Usage Audit</h3><div class="ap-card-body" id="kpiAudit">—</div></div>
+            <div class="ap-card"><h3>Policy Violations</h3><div class="ap-card-body" id="kpiPV">—</div></div>
+        </div>
+
+        <!-- Provider routing flow -->
+        <div class="card mb-4">
+            <div class="card-header"><div class="card-title">Routing flow — AI System → Sanitization → Policy → Model → Audit</div></div>
+            <div class="flow-diagram">
+                <span class="flow-step start">AI System</span><span class="flow-arrow">→</span>
+                <span class="flow-step policy">Sanitization Layer</span><span class="flow-arrow">→</span>
+                <span class="flow-step policy">Provider Routing Policy</span><span class="flow-arrow">→</span>
+                <span class="flow-step model">Assurance Model</span><span class="flow-arrow">→</span>
+                <span class="flow-step model">Eval / Finding / Report</span><span class="flow-arrow">→</span>
+                <span class="flow-step audit">Audit Event</span>
+            </div>
+        </div>
+
+        <!-- Provider list -->
+        <div class="card mb-4">
+            <div class="card-header"><div class="card-title">Registered Providers</div></div>
+            <div id="providerList"></div>
+        </div>
+
+        <!-- Audit table -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">Model Usage Audit</div>
+                <a class="card-link" href="#" id="refreshAudit">Refresh</a>
+            </div>
+            <table class="audit-table" id="auditTable">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Use Case</th>
+                        <th>AI System</th>
+                        <th>Data Classes</th>
+                        <th>Decision</th>
+                        <th>Reason</th>
+                        <th>Cost</th>
+                        <th>Evidence</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/assurance-providers');
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+    function statusPill(s) {
+        const cls = ({connected:'ok', not_configured:'muted', disconnected:'bad', warning:'warn', disabled:'muted'})[s] || 'muted';
+        return `<span class="pill ${cls}">${s.replace(/_/g, ' ')}</span>`;
+    }
+
+    function decisionPill(d) {
+        const cls = ({allowed:'ok', blocked:'bad', warning:'warn', simulated:'muted'})[d] || 'muted';
+        return `<span class="pill ${cls}">${d}</span>`;
+    }
+
+    async function loadAll() {
+        const [list, audit] = await Promise.all([
+            fetch('/api/assurance-providers/list').then(r => r.json()),
+            fetch('/api/assurance-providers/audit/list').then(r => r.json()),
+        ]);
+        renderKpis(list);
+        renderProviders(list.providers);
+        renderAudit(audit.audit);
+    }
+
+    function renderKpis(d) {
+        const s = d.policy_summary || {};
+        const ps = d.providers || [];
+        document.getElementById('kpiStatus').innerHTML = `
+            <div><strong>${s.providers_connected || 0}</strong> connected · <strong>${s.providers_not_configured || 0}</strong> unconfigured of ${s.providers_total || 0} total.</div>
+            <div class="pill-list" style="margin-top:6px;">${ps.map(p => `<span class="pill ${({connected:'ok',not_configured:'muted',disabled:'muted',disconnected:'bad',warning:'warn'})[p.status] || 'muted'}">${esc(p.provider_name)}</span>`).join('')}</div>
+        `;
+        const tb = {};
+        ps.forEach(p => { (tb[p.trust_boundary] = (tb[p.trust_boundary] || 0) + 1); });
+        document.getElementById('kpiTrust').innerHTML = Object.keys(tb).map(b =>
+            `<div>${esc(b)}: <strong>${tb[b]}</strong></div>`).join('');
+        document.getElementById('kpiData').innerHTML =
+            `<strong>${s.data_classes_count || 0}</strong> data classes governed.<br><span class="pill-list" style="margin-top:6px;">${['public','internal','sanitized_confidential','pii','npi','pci','payment_data','aml_kyc_data','credit_data','redacted_evidence'].map(d => `<span class="pill">${d}</span>`).join('')}</span>`;
+        document.getElementById('kpiUseCases').innerHTML =
+            `<strong>${s.use_case_count || 0}</strong> governed use cases.<br><span class="pill-list" style="margin-top:6px;">${['model_as_judge','hallucination_grading','groundedness_scoring','findings_summarization','release_decision_narrative','evidence_summarization','executive_report_generation','policy_control_qa'].map(u => `<span class="pill">${u}</span>`).join('')}</span>`;
+        document.getElementById('kpiBlockedUC').innerHTML =
+            `Production inference + tool-using-agent runtime are blocked on external SaaS.<br><span class="pill-list" style="margin-top:6px;"><span class="pill bad">production_inference</span><span class="pill bad">tool_using_agent_runtime</span></span>`;
+        const totalLimit = ps.reduce((a, p) => a + (p.monthly_cost_limit_usd || 0), 0);
+        document.getElementById('kpiCost').innerHTML =
+            `Monthly cap: <strong>$${totalLimit.toLocaleString()}</strong> across providers.<br>` +
+            ps.map(p => `<div>${esc(p.provider_name)}: $${(p.monthly_cost_limit_usd || 0).toLocaleString()} · ${p.rate_limit_per_min || 0}/min</div>`).join('');
+        document.getElementById('kpiAudit').innerHTML =
+            `${s.audit_total || 0} events · <span class="pill ok">${s.audit_allowed || 0} allowed</span> <span class="pill muted">${s.audit_simulated || 0} simulated</span> <span class="pill bad">${s.audit_blocked || 0} blocked</span>`;
+        document.getElementById('kpiPV').innerHTML =
+            (s.audit_blocked || 0) === 0
+                ? '<span class="pill ok">No policy violations recorded.</span>'
+                : `<span class="pill bad">${s.audit_blocked} blocked attempts</span> — see audit table below for restricted-data rejections.`;
+    }
+
+    function renderProviders(ps) {
+        document.getElementById('providerList').innerHTML = ps.map(p => `
+            <div class="provider-row">
+                <div>
+                    <div class="provider-name">${esc(p.provider_name)} ${statusPill(p.status)}</div>
+                    <div class="provider-sub">${esc(p.provider_id)} · ${esc(p.provider_type)} · default: ${esc(p.default_model)}</div>
+                    <div style="margin-top:6px; font-size:11px; color:var(--text-secondary);">
+                        <strong>Trust boundary:</strong> ${esc(p.trust_boundary)}<br>
+                        <strong>Data residency:</strong> ${esc(p.data_residency)}<br>
+                        <strong>Roles:</strong> ${(p.roles || []).map(r => `<span class="pill">${r}</span>`).join(' ')}
+                    </div>
+                    <div class="key-row" title="API key never exposed to frontend">
+                        <span style="color:var(--text-tertiary);">Key:</span>
+                        <code>${esc(p.masked_key_preview)}</code>
+                        <span class="pill muted">${p.has_real_credentials ? 'env credentials present' : 'env credentials absent'}</span>
+                    </div>
+                    <div class="key-row">
+                        <span style="color:var(--text-tertiary);">Secret ref:</span>
+                        <code>${esc(p.api_key_secret_ref)}</code>
+                    </div>
+                </div>
+                <div>
+                    <div class="provider-cell-title">Allowed data classes</div>
+                    <div class="pill-list">${(p.allowed_data_classes || []).map(d => `<span class="pill ok">${d}</span>`).join('')}</div>
+                    <div class="provider-cell-title" style="margin-top:8px;">Blocked</div>
+                    <div class="pill-list">${(p.blocked_data_classes || []).map(d => `<span class="pill bad">${d}</span>`).join('') || '<span class="pill muted">none</span>'}</div>
+                </div>
+                <div>
+                    <div class="provider-cell-title">Allowed use cases</div>
+                    <div class="pill-list">${(p.allowed_use_cases || []).map(u => `<span class="pill">${u}</span>`).join('')}</div>
+                    <div class="provider-cell-title" style="margin-top:8px;">Blocked</div>
+                    <div class="pill-list">${(p.blocked_use_cases || []).map(u => `<span class="pill bad">${u}</span>`).join('') || '<span class="pill muted">none</span>'}</div>
+                </div>
+                <div>
+                    <div class="provider-cell-title">Controls</div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">
+                        Cap: $${(p.monthly_cost_limit_usd || 0).toLocaleString()} / mo<br>
+                        Rate: ${p.rate_limit_per_min || 0}/min<br>
+                        Audit: ${p.audit_logging_enabled ? 'on' : 'off'}<br>
+                        Last test: ${esc(p.last_connection_test || 'never')}
+                    </div>
+                    <div class="btn-row">
+                        <button class="btn btn-sm" onclick="testProvider('${esc(p.provider_id)}', this)">Test</button>
+                        <button class="btn btn-sm" onclick="rotateKey('${esc(p.provider_id)}')">Rotate Key</button>
+                        ${p.enabled
+                            ? `<button class="btn btn-sm" onclick="disableProvider('${esc(p.provider_id)}')">Disable</button>`
+                            : `<button class="btn btn-sm btn-primary" onclick="enableProvider('${esc(p.provider_id)}')">Enable</button>`}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderAudit(rows) {
+        const tbody = document.querySelector('#auditTable tbody');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="loading">No audit events yet. Trigger a contextual assistant action to generate one.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(a => `
+            <tr>
+                <td>${esc(new Date(a.timestamp).toLocaleString(undefined, {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))}</td>
+                <td>${esc(a.provider_name || '—')}</td>
+                <td><code style="font-size:11px;">${esc(a.model || '—')}</code></td>
+                <td>${esc(a.use_case)}</td>
+                <td>${esc(a.ai_system_id || '—')}</td>
+                <td><span class="pill-list">${(a.data_classes || []).map(d => `<span class="pill">${d}</span>`).join('') || '—'}</span></td>
+                <td>${decisionPill(a.decision)}</td>
+                <td style="max-width:280px;font-size:11px;color:var(--text-secondary);">${esc(a.reason)}</td>
+                <td>${a.cost_estimate_usd ? `$${a.cost_estimate_usd.toFixed(4)}` : '—'}</td>
+                <td>${a.evidence_id ? `<a href="/evidence" class="card-link" style="color:var(--accent);">${a.evidence_id}</a>` : '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function testProvider(id, btn) {
+        btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Testing…';
+        try {
+            const r = await fetch(`/api/assurance-providers/${id}/test`, { method: 'POST' });
+            const d = await r.json();
+            alert(`${d.provider_id} test\n\n${d.note}\n\nCredentials present: ${d.has_real_credentials}\nTrust boundary: ${d.trust_boundary}\nAudit event: ${d.audit_event_id}`);
+            await loadAll();
+        } finally {
+            btn.disabled = false; btn.textContent = orig;
+        }
+    }
+    async function rotateKey(id) {
+        const r = await fetch(`/api/assurance-providers/${id}/rotate-key`, { method: 'POST' });
+        const d = await r.json();
+        alert(`Key rotation request recorded.\n\nSecret ref: ${d.secret_ref}\n\n${d.note}`);
+        await loadAll();
+    }
+    async function disableProvider(id) {
+        if (!confirm(`Disable ${id}? Routing to this provider will be blocked.`)) return;
+        await fetch(`/api/assurance-providers/${id}/disable`, { method: 'POST' });
+        await loadAll();
+    }
+    async function enableProvider(id) {
+        await fetch(`/api/assurance-providers/${id}/enable`, { method: 'POST' });
+        await loadAll();
+    }
+
+    window.testProvider = testProvider;
+    window.rotateKey = rotateKey;
+    window.disableProvider = disableProvider;
+    window.enableProvider = enableProvider;
+
+    document.getElementById('refreshAudit').addEventListener('click', (e) => { e.preventDefault(); loadAll(); });
+
+    loadAll();
+    </script>
+</body>
+</html>

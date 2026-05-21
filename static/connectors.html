@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Connectors — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .conn-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 1rem 1.25rem; margin-bottom: 0.75rem;
+            display: grid; grid-template-columns: 1fr 100px 110px 130px 140px;
+            gap: 0.875rem; align-items: center;
+        }
+        .conn-card .cat-pill {
+            display: inline-block; padding: 1px 7px; border-radius: 4px;
+            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+            background: var(--accent-bg); color: var(--accent);
+        }
+        .conn-card .counts {
+            display: flex; gap: 0.625rem; align-items: center;
+            font-family: var(--font-mono); font-size: 11px;
+        }
+        .conn-card .counts .pair { color: var(--text-secondary); }
+        .conn-card .counts .pair b { color: var(--text-primary); font-size: 13px; }
+        .latest-output {
+            display: grid; grid-template-columns: 110px 1fr 110px;
+            gap: 0.625rem; padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border); font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Connectors</div>
+                <div class="page-subtitle">Adapters that normalize external eval, security-test, observability, and AWS-telemetry tools into the assurance object model (Eval · Finding · Runtime Event · Evidence)</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
+                <button class="btn btn-sm btn-primary" id="syncAllBtn">Sync All</button>
+            </div>
+        </div>
+
+        <div class="kpi-row" id="kpis"></div>
+
+        <div id="cats"></div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/connectors');
+
+    const CATEGORY_LABEL = {
+        EVAL: 'Eval Connectors',
+        SECURITY_TEST: 'Security Test Connectors',
+        OBSERVABILITY: 'Observability Connectors',
+        CLOUD_TELEMETRY: 'Cloud Telemetry Connectors',
+        GUARDRAIL: 'Guardrail Connectors',
+    };
+    const CATEGORY_ORDER = ['EVAL', 'SECURITY_TEST', 'OBSERVABILITY', 'CLOUD_TELEMETRY', 'GUARDRAIL'];
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+    async function load() {
+        const r = await fetch('/api/grc/connectors/v2/list');
+        const d = await r.json();
+        const conns = d.connectors;
+        renderKpis(conns);
+        renderCats(conns);
+    }
+
+    function renderKpis(conns) {
+        const synced = conns.filter(c => c.sync_count > 0).length;
+        const evals = conns.reduce((s, c) => s + c.evals_produced, 0);
+        const findings = conns.reduce((s, c) => s + c.findings_produced, 0);
+        const events = conns.reduce((s, c) => s + c.runtime_events_produced, 0);
+        const evidence = conns.reduce((s, c) => s + c.evidence_produced, 0);
+        document.getElementById('kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▣</div><div class="kpi-label">Connectors</div></div><div class="kpi-value">${conns.length}</div><div class="kpi-trend">${synced} synced at least once</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Evals Produced</div></div><div class="kpi-value">${evals}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Findings Produced</div></div><div class="kpi-value">${findings}</div></div>
+            <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">▤</div><div class="kpi-label">Events / Evidence</div></div><div class="kpi-value">${events}/${evidence}</div></div>
+        `;
+    }
+
+    function renderCats(conns) {
+        const byCat = {};
+        conns.forEach(c => (byCat[c.category] = byCat[c.category] || []).push(c));
+        document.getElementById('cats').innerHTML = CATEGORY_ORDER
+            .filter(cat => byCat[cat] && byCat[cat].length)
+            .map(cat => `
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">${CATEGORY_LABEL[cat]}</div>
+                            <div class="card-subtitle">${byCat[cat].length} connector${byCat[cat].length === 1 ? '' : 's'}</div>
+                        </div>
+                    </div>
+                    <div>${byCat[cat].map(renderConnector).join('')}</div>
+                </div>
+            `).join('');
+    }
+
+    function renderConnector(c) {
+        const status = c.sync_count > 0 ? 'connected' : c.status.toLowerCase();
+        const statusCls = c.sync_count > 0 ? 'badge-pass' : 'badge-neutral';
+        const last = c.last_synced_at ? c.last_synced_at.slice(0, 19) : 'never';
+        return `
+            <div class="conn-card">
+                <div>
+                    <div class="text-sm font-bold">${esc(c.name)}</div>
+                    <div class="text-xs text-tertiary mt-1">${esc(c.description)}</div>
+                    <div class="text-xs text-tertiary mt-1">Config keys: ${(c.config_keys || []).join(', ') || '—'}</div>
+                </div>
+                <div>
+                    <span class="cat-pill">${esc(c.category.replace(/_/g, ' '))}</span>
+                </div>
+                <div>
+                    <span class="badge ${statusCls}">${status}</span>
+                    <div class="text-xs text-tertiary mt-1">${c.sync_count} sync${c.sync_count === 1 ? '' : 's'}</div>
+                </div>
+                <div class="counts">
+                    <div class="pair">E:<b>${c.evals_produced}</b></div>
+                    <div class="pair">F:<b>${c.findings_produced}</b></div>
+                    <div class="pair">Ev:<b>${c.runtime_events_produced}</b></div>
+                    <div class="pair">Ev:<b>${c.evidence_produced}</b></div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-tertiary mb-1">${last}</div>
+                    <button class="btn btn-sm btn-primary" onclick="runSync('${esc(c.name)}', this)">Run Sync</button>
+                </div>
+            </div>
+        `;
+    }
+
+    async function runSync(name, btn) {
+        btn.disabled = true;
+        const orig = btn.textContent;
+        btn.textContent = 'Syncing…';
+        try {
+            const r = await fetch(`/api/grc/connectors/v2/${encodeURIComponent(name)}/sync`, { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) { alert('Sync failed: ' + (d.detail || JSON.stringify(d))); return; }
+            const sampleLines = [];
+            if (d.sample_ids.evals.length) sampleLines.push('Evals: ' + d.sample_ids.evals.join(', '));
+            if (d.sample_ids.findings.length) sampleLines.push('Findings: ' + d.sample_ids.findings.join(', '));
+            if (d.sample_ids.runtime_events.length) sampleLines.push('Runtime events: ' + d.sample_ids.runtime_events.join(', '));
+            if (d.sample_ids.evidence.length) sampleLines.push('Evidence: ' + d.sample_ids.evidence.join(', '));
+            const msg =
+`${name} sync complete at ${d.ran_at}
+
+Produced:
+  evals:           ${d.evals_produced}
+  findings:        ${d.findings_produced}
+  runtime events:  ${d.runtime_events_produced}
+  evidence:        ${d.evidence_produced}
+
+${sampleLines.join('\n')}
+
+These records are now merged into the dashboards (Findings, Evals, Evidence, Runtime).`;
+            alert(msg);
+            await load();
+        } finally {
+            btn.disabled = false;
+            btn.textContent = orig;
+        }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', load);
+    document.getElementById('syncAllBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('syncAllBtn');
+        btn.disabled = true; btn.textContent = 'Syncing…';
+        try {
+            const r = await fetch('/api/grc/connectors/v2/sync-all', { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) { alert('Sync-all failed.'); return; }
+            const t = d.totals;
+            alert(`Sync-all complete\n\nTotals across ${d.results.length} connectors:\n  evals: ${t.evals}\n  findings: ${t.findings}\n  runtime events: ${t.runtime_events}\n  evidence: ${t.evidence}\n  errors: ${t.errors}`);
+            await load();
+        } finally {
+            btn.disabled = false; btn.textContent = 'Sync All';
+        }
+    });
+
+    window.runSync = runSync;
+    load();
+    </script>
+</body>
+</html>

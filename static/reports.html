@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reports — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .reports-grid {
+            display: grid; grid-template-columns: 300px 1fr;
+            gap: 1.25rem; align-items: start;
+        }
+        .report-list { background: var(--bg-card); border: 1px solid var(--border);
+                       border-radius: 8px; padding: 0.75rem; position: sticky; top: 1rem; }
+        .report-list-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+                             color: var(--text-tertiary); margin-bottom: 0.5rem; padding: 0 0.25rem; }
+        .report-item { padding: 0.625rem 0.5rem; border-radius: 6px; cursor: pointer;
+                        border-left: 2px solid transparent; margin-bottom: 2px; }
+        .report-item:hover { background: var(--bg-hover); }
+        .report-item.active { background: var(--bg-hover); border-left-color: var(--accent); }
+        .report-item .rt { font-size: 13px; font-weight: 600; }
+        .report-item .rs { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+        .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+                    margin-bottom: 1rem; }
+        .controls select, .controls input {
+            background: var(--bg-deep); color: var(--text-primary);
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 6px 8px; font-size: 13px;
+        }
+        .section { background: var(--bg-card); border: 1px solid var(--border);
+                    border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.875rem; }
+        .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+                          color: var(--text-tertiary); margin-bottom: 0.5rem; }
+        .kpi-strip { display: grid; gap: 0.625rem; margin-bottom: 0.5rem; }
+        .kpi-strip.cols-4 { grid-template-columns: repeat(4, 1fr); }
+        .kpi-strip.cols-6 { grid-template-columns: repeat(6, 1fr); }
+        .kpi-tile { background: var(--bg-deep); border: 1px solid var(--border);
+                     border-radius: 6px; padding: 0.625rem 0.75rem; }
+        .kpi-tile .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+                            color: var(--text-tertiary); }
+        .kpi-tile .value { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+        .kpi-tile .value.bad { color: var(--red); }
+        .kpi-tile .value.warn { color: var(--amber, #fbbf24); }
+        .kpi-tile .value.ok { color: var(--green); }
+
+        table.rep {
+            width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 0.25rem;
+        }
+        table.rep th, table.rep td {
+            border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left;
+            vertical-align: top;
+        }
+        table.rep th { font-size: 10px; text-transform: uppercase; color: var(--text-tertiary);
+                       letter-spacing: 0.06em; background: transparent; }
+        table.rep tr:hover td { background: var(--bg-hover); }
+        .kv { display: grid; grid-template-columns: 200px 1fr; gap: 4px 12px; font-size: 12px; }
+        .kv .k { color: var(--text-tertiary); }
+        .kv .v { color: var(--text-primary); word-break: break-word; }
+        .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px;
+                background: var(--bg-deep); border: 1px solid var(--border); color: var(--text-secondary); }
+        .empty { color: var(--text-tertiary); font-style: italic; font-size: 12px; }
+        .audience-row { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 0.875rem; }
+        .audience-row .pill { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3);
+                              color: #a5b4fc; }
+        .hero { background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(56,189,248,0.06));
+                border: 1px solid rgba(99,102,241,0.25); border-radius: 8px;
+                padding: 0.875rem 1rem; margin-bottom: 0.875rem; }
+        .hero h2 { font-size: 16px; margin: 0 0 4px; }
+        .hero p { color: var(--text-secondary); font-size: 12px; margin: 0; }
+        details > summary { cursor: pointer; font-size: 11px; color: var(--text-tertiary); }
+        pre.json { background: var(--bg-deep); border: 1px solid var(--border);
+                    border-radius: 6px; padding: 0.5rem; font-size: 11px; max-height: 320px;
+                    overflow: auto; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Reports</div>
+                <div class="page-subtitle">Executive + audit-view reporting across the AI assurance lifecycle</div>
+            </div>
+        </div>
+
+        <div class="reports-grid">
+            <div class="report-list" id="reportList"></div>
+            <div id="reportPanel"></div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/reports');
+
+    let CATALOG = [];
+    let SYSTEMS = [];
+    let currentType = "executive";
+    let currentSystem = "";
+    let currentReport = null;
+
+    async function load() {
+        const [c, s] = await Promise.all([
+            fetch('/api/reports/catalog').then(r => r.json()),
+            fetch('/api/reports/systems').then(r => r.json()),
+        ]);
+        CATALOG = c.reports || [];
+        SYSTEMS = s.systems || [];
+        if (SYSTEMS.length && !currentSystem) currentSystem = SYSTEMS[0].id;
+        renderList();
+        await fetchReport();
+    }
+
+    function renderList() {
+        const el = document.getElementById('reportList');
+        const html = CATALOG.map(r => `
+            <div class="report-item ${r.type === currentType ? 'active' : ''}" data-type="${r.type}">
+                <div class="rt">${r.title}</div>
+                <div class="rs">${r.scope}</div>
+            </div>
+        `).join('');
+        el.innerHTML = `<div class="report-list-title">Report types</div>${html}`;
+        el.querySelectorAll('.report-item').forEach(n => {
+            n.addEventListener('click', () => {
+                currentType = n.dataset.type;
+                renderList();
+                fetchReport();
+            });
+        });
+    }
+
+    function reportMeta() {
+        return CATALOG.find(r => r.type === currentType) || {};
+    }
+
+    function needsSystem() {
+        const m = reportMeta();
+        return m.scope === 'system' || (m.scope === 'system or portfolio' && currentSystem);
+    }
+
+    async function fetchReport() {
+        const m = reportMeta();
+        if (m.scope === 'system' && !currentSystem) {
+            renderPanel(null);
+            return;
+        }
+        let url = `/api/reports/${currentType}`;
+        if (currentSystem && (m.scope === 'system' || m.scope === 'system or portfolio')) {
+            url += `?system_id=${encodeURIComponent(currentSystem)}`;
+        }
+        const panel = document.getElementById('reportPanel');
+        panel.innerHTML = '<div class="section"><div class="empty">Loading…</div></div>';
+        try {
+            const r = await fetch(url);
+            const d = await r.json();
+            if (!r.ok) { renderError(d.detail || JSON.stringify(d)); return; }
+            currentReport = d;
+            renderPanel(d);
+        } catch (e) {
+            renderError(String(e));
+        }
+    }
+
+    function renderError(msg) {
+        document.getElementById('reportPanel').innerHTML =
+            `<div class="section"><div class="empty">Error: ${escapeHtml(msg)}</div></div>`;
+    }
+
+    function exportUrl(fmt) {
+        let url = `/api/reports/${currentType}/export.${fmt}`;
+        if (currentSystem && (reportMeta().scope === 'system' || reportMeta().scope === 'system or portfolio')) {
+            url += `?system_id=${encodeURIComponent(currentSystem)}`;
+        }
+        return url;
+    }
+
+    function renderPanel(d) {
+        const panel = document.getElementById('reportPanel');
+        const m = reportMeta();
+        const sysSelectorVisible = m.scope === 'system' || m.scope === 'system or portfolio';
+        const sysOpts = SYSTEMS.map(s =>
+            `<option value="${s.id}" ${s.id === currentSystem ? 'selected' : ''}>${s.name} (${s.id})</option>`
+        ).join('');
+
+        let html = `
+            <div class="hero">
+                <h2>${m.title || currentType}</h2>
+                <p>${m.description || ''}</p>
+            </div>
+            ${m.audience ? `<div class="audience-row">${m.audience.map(a => `<span class="pill">${a}</span>`).join('')}</div>` : ''}
+            <div class="controls">
+                ${sysSelectorVisible ? `
+                    <label style="font-size:12px;color:var(--text-tertiary);">System:</label>
+                    <select id="systemSelect">
+                        ${m.scope === 'system or portfolio' ? '<option value="">— Portfolio —</option>' : ''}
+                        ${sysOpts}
+                    </select>` : ''}
+                <div style="margin-left:auto;display:flex;gap:0.375rem;">
+                    ${currentType === 'executive' ? '<button class="btn btn-sm" id="draftNarrativeBtn" title="Route via the Assurance Model — sanitized portfolio metadata only">Draft executive narrative</button>' : ''}
+                    <a class="btn btn-sm" href="${exportUrl('pdf')}" target="_blank">Export PDF</a>
+                    <a class="btn btn-sm" href="${exportUrl('csv')}" target="_blank">Export CSV</a>
+                    <a class="btn btn-sm" href="${exportUrl('json')}" target="_blank">Export JSON</a>
+                </div>
+            </div>
+            <div id="assistResp"></div>
+        `;
+
+        if (!d) {
+            html += `<div class="section"><div class="empty">No report data.</div></div>`;
+            panel.innerHTML = html;
+            wireControls();
+            return;
+        }
+
+        html += renderReport(d);
+        panel.innerHTML = html;
+        wireControls();
+    }
+
+    function wireControls() {
+        const sel = document.getElementById('systemSelect');
+        if (sel) {
+            sel.addEventListener('change', e => {
+                currentSystem = e.target.value;
+                fetchReport();
+            });
+        }
+        const draft = document.getElementById('draftNarrativeBtn');
+        if (draft) {
+            draft.addEventListener('click', async () => {
+                await callAssuranceModel('draft-report', {
+                    data_classes: ['sanitized_eval_trace', 'sanitized_confidential'],
+                    payload: { scope: 'portfolio' },
+                    user: 'governance-ui',
+                }, 'assistResp');
+            });
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Per-report renderers
+    // ---------------------------------------------------------------------
+    function renderReport(d) {
+        if (d.report_type === 'executive_ai_risk') return renderExecutive(d);
+        if (d.report_type === 'ai_system_assessment') return renderAssessment(d);
+        if (d.report_type === 'release_gate') return renderReleaseGate(d);
+        if (d.report_type === 'framework_coverage') return renderFrameworkCoverage(d);
+        if (d.report_type === 'findings_remediation') return renderFindings(d);
+        if (d.report_type === 'audit_evidence') return renderEvidence(d);
+        return `<div class="section"><pre class="json">${escapeHtml(JSON.stringify(d, null, 2))}</pre></div>`;
+    }
+
+    function meta(d) {
+        return `<div class="section"><div class="kv">
+            <div class="k">Generated</div><div class="v">${escapeHtml(d.generated_at || '')}</div>
+            ${d.scope ? `<div class="k">Scope</div><div class="v">${escapeHtml(d.scope)}</div>` : ''}
+        </div></div>`;
+    }
+
+    function systemSummarySection(d) {
+        const s = d.system_summary;
+        if (!s) return '';
+        return section('AI System Summary', `<div class="kv">
+            <div class="k">System</div><div class="v">${escapeHtml(s.name)} (${escapeHtml(s.id)})</div>
+            <div class="k">Description</div><div class="v">${escapeHtml(s.description || '')}</div>
+            <div class="k">Domain</div><div class="v">${escapeHtml(s.domain || '')}</div>
+            <div class="k">Business owner</div><div class="v">${escapeHtml(s.business_owner || '')}</div>
+            <div class="k">Technical owner</div><div class="v">${escapeHtml(s.technical_owner || '')}</div>
+            <div class="k">Model</div><div class="v">${escapeHtml(s.model_provider || '')} · ${(s.models_used || []).map(escapeHtml).join(', ')}</div>
+            <div class="k">Autonomy / Impact</div><div class="v">${escapeHtml(s.autonomy_level || '')} · ${escapeHtml(s.customer_impact || '')}</div>
+            <div class="k">Regulatory</div><div class="v">${pills(s.regulatory_exposure || [])}</div>
+            <div class="k">Data classes</div><div class="v">${pills(s.data_classes || [])}</div>
+            <div class="k">AWS services</div><div class="v">${pills(s.aws_services || [])}</div>
+            <div class="k">Runtime status</div><div class="v">${escapeHtml(s.runtime_status || '')}</div>
+            <div class="k">Recorded decision</div><div class="v">${decisionBadge(s.release_decision || 'NOT_ASSESSED')}</div>
+            <div class="k">Risk (inherent → residual)</div><div class="v">${escapeHtml(s.inherent_risk)} → ${escapeHtml(s.residual_risk)}</div>
+            <div class="k">Human oversight</div><div class="v">${escapeHtml(s.human_oversight || '')}</div>
+        </div>`);
+    }
+
+    function evalSection(d) {
+        return section('Eval Results', table(
+            ['Eval', 'Score', 'Threshold', 'Status', 'Tool', 'Tests', 'Failed', 'Run at'],
+            (d.eval_results || []).slice(0, 30).map(e => [
+                e.eval_type,
+                (e.score ?? '').toString(),
+                (e.threshold ?? '').toString(),
+                statusPill(e.status),
+                e.tool_source,
+                e.test_count,
+                e.failed_count,
+                e.run_at,
+            ])
+        ));
+    }
+
+    function releaseDecisionSection(d) {
+        const rd = d.release_decision;
+        if (!rd) return '';
+        return section('Release Decision', `<div class="kv">
+            <div class="k">Decision</div><div class="v">${decisionBadge(rd.decision || '')}</div>
+            <div class="k">Rule fired</div><div class="v" style="font-family:var(--font-mono);">${escapeHtml(rd.rule_fired || '')}</div>
+            <div class="k">Rationale</div><div class="v">${escapeHtml(rd.rationale || '')}</div>
+            ${(rd.conditions && rd.conditions.length) ? `<div class="k">Conditions</div><div class="v"><ul style="margin:0;padding-left:1.1rem;">${rd.conditions.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>` : ''}
+        </div>`);
+    }
+
+    function openFindingsSection(d) {
+        return section('Open Findings', table(
+            ['ID', 'Severity', 'Title', 'Control', 'Owner', 'SLA', 'Impact'],
+            (d.open_findings || []).map(f => [
+                f.id, severityBadge(f.severity), escapeHtml(f.title),
+                f.control_id || '—', escapeHtml(f.owner || ''),
+                f.sla_due_date + (f.sla_breached ? ' ⚠' : ''),
+                f.release_impact || '',
+            ])
+        ));
+    }
+
+    function remediationSection(d) {
+        return section('Remediation Plan', table(
+            ['Finding', 'Severity', 'Owner', 'SLA Due', 'Remediation'],
+            (d.remediation_plan || []).map(r => [
+                r.finding_id, severityBadge(r.severity), escapeHtml(r.owner || ''),
+                r.sla_due, escapeHtml(r.remediation || ''),
+            ])
+        ));
+    }
+
+    function approvalSection(d) {
+        return section('Approval History', table(
+            ['Approver', 'Role', 'Decision', 'Timestamp', 'Comments'],
+            (d.approval_history || []).map(a => [
+                escapeHtml(a.approver), a.role, decisionPill(a.decision),
+                a.timestamp, escapeHtml(a.comments || ''),
+            ])
+        ));
+    }
+
+    function exceptionSection(d) {
+        return section('Exception History', table(
+            ['ID', 'Control', 'Risk Acceptor', 'Role', 'Expires', 'Status', 'Reason'],
+            (d.exception_history || []).map(e => [
+                e.id, e.control_id || '—', escapeHtml(e.risk_acceptor || ''),
+                e.role || '', e.expiration_date || '—', e.status || '',
+                escapeHtml(e.reason || ''),
+            ])
+        ));
+    }
+
+    function evidenceCompletenessTile(d) {
+        const pct = Math.round((d.evidence_completeness || 0) * 100);
+        const cls = pct >= 85 ? 'ok' : pct >= 50 ? 'warn' : 'bad';
+        return `<div class="kpi-tile"><div class="label">Evidence completeness</div><div class="value ${cls}">${pct}%</div></div>`;
+    }
+
+    // ----- 1. Executive -----
+    function renderExecutive(d) {
+        const k = d.portfolio_kpis || {};
+        const tiles = `
+            <div class="kpi-tile"><div class="label">AI systems</div><div class="value">${k.ai_systems_total ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">In production</div><div class="value">${k.in_production ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">In pilot</div><div class="value">${k.in_pilot ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Approved</div><div class="value ok">${k.approved ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Conditional pilot</div><div class="value warn">${k.conditional_pilot ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">On hold</div><div class="value bad">${k.hold ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open CRITICAL</div><div class="value bad">${k.open_critical ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open HIGH</div><div class="value warn">${k.open_high ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">SLA breached</div><div class="value bad">${k.sla_breached ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Active waivers</div><div class="value">${k.active_waivers ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Avg evidence</div><div class="value">${Math.round((k.avg_evidence_completeness || 0) * 100)}%</div></div>
+            <div class="kpi-tile"><div class="label">Avg score</div><div class="value">${k.avg_overall_score ?? 0}</div></div>
+        `;
+
+        return meta(d) +
+            `<div class="section"><div class="section-title">Portfolio KPIs</div><div class="kpi-strip cols-6">${tiles}</div></div>` +
+            section('Systems Needing Attention (top 3)', table(
+                ['System', 'Decision', 'Residual', 'Open CRIT', 'Open HIGH', 'SLA breached', 'Rule fired'],
+                (d.needs_attention || []).map(r => [
+                    `${escapeHtml(r.name)} <span class="pill">${r.system_id}</span>`,
+                    decisionBadge(r.decision), r.residual_risk,
+                    r.open_critical, r.open_high, r.sla_breached,
+                    `<code style="font-size:11px;">${escapeHtml(r.rule_fired || '')}</code>`,
+                ])
+            )) +
+            section('Framework Rollup', table(
+                ['Framework', 'Applicable', 'Passing', 'Failing', 'Coverage %'],
+                (d.framework_rollup || []).map(f => [
+                    f.framework, f.controls_applicable, f.controls_passing, f.controls_failing, f.coverage_pct + '%',
+                ])
+            )) +
+            section('Waivers by Risk Acceptor Role', table(
+                ['Role', 'Active waivers'],
+                (d.waivers_by_acceptor_role || []).map(r => [r.role, r.count])
+            )) +
+            section('All AI Systems', table(
+                ['System', 'Domain', 'Business owner', 'Status', 'Decision', 'Residual',
+                 'Score', 'Evidence', 'CRIT', 'HIGH', 'SLA', 'Waivers'],
+                (d.ai_systems || []).map(r => [
+                    `${escapeHtml(r.name)} <span class="pill">${r.system_id}</span>`,
+                    escapeHtml(r.domain),
+                    escapeHtml(r.business_owner),
+                    r.runtime_status,
+                    decisionBadge(r.release_decision),
+                    r.residual_risk,
+                    r.overall_score,
+                    Math.round((r.evidence_completeness || 0) * 100) + '%',
+                    r.open_critical, r.open_high, r.sla_breached, r.active_waivers,
+                ])
+            ));
+    }
+
+    // ----- 2. Assessment -----
+    function renderAssessment(d) {
+        const rc = d.risk_classification || {};
+        const rr = rc.residual_risk || {};
+        const tiles = `
+            <div class="kpi-tile"><div class="label">Overall score</div><div class="value">${d.overall_score ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Inherent risk</div><div class="value">${rc.inherent_risk || '—'}</div></div>
+            <div class="kpi-tile"><div class="label">Residual risk</div><div class="value">${rr.level || '—'}</div></div>
+            ${evidenceCompletenessTile(d)}
+        `;
+        return meta(d) + systemSummarySection(d) +
+            `<div class="section"><div class="section-title">Headline metrics</div><div class="kpi-strip cols-4">${tiles}</div></div>` +
+            section('Risk Classification', `<div class="kv">
+                <div class="k">Inherent risk</div><div class="v">${rc.inherent_risk || '—'}</div>
+                <div class="k">Rules fired</div><div class="v">${pills(rc.rules_fired || [])}</div>
+                <div class="k">Residual normalized score</div><div class="v">${rr.normalized_score ?? '—'} / 100</div>
+                <div class="k">Residual raw score</div><div class="v">${rr.raw_score ?? '—'}</div>
+            </div>`) +
+            section('Framework Coverage', table(
+                ['Framework', 'Applicable', 'Passing', 'Failing', 'Coverage %'],
+                (d.framework_coverage || []).map(f => [
+                    f.framework, f.controls_applicable, f.controls_passing, f.controls_failing, f.coverage_pct + '%',
+                ])
+            )) +
+            section('Failed Controls', table(
+                ['Control', 'Title', 'Domain', 'Priority', 'Status', 'Rationale'],
+                (d.failed_controls || []).map(c => [
+                    `<strong>${c.control_id}</strong>`, escapeHtml(c.title), c.domain, c.priority,
+                    statusPill(c.status), escapeHtml(c.rationale || ''),
+                ])
+            )) +
+            evalSection(d) +
+            releaseDecisionSection(d) +
+            openFindingsSection(d) +
+            remediationSection(d) +
+            approvalSection(d) +
+            exceptionSection(d);
+    }
+
+    // ----- 3. Release Gate -----
+    function renderReleaseGate(d) {
+        const t = d.totals || {};
+        const tiles = `
+            <div class="kpi-tile"><div class="label">Pass</div><div class="value ok">${t.pass ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Fail</div><div class="value bad">${t.fail ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Warning</div><div class="value warn">${t.warning ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Blocking failures</div><div class="value bad">${t.blocking_failures ?? 0}</div></div>
+            ${evidenceCompletenessTile(d)}
+            <div class="kpi-tile"><div class="label">Target env</div><div class="value">${d.target_environment || ''}</div></div>
+        `;
+        return meta(d) + systemSummarySection(d) +
+            `<div class="section"><div class="section-title">Gate summary</div><div class="kpi-strip cols-6">${tiles}</div></div>` +
+            releaseDecisionSection(d) +
+            section('Gates (RG-001..RG-010)', table(
+                ['Gate', 'Name', 'Status', 'Blocking', 'Reason / Waiver', 'Remediation'],
+                (d.gates || []).map(g => [
+                    `<strong>${g.gate_id}</strong>`, escapeHtml(g.gate_name || ''),
+                    statusPill(g.status), g.blocking ? 'Yes' : 'No',
+                    escapeHtml(g.failed_reason || ''),
+                    escapeHtml(g.remediation || ''),
+                ])
+            )) +
+            evalSection(d) +
+            openFindingsSection(d) +
+            remediationSection(d) +
+            approvalSection(d) +
+            exceptionSection(d);
+    }
+
+    // ----- 4. Framework Coverage -----
+    function renderFrameworkCoverage(d) {
+        let html = meta(d) + systemSummarySection(d);
+        (d.frameworks || []).forEach(fw => {
+            html += section(`${fw.framework}`, `
+                <div class="kpi-strip cols-4" style="margin-bottom:0.5rem;">
+                    <div class="kpi-tile"><div class="label">Applicable items</div><div class="value">${fw.applicable_items}</div></div>
+                    <div class="kpi-tile"><div class="label">Passing items</div><div class="value ok">${fw.passing_items}</div></div>
+                    <div class="kpi-tile"><div class="label">Avg coverage %</div><div class="value">${fw.avg_coverage_pct}%</div></div>
+                    <div class="kpi-tile"><div class="label">Avg evidence</div><div class="value">${Math.round((fw.avg_evidence_completeness || 0) * 100)}%</div></div>
+                </div>
+                ${table(
+                    ['Item', 'Display Name', 'Coverage %', 'Evidence', 'Gates'],
+                    (fw.items || []).map(it => [
+                        `<strong>${it.item_id}</strong>`,
+                        escapeHtml(it.display_name || ''),
+                        Math.round(it.coverage_pct) + '%',
+                        Math.round((it.evidence_completeness || 0) * 100) + '%',
+                        (it.release_gates_affected || []).join(', '),
+                    ])
+                )}
+            `);
+        });
+        html += section('Evidence Completeness by Control Domain', table(
+            ['Domain', 'Applicable', 'Covered', 'Completeness %'],
+            (d.evidence_completeness_by_domain || []).map(r => [
+                r.domain || r.control_domain, r.applicable_controls, r.covered_controls,
+                r.completeness_pct + '%',
+            ])
+        ));
+        if (d.release_decision) html += releaseDecisionSection(d);
+        if ((d.failed_controls || []).length) {
+            html += section('Failed Controls', `<div class="kv"><div class="k">Controls</div><div class="v">${pills(d.failed_controls)}</div></div>`);
+        }
+        html += evalSection(d) + openFindingsSection(d) + remediationSection(d)
+              + approvalSection(d) + exceptionSection(d);
+        return html;
+    }
+
+    // ----- 5. Findings & Remediation -----
+    function renderFindings(d) {
+        const t = d.totals || {};
+        const o = t.open_by_severity || {};
+        const tiles = `
+            <div class="kpi-tile"><div class="label">Total findings</div><div class="value">${t.total ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open CRITICAL</div><div class="value bad">${o.CRITICAL ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open HIGH</div><div class="value warn">${o.HIGH ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open MEDIUM</div><div class="value">${o.MEDIUM ?? 0}</div></div>
+            <div class="kpi-tile"><div class="label">Open LOW</div><div class="value">${o.LOW ?? 0}</div></div>
+        `;
+        let html = meta(d) + systemSummarySection(d) +
+            `<div class="section"><div class="section-title">Findings summary</div><div class="kpi-strip cols-6">${tiles}</div></div>` +
+            openFindingsSection(d) +
+            remediationSection(d);
+        const byStatus = d.findings_by_status || {};
+        Object.keys(byStatus).forEach(st => {
+            html += section(`Findings — ${st}`, table(
+                ['ID', 'Severity', 'Title', 'Control', 'Owner', 'SLA', 'Discovered'],
+                byStatus[st].map(f => [
+                    f.id, severityBadge(f.severity), escapeHtml(f.title),
+                    f.control_id || '—', escapeHtml(f.owner || ''),
+                    f.sla_due_date + (f.sla_breached ? ' ⚠' : ''),
+                    f.discovered,
+                ])
+            ));
+        });
+        html += evalSection(d) + releaseDecisionSection(d) + approvalSection(d) + exceptionSection(d);
+        return html;
+    }
+
+    // ----- 6. Audit Evidence -----
+    function renderEvidence(d) {
+        const tiles = `
+            <div class="kpi-tile"><div class="label">Evidence records</div><div class="value">${d.evidence_count ?? 0}</div></div>
+            ${evidenceCompletenessTile(d)}
+        `;
+        let html = meta(d) + systemSummarySection(d) +
+            `<div class="section"><div class="section-title">Evidence summary</div><div class="kpi-strip cols-4">${tiles}</div></div>` +
+            section('Completeness by Framework', table(
+                ['Framework', 'Applicable', 'Covered', 'Completeness %'],
+                (d.completeness_by_framework || []).map(r => [
+                    r.framework, r.applicable_controls, r.covered_controls, r.completeness_pct + '%',
+                ])
+            )) +
+            section('Completeness by Control Domain', table(
+                ['Domain', 'Applicable', 'Covered', 'Completeness %'],
+                (d.completeness_by_control_domain || []).map(r => [
+                    r.domain || r.control_domain, r.applicable_controls, r.covered_controls, r.completeness_pct + '%',
+                ])
+            ));
+
+        const sections = d.evidence_by_section || {};
+        Object.keys(sections).forEach(name => {
+            html += section(`Section — ${name}`, table(
+                ['ID', 'Type', 'Source', 'Summary', 'Collected'],
+                sections[name].map(e => [
+                    e.id, e.evidence_type, escapeHtml(e.source || ''),
+                    escapeHtml(e.summary || ''), e.collected_at,
+                ])
+            ));
+        });
+        html += section('Evidence by Control', table(
+            ['Control', 'Evidence IDs'],
+            (d.evidence_by_control || []).map(r => [r.control_id, (r.evidence_ids || []).join(', ')])
+        )) +
+        section('Failed Controls', `<div class="kv"><div class="k">Controls</div><div class="v">${pills(d.failed_controls || [])}</div></div>`) +
+        releaseDecisionSection(d) +
+        openFindingsSection(d) +
+        remediationSection(d) +
+        approvalSection(d) +
+        exceptionSection(d);
+        return html;
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+    function section(title, body) {
+        return `<div class="section"><div class="section-title">${escapeHtml(title)}</div>${body || '<div class="empty">No data.</div>'}</div>`;
+    }
+    function table(cols, rows) {
+        if (!rows || !rows.length) return '<div class="empty">No data.</div>';
+        return `<table class="rep"><thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>${
+            rows.map(r => `<tr>${r.map(cell => `<td>${cell == null ? '' : cell}</td>`).join('')}</tr>`).join('')
+        }</tbody></table>`;
+    }
+    function pills(arr) {
+        if (!arr || !arr.length) return '<span class="empty">none</span>';
+        return arr.map(x => `<span class="pill">${escapeHtml(String(x))}</span>`).join(' ');
+    }
+    function statusPill(s) {
+        if (!s) return '';
+        const cls = ({PASS:'badge-pass', FAIL:'badge-critical', WARNING:'badge-medium',
+                       NOT_APPLICABLE:'badge-neutral', PARTIAL:'badge-medium',
+                       NO_EVIDENCE:'badge-critical'})[s] || 'badge-neutral';
+        return `<span class="badge ${cls}">${s}</span>`;
+    }
+    function decisionPill(d) {
+        if (!d) return '';
+        const cls = ({APPROVED:'badge-pass', REJECTED:'badge-critical',
+                      CONDITIONAL:'badge-medium', DEFERRED:'badge-neutral'})[d] || 'badge-neutral';
+        return `<span class="badge ${cls}">${d}</span>`;
+    }
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    load();
+    </script>
+</body>
+</html>

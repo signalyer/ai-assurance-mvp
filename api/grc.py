@@ -13,11 +13,21 @@ from mock_data import (
     RUNTIME_EVENTS,
     POLICIES,
     EVIDENCE,
-    NEXT_ACTIONS,
-    HOMEPAGE_RUNTIME_EVENTS,
-    HOMEPAGE_CRITICAL_FINDINGS,
-    compute_kpis,
 )
+# Real-data portfolio aggregations replace the hardcoded mock constants
+# (NEXT_ACTIONS, HOMEPAGE_RUNTIME_EVENTS, HOMEPAGE_CRITICAL_FINDINGS, compute_kpis)
+# so every Overview metric ties to a real AI system, control, finding, gate,
+# evidence, or runtime event.
+from domain.portfolio import (
+    compute_kpis,
+    homepage_runtime_events,
+    homepage_critical_findings,
+    next_actions,
+    threat_series_7d,
+)
+from domain.notifications import summary as notifications_summary
+from domain.notifications import mark_resolved as notifications_mark_resolved
+from domain.notifications import clear_resolved as notifications_clear_resolved
 
 router = APIRouter(prefix="/api/grc", tags=["grc"])
 
@@ -32,20 +42,58 @@ async def get_kpis() -> dict:
 
 @router.get("/next-actions")
 async def get_next_actions() -> dict:
-    """Next actions queue for command center."""
-    return {"actions": NEXT_ACTIONS}
+    """Next actions queue — derived from open findings, release holds, and waivers."""
+    return {"actions": next_actions()}
 
 
 @router.get("/homepage/runtime-events")
 async def get_homepage_runtime_events() -> dict:
-    """Runtime events formatted for homepage display."""
-    return {"events": HOMEPAGE_RUNTIME_EVENTS}
+    """Most recent runtime events across all governed AI systems."""
+    return {"events": homepage_runtime_events()}
 
 
 @router.get("/homepage/critical-findings")
 async def get_homepage_critical_findings() -> dict:
-    """Critical findings formatted for homepage display."""
-    return {"findings": HOMEPAGE_CRITICAL_FINDINGS}
+    """Open CRITICAL/HIGH findings across the portfolio, worst-SLA first."""
+    return {"findings": homepage_critical_findings()}
+
+
+@router.get("/homepage/threat-series")
+async def get_threat_series() -> dict:
+    """7-day threat-activity series, bucketed from real runtime events."""
+    return threat_series_7d()
+
+
+# === Notifications (AI Risk Operations notification center) ===
+
+@router.get("/notifications")
+async def get_notifications(tab: str | None = None, severity: str | None = None,
+                              category: str | None = None,
+                              include_resolved: bool = False) -> dict:
+    s = notifications_summary()
+    items = s["items"]
+    if not include_resolved:
+        items = [n for n in items if not n["resolved"]]
+    if tab and tab != "all":
+        items = [n for n in items if n["tab"] == tab]
+    if severity:
+        items = [n for n in items if n["severity"] == severity]
+    if category:
+        items = [n for n in items if n["category"] == category]
+    return {**s, "items": items}
+
+
+@router.post("/notifications/{notif_id}/resolve")
+async def resolve_notification(notif_id: str) -> dict:
+    rec = notifications_mark_resolved(notif_id, actor="user")
+    return {"ok": True, **rec}
+
+
+@router.post("/notifications/reset")
+async def reset_notifications() -> dict:
+    """Clear all 'resolved' overrides — restores the inbox to its computed state."""
+    notifications_clear_resolved()
+    return {"ok": True}
 
 
 # === AI Systems ===

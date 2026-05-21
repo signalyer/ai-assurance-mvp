@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register AI System — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Register AI System</div>
+                <div class="page-subtitle">Intake workflow — classifies inherent risk and applies required controls before any release activity</div>
+            </div>
+            <div class="page-actions">
+                <a class="btn btn-sm" href="/ai-systems">Cancel</a>
+            </div>
+        </div>
+
+        <div class="step-rail" id="stepRail"></div>
+
+        <div class="wizard-layout">
+            <div class="card">
+                <div id="stepBody"></div>
+
+                <div class="wizard-footer">
+                    <div class="left">
+                        <button class="btn btn-sm" id="backBtn">Back</button>
+                    </div>
+                    <div class="right">
+                        <button class="btn btn-sm" id="nextBtn">Next</button>
+                        <button class="btn btn-sm btn-primary" id="submitBtn" style="display: none;">Submit Intake</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card risk-panel">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Preliminary Risk Classification</div>
+                        <div class="card-subtitle">Live — updates as you complete the intake</div>
+                    </div>
+                </div>
+                <div style="text-align: center; padding: 0.75rem 0;">
+                    <div id="riskPill" class="risk-pill MEDIUM">MEDIUM</div>
+                </div>
+                <div id="riskRationale" style="margin-top: 0.5rem;"></div>
+                <div class="drawer-section" style="margin-top: 1rem;">
+                    <div class="drawer-section-title">Required Controls</div>
+                    <div id="ctrlSummary" class="text-sm text-secondary">—</div>
+                </div>
+                <div class="drawer-section">
+                    <div class="drawer-section-title">Regulatory Exposure</div>
+                    <div id="regSummary" class="flex gap-1" style="flex-wrap: wrap;">—</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/ai-systems');
+
+    // ---------- State ----------
+    const STATE = {
+        // Step 1
+        name: "", description: "", business_owner: "", technical_owner: "",
+        domain: "", use_case: "",
+        user_population: "internal", customer_impact: "",
+        // Step 2
+        cloud_provider: "AWS",
+        aws_services: [], model_provider: "", models_used: [],
+        rag_enabled: false, rag_sources: [], vector_store: "",
+        tools_used: [], external_integrations: [],
+        // Step 3
+        data_classes: [],
+        data_in_prompts: false, data_in_rag: false,
+        tools_return_sensitive_data: false, logs_contain_sensitive_data: false,
+        // Step 4
+        autonomy_level: "answer_only",
+        can_call_tools: false, can_write_data: false,
+        can_trigger_customer_communication: false, can_influence_fs_workflow: false,
+        human_approval_required: true,
+        // Step 5
+        architecture_diagram_url: "", iac_url: "", iam_policy_url: "",
+        bedrock_config_url: "", rag_pipeline_config_url: "",
+        eval_report_url: "", logging_config_url: "", security_review_url: "",
+    };
+
+    const STEPS = [
+        { id: 1, label: "Business Context", render: renderStep1 },
+        { id: 2, label: "Architecture",      render: renderStep2 },
+        { id: 3, label: "Data Classification",render: renderStep3 },
+        { id: 4, label: "Agent Autonomy",    render: renderStep4 },
+        { id: 5, label: "Evidence Upload",   render: renderStep5 },
+    ];
+    let currentStep = 1;
+
+    // ---------- Render helpers ----------
+    function inputField(label, key, opts = {}) {
+        const req = opts.required ? `<span class="req">*</span>` : '';
+        const help = opts.help ? `<div class="form-help">${opts.help}</div>` : '';
+        const type = opts.type || 'text';
+        const placeholder = opts.placeholder || '';
+        return `
+            <div class="form-field${opts.span2 ? ' span-2' : ''}">
+                <label class="form-label">${label}${req}</label>
+                <input class="form-input" type="${type}" data-key="${key}" value="${escapeAttr(STATE[key] || '')}" placeholder="${placeholder}">
+                ${help}
+            </div>`;
+    }
+
+    function textareaField(label, key, opts = {}) {
+        const req = opts.required ? `<span class="req">*</span>` : '';
+        return `
+            <div class="form-field span-2">
+                <label class="form-label">${label}${req}</label>
+                <textarea class="form-textarea" data-key="${key}" placeholder="${opts.placeholder || ''}">${escapeAttr(STATE[key] || '')}</textarea>
+            </div>`;
+    }
+
+    function selectField(label, key, options, opts = {}) {
+        const req = opts.required ? `<span class="req">*</span>` : '';
+        const opts_html = options.map(o => {
+            const value = typeof o === 'string' ? o : o.value;
+            const text  = typeof o === 'string' ? o : o.label;
+            const sel = STATE[key] === value ? 'selected' : '';
+            return `<option value="${value}" ${sel}>${text}</option>`;
+        }).join('');
+        return `
+            <div class="form-field${opts.span2 ? ' span-2' : ''}">
+                <label class="form-label">${label}${req}</label>
+                <select class="form-select" data-key="${key}">
+                    <option value="">Select…</option>
+                    ${opts_html}
+                </select>
+            </div>`;
+    }
+
+    function chipsField(label, key, options, opts = {}) {
+        const selected = STATE[key] || [];
+        const chips = options.map(o => {
+            const v = typeof o === 'string' ? o : o.value;
+            const l = typeof o === 'string' ? o : o.label;
+            const on = selected.includes(v) ? 'selected' : '';
+            const danger = opts.dangerValues && opts.dangerValues.includes(v) ? 'critical' : '';
+            return `<span class="chip ${on} ${danger}" data-chips="${key}" data-value="${v}">${l}</span>`;
+        }).join('');
+        return `
+            <div class="form-field span-2">
+                <label class="form-label">${label}</label>
+                <div class="chip-group">${chips}</div>
+                ${opts.help ? `<div class="form-help">${opts.help}</div>` : ''}
+            </div>`;
+    }
+
+    function switchField(label, key, help) {
+        const on = STATE[key] ? 'on' : '';
+        return `
+            <div class="switch-row span-2" data-switch-row="${key}" style="grid-column: span 2;">
+                <div>
+                    <div class="switch-label">${label}</div>
+                    ${help ? `<div class="switch-help">${help}</div>` : ''}
+                </div>
+                <div class="switch ${on}" data-switch="${key}"></div>
+            </div>`;
+    }
+
+    function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+
+    // ---------- Step renderers ----------
+    function renderStep1() {
+        return `
+            <div class="card-header"><div><div class="card-title">Step 1 — Business Context</div><div class="card-subtitle">Who owns it, what it does, who it impacts</div></div></div>
+            <div class="form-grid">
+                ${inputField("AI System Name", "name", { required: true, span2: true, placeholder: "e.g. Payments Exception Review Agent" })}
+                ${textareaField("Description", "description", { required: true, placeholder: "What does this system do, in business terms?" })}
+                ${inputField("Business Owner", "business_owner", { required: true, placeholder: "Name, Title (e.g. Sarah Chen, VP Payments Ops)" })}
+                ${inputField("Technical Owner", "technical_owner", { required: true, placeholder: "Name, Title" })}
+                ${selectField("Domain", "domain", [
+                    "Payments", "AML", "KYC", "Credit", "Customer Service", "Wealth", "Treasury",
+                ], { required: true })}
+                ${selectField("User Population", "user_population", [
+                    { value: "internal", label: "Internal users only" },
+                    { value: "customer-facing", label: "Customer-facing" },
+                    { value: "third-party", label: "Third-party / partner" },
+                    { value: "regulator-facing", label: "Regulator-facing" },
+                ], { required: true })}
+                ${selectField("Customer Impact", "customer_impact", [
+                    { value: "none", label: "None" },
+                    { value: "indirect", label: "Indirect (informs human decisions)" },
+                    { value: "direct", label: "Direct (acts on customer accounts)" },
+                    { value: "material", label: "Material financial impact" },
+                ], { required: true })}
+                ${textareaField("Use Case", "use_case", { placeholder: "Business outcome, KPI, expected efficiency gain…" })}
+            </div>`;
+    }
+
+    function renderStep2() {
+        return `
+            <div class="card-header"><div><div class="card-title">Step 2 — Architecture</div><div class="card-subtitle">Cloud, model, RAG, tools, external integrations</div></div></div>
+            <div class="form-grid">
+                ${selectField("Cloud Provider", "cloud_provider", ["AWS"], { required: true })}
+                ${inputField("Model Provider", "model_provider", { placeholder: "e.g. Anthropic via AWS Bedrock" })}
+                ${chipsField("AWS Services Used", "aws_services", [
+                    "Bedrock", "Lambda", "ECS", "EKS", "S3", "OpenSearch", "Aurora",
+                    "DynamoDB", "API Gateway", "Step Functions", "CloudWatch",
+                    "CloudTrail", "KMS", "IAM", "VPC Endpoints",
+                ])}
+                ${chipsField("Models Used", "models_used", [
+                    "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5",
+                    "gpt-4o", "amazon.titan-text-express", "amazon.nova-pro",
+                    "internal-fine-tune",
+                ])}
+                ${switchField("RAG enabled", "rag_enabled", "Does this system retrieve from a knowledge base before answering?")}
+                ${inputField("Vector Store", "vector_store", { placeholder: "e.g. OpenSearch Serverless, Aurora pgvector — leave blank if no RAG", span2: true })}
+                ${chipsField("RAG Sources", "rag_sources", [
+                    "Internal Procedures", "FAQ Corpus", "Regulatory Guidance",
+                    "Case History (de-identified)", "Product Documentation",
+                    "FinCEN Advisories", "Underwriting Standards",
+                ])}
+                ${chipsField("Tools / APIs Used", "tools_used", [
+                    "lookup_transaction", "hold_payment", "release_payment",
+                    "search_sanctions", "extract_id_document", "get_account_balance",
+                    "transfer_funds", "open_case_note", "send_customer_message",
+                    "credit_decision", "escalate_to_analyst",
+                ])}
+                ${chipsField("External Integrations", "external_integrations", [
+                    "Core Banking", "Payments Platform", "AML Platform",
+                    "OFAC / SDN", "CRM", "Email / SMS Gateway", "Document Store",
+                ])}
+            </div>`;
+    }
+
+    function renderStep3() {
+        return `
+            <div class="card-header"><div><div class="card-title">Step 3 — Data Classification</div><div class="card-subtitle">What kinds of data flow through this system, and where</div></div></div>
+            <div class="form-grid">
+                ${chipsField("Data Classes", "data_classes", [
+                    { value: "public",        label: "Public" },
+                    { value: "internal",      label: "Internal" },
+                    { value: "confidential",  label: "Confidential" },
+                    { value: "pii",           label: "PII" },
+                    { value: "npi",           label: "NPI (GLBA)" },
+                    { value: "pci",           label: "PCI (cardholder data)" },
+                    { value: "payment_data",  label: "Payment Data" },
+                    { value: "aml_kyc_data",  label: "AML / KYC Data" },
+                    { value: "credit_data",   label: "Credit Data" },
+                ], { dangerValues: ["pii","npi","pci","payment_data","aml_kyc_data","credit_data"],
+                     help: "Sensitive classes drive a stricter control set." })}
+                ${switchField("Data enters prompts", "data_in_prompts", "Customer data is passed into model context at inference time.")}
+                ${switchField("Data enters RAG", "data_in_rag", "Customer or internal-sensitive data is indexed in the RAG corpus.")}
+                ${switchField("Tools return sensitive data", "tools_return_sensitive_data", "Any tool response carries PII/NPI/PCI back to the agent.")}
+                ${switchField("Logs may contain sensitive data", "logs_contain_sensitive_data", "Inference logs, traces, or audit trails capture sensitive fields.")}
+            </div>`;
+    }
+
+    function renderStep4() {
+        return `
+            <div class="card-header"><div><div class="card-title">Step 4 — Agent Autonomy</div><div class="card-subtitle">What the agent can decide, what it can do, where humans must intervene</div></div></div>
+            <div class="form-grid">
+                ${selectField("Autonomy Level", "autonomy_level", [
+                    { value: "answer_only",          label: "Answer only — read-only Q&A" },
+                    { value: "recommend",            label: "Recommend — surfaces options, no action" },
+                    { value: "draft",                label: "Draft — produces documents for human review" },
+                    { value: "execute_with_approval",label: "Execute with approval — tools gated by human" },
+                    { value: "execute_autonomously", label: "Execute autonomously — no human gate" },
+                ], { required: true, span2: true })}
+                ${switchField("Can call tools / APIs", "can_call_tools", "Agent invokes deterministic tools beyond pure text generation.")}
+                ${switchField("Can write data", "can_write_data", "Agent mutates a system of record (create/update/delete).")}
+                ${switchField("Can trigger customer communication", "can_trigger_customer_communication", "Agent can send email, SMS, in-app messages, or chat responses.")}
+                ${switchField("Can influence Payments / Credit / AML / KYC", "can_influence_fs_workflow", "Agent action can move money, approve credit, file SARs, or open accounts.")}
+                ${switchField("Human approval required for high-risk actions", "human_approval_required", "Money movement > $10K, customer-impacting decisions, sanctions hits.")}
+            </div>`;
+    }
+
+    function renderStep5() {
+        return `
+            <div class="card-header"><div><div class="card-title">Step 5 — Evidence Upload</div><div class="card-subtitle">Link the artifacts that will be evaluated. Links only — files stay in their systems of record.</div></div></div>
+            <div class="form-grid">
+                ${inputField("Architecture Diagram",        "architecture_diagram_url",  { placeholder: "Confluence / Lucid URL", span2: true })}
+                ${inputField("Terraform / CloudFormation",  "iac_url",                   { placeholder: "Git repo or commit URL" })}
+                ${inputField("IAM Policy",                  "iam_policy_url",            { placeholder: "Policy ARN or document link" })}
+                ${inputField("Bedrock Configuration",       "bedrock_config_url",        { placeholder: "ModelInvocationLoggingConfiguration export" })}
+                ${inputField("RAG Pipeline Config",         "rag_pipeline_config_url",   { placeholder: "Pipeline manifest URL" })}
+                ${inputField("Eval Report",                 "eval_report_url",           { placeholder: "Latest eval run report" })}
+                ${inputField("Logging Config",              "logging_config_url",        { placeholder: "CloudWatch / Macie config" })}
+                ${inputField("Security Review",             "security_review_url",       { placeholder: "AppSec review document" })}
+            </div>
+            <div class="form-help" style="margin-top: 1rem;">
+                On submit: an AI System record will be created, inherent risk classified, required P0/P1 controls bound as release gates, and an initial assessment opened. You'll be redirected to the system detail page.
+            </div>`;
+    }
+
+    // ---------- Render the rail + current step ----------
+    function renderRail() {
+        document.getElementById('stepRail').innerHTML = STEPS.map(s => {
+            const cls = s.id === currentStep ? 'active' : (s.id < currentStep ? 'done' : '');
+            return `<div class="step-rail-item ${cls}" data-step="${s.id}">
+                <span class="step-num">${s.id < currentStep ? '✓' : s.id}</span>
+                <span>${s.label}</span>
+            </div>`;
+        }).join('');
+        document.querySelectorAll('[data-step]').forEach(el => {
+            el.addEventListener('click', () => {
+                currentStep = parseInt(el.dataset.step);
+                renderAll();
+            });
+        });
+    }
+
+    function renderStepBody() {
+        document.getElementById('stepBody').innerHTML = STEPS[currentStep - 1].render();
+        bindInputs();
+    }
+
+    function bindInputs() {
+        document.querySelectorAll('[data-key]').forEach(el => {
+            el.addEventListener('input', () => {
+                STATE[el.dataset.key] = el.value;
+                schedulePreview();
+            });
+            el.addEventListener('change', () => {
+                STATE[el.dataset.key] = el.value;
+                schedulePreview();
+            });
+        });
+        document.querySelectorAll('[data-switch]').forEach(el => {
+            el.addEventListener('click', () => {
+                const key = el.dataset.switch;
+                STATE[key] = !STATE[key];
+                el.classList.toggle('on');
+                schedulePreview();
+            });
+        });
+        document.querySelectorAll('[data-chips]').forEach(el => {
+            el.addEventListener('click', () => {
+                const key = el.dataset.chips;
+                const v = el.dataset.value;
+                STATE[key] = STATE[key] || [];
+                const i = STATE[key].indexOf(v);
+                if (i >= 0) STATE[key].splice(i, 1);
+                else STATE[key].push(v);
+                el.classList.toggle('selected');
+                schedulePreview();
+            });
+        });
+    }
+
+    function renderAll() {
+        renderRail();
+        renderStepBody();
+        document.getElementById('backBtn').disabled = currentStep === 1;
+        document.getElementById('nextBtn').style.display = currentStep === STEPS.length ? 'none' : '';
+        document.getElementById('submitBtn').style.display = currentStep === STEPS.length ? '' : 'none';
+    }
+
+    // ---------- Live preview ----------
+    let previewTimer = null;
+    function schedulePreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(runPreview, 250);
+    }
+
+    async function runPreview() {
+        try {
+            const r = await fetch('/api/grc/intake/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(STATE),
+            });
+            if (!r.ok) return;
+            const d = await r.json();
+
+            const pill = document.getElementById('riskPill');
+            pill.className = 'risk-pill ' + d.risk_level;
+            pill.textContent = d.risk_level;
+
+            document.getElementById('riskRationale').innerHTML = d.rationale.map((r, i) => {
+                const tag = d.rules_fired[i] || '·';
+                return `<div class="rule-row"><span class="rule-tag">${tag}</span><span>${escapeHtml(r)}</span></div>`;
+            }).join('') || '<div class="text-xs text-tertiary">No rule fired yet — complete more fields.</div>';
+
+            const c = d.controls;
+            document.getElementById('ctrlSummary').innerHTML = `
+                <div><span class="font-bold">${c.required_total}</span> P0/P1 required · ${c.applicable_total} total applicable</div>
+                <div class="text-xs text-tertiary mt-1">
+                    P0: ${c.by_priority.P0 || 0} · P1: ${c.by_priority.P1 || 0} · P2: ${c.by_priority.P2 || 0}
+                </div>
+                ${c.required.slice(0, 6).map(rc => `
+                    <div class="text-xs mt-1">
+                        <span class="font-mono">${rc.control_id}</span>
+                        <span class="badge ${rc.priority === 'P0' ? 'badge-critical' : 'badge-high'}" style="margin-left: 4px;">${rc.priority}</span>
+                        ${escapeHtml(rc.title)}
+                    </div>
+                `).join('')}
+                ${c.required.length > 6 ? `<div class="text-xs text-tertiary mt-1">+ ${c.required.length - 6} more…</div>` : ''}
+            `;
+
+            document.getElementById('regSummary').innerHTML = d.regulatory_exposure.length
+                ? d.regulatory_exposure.map(e => `<span class="framework-badge">${e}</span>`).join('')
+                : '<span class="text-xs text-tertiary">None inferred from domain yet.</span>';
+        } catch (e) {
+            console.warn('Preview failed', e);
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    // ---------- Submit ----------
+    document.getElementById('nextBtn').addEventListener('click', () => {
+        if (currentStep < STEPS.length) { currentStep += 1; renderAll(); }
+    });
+    document.getElementById('backBtn').addEventListener('click', () => {
+        if (currentStep > 1) { currentStep -= 1; renderAll(); }
+    });
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        if (!STATE.name || !STATE.business_owner || !STATE.technical_owner || !STATE.domain) {
+            alert('Step 1 required fields missing — system name, business owner, technical owner, and domain are required.');
+            currentStep = 1;
+            renderAll();
+            return;
+        }
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+        try {
+            const r = await fetch('/api/grc/intake/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(STATE),
+            });
+            const d = await r.json();
+            if (!r.ok) { alert('Intake failed: ' + (d.detail || JSON.stringify(d))); btn.disabled = false; btn.textContent = 'Submit Intake'; return; }
+            window.location.href = d.redirect_to || '/ai-systems';
+        } catch (e) {
+            alert('Intake failed: ' + e.message);
+            btn.disabled = false;
+            btn.textContent = 'Submit Intake';
+        }
+    });
+
+    renderAll();
+    runPreview();
+    </script>
+</body>
+</html>

@@ -5,24 +5,35 @@
     <title>Security — AssureAI</title>
     <link rel="stylesheet" href="/static/shared.css">
     <style>
-        .owasp-row {
+        .item-row {
             display: grid;
-            grid-template-columns: 80px 1fr 100px 100px 100px 110px;
-            gap: 0.75rem;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            transition: background 0.1s;
+            grid-template-columns: 260px 1fr 110px 110px 110px 90px;
+            gap: 0.875rem; align-items: center;
+            padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+            cursor: pointer; font-size: 13px;
         }
+        .item-row:last-child { border-bottom: none; }
+        .item-row:hover { background: var(--bg-card-hover); }
+        .item-row.bad  { border-left: 3px solid var(--critical); }
+        .item-row.warn { border-left: 3px solid var(--medium); }
+        .item-row.good { border-left: 3px solid var(--pass); }
+        .item-row.gap  { border-left: 3px solid var(--border-strong); opacity: 0.85; }
 
-        .owasp-row:hover { background: var(--bg-card-hover); }
-        .owasp-row:last-child { border-bottom: none; }
+        .drill {
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 1.25rem;
+        }
+        .drill h4 { margin: 0 0 0.5rem 0; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+        .drill .row { display: grid; grid-template-columns: 90px 1fr 90px 90px; gap: 0.5rem; padding: 4px 0; font-size: 12px; }
+        .drill .reco { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+        .drill .finding { font-size: 12px; padding: 4px 0; display: grid; grid-template-columns: 80px 1fr 70px 80px; gap: 0.5rem; }
 
-        .owasp-row.critical { border-left: 3px solid var(--critical); }
-        .owasp-row.high { border-left: 3px solid var(--high); }
-        .owasp-row.medium { border-left: 3px solid var(--medium); }
-        .owasp-row.pass { border-left: 3px solid var(--pass); }
+        .coverage-fill { height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; }
+        .coverage-fill > div { height: 100%; }
+        .coverage-fill > div.good { background: var(--pass); }
+        .coverage-fill > div.warn { background: var(--medium); }
+        .coverage-fill > div.bad  { background: var(--critical); }
     </style>
 </head>
 <body>
@@ -32,194 +43,215 @@
         <div class="page-header">
             <div>
                 <div class="page-title">Security Posture</div>
-                <div class="page-subtitle">OWASP Top 10 for LLM Applications + OWASP Agentic AI Top 10 risk posture</div>
+                <div class="page-subtitle">OWASP LLM Top 10 + OWASP Agentic AI Top 10 — derived from live controls, findings, and evidence</div>
             </div>
             <div class="page-actions">
-                <button class="btn btn-sm">Export Report</button>
-                <button class="btn btn-sm btn-primary">Run Red Team</button>
+                <select class="filter-select" id="scopeSelect">
+                    <option value="ALL">All AI Systems</option>
+                </select>
+                <button class="btn btn-sm" id="refreshBtn">Refresh</button>
             </div>
         </div>
 
         <div class="tabs">
             <button class="tab active" data-tab="llm">OWASP LLM Top 10</button>
-            <button class="tab" data-tab="agentic">OWASP Agentic AI Top 10</button>
-            <button class="tab" data-tab="adversarial">Adversarial Testing</button>
+            <button class="tab" data-tab="agentic">OWASP Agentic AI</button>
         </div>
 
-        <!-- OWASP LLM -->
-        <div id="llmTab">
-            <div class="kpi-row" id="llmKpi"></div>
-            <div class="card" style="padding: 0; overflow: hidden;">
-                <div class="card-header" style="padding: 1rem 1.25rem;">
-                    <div>
-                        <div class="card-title">OWASP Top 10 for LLM Applications (2025)</div>
-                        <div class="card-subtitle">Findings mapped to each category</div>
-                    </div>
-                </div>
-                <div class="owasp-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); cursor: default; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
-                    <div>ID</div>
-                    <div>Category</div>
-                    <div>Findings</div>
-                    <div>Critical</div>
-                    <div>Systems</div>
-                    <div>Status</div>
-                </div>
-                <div id="llmTable"></div>
-            </div>
-        </div>
-
-        <!-- OWASP Agentic -->
-        <div id="agenticTab" style="display: none;">
-            <div class="kpi-row" id="agenticKpi"></div>
-            <div class="card" style="padding: 0; overflow: hidden;">
-                <div class="card-header" style="padding: 1rem 1.25rem;">
-                    <div>
-                        <div class="card-title">OWASP Top 10 for Agentic AI</div>
-                        <div class="card-subtitle">Tool-using and autonomous agent risks</div>
-                    </div>
-                </div>
-                <div class="owasp-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); cursor: default; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
-                    <div>ID</div>
-                    <div>Category</div>
-                    <div>Findings</div>
-                    <div>Critical</div>
-                    <div>Systems</div>
-                    <div>Status</div>
-                </div>
-                <div id="agenticTable"></div>
-            </div>
-        </div>
-
-        <!-- Adversarial -->
-        <div id="adversarialTab" style="display: none;">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div>
-                        <div class="card-title">Adversarial Test Suite</div>
-                        <div class="card-subtitle">Jailbreak, prompt injection, and data exfiltration probes</div>
-                    </div>
-                    <button class="btn btn-primary btn-sm" id="runAdvBtn">Run Test Suite</button>
-                </div>
-                <div id="adversarialContent">
-                    <div class="grid-3" id="advCategories"></div>
-                </div>
-            </div>
-        </div>
+        <div id="llmPanel"></div>
+        <div id="agenticPanel" style="display: none;"></div>
     </div>
 
     <script src="/static/shared.js"></script>
     <script>
-        initPage('/security');
+    initPage('/security');
 
-        function statusBadgeOwasp(status) {
-            const map = {
-                CRITICAL: 'badge-critical',
-                HIGH_RISK: 'badge-high',
-                MEDIUM: 'badge-medium',
-                LOW: 'badge-low',
-                PASS: 'badge-pass',
-            };
-            return `<span class="badge ${map[status] || 'badge-neutral'}">${status.replace(/_/g, ' ')}</span>`;
-        }
+    const STATE = { scope: 'ALL' };
+    let OPEN = new Set();
 
-        function severityClass(status) {
-            const map = {
-                CRITICAL: 'critical',
-                HIGH_RISK: 'high',
-                MEDIUM: 'medium',
-                LOW: 'pass',
-                PASS: 'pass',
-            };
-            return map[status] || '';
-        }
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
-        async function loadLLM() {
-            const r = await fetch('/api/grc/security/owasp-llm');
-            const d = await r.json();
+    function classifyCoverage(item) {
+        if (item.mapped_controls.length === 0) return 'gap';
+        if (item.coverage_pct >= 80) return 'good';
+        if (item.coverage_pct >= 50) return 'warn';
+        return 'bad';
+    }
 
-            const totalFindings = d.items.reduce((s, i) => s + i.open_findings, 0);
-            const totalCritical = d.items.reduce((s, i) => s + i.critical, 0);
-            const atRisk = d.items.filter(i => i.status === 'CRITICAL' || i.status === 'HIGH_RISK').length;
-            const passing = d.items.filter(i => i.status === 'PASS').length;
+    function controlStatusBadge(s) {
+        const m = { PASS:'badge-pass', FAIL:'badge-critical', NO_EVIDENCE:'badge-medium', PARTIAL:'badge-medium', NOT_APPLICABLE:'badge-neutral' };
+        return `<span class="badge ${m[s] || 'badge-neutral'}">${s.replace(/_/g, ' ')}</span>`;
+    }
 
-            document.getElementById('llmKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${totalFindings}</div><div class="kpi-trend">across 10 categories</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${totalCritical}</div><div class="kpi-trend">P0 findings</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">Categories at Risk</div></div><div class="kpi-value high">${atRisk}</div><div class="kpi-trend">of 10 categories</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">categories clean</div></div>
-            `;
+    function priorityBadge(p) {
+        const m = { P0:'badge-critical', P1:'badge-high', P2:'badge-medium', P3:'badge-neutral' };
+        return `<span class="badge ${m[p] || 'badge-neutral'}">${p}</span>`;
+    }
 
-            document.getElementById('llmTable').innerHTML = d.items.map(item => `
-                <div class="owasp-row ${severityClass(item.status)}">
-                    <span class="font-mono font-bold">${item.id}</span>
-                    <div class="text-sm font-bold">${item.name}</div>
-                    <span class="text-sm">${item.open_findings}</span>
-                    <span class="text-sm ${item.critical > 0 ? 'text-critical font-bold' : 'text-tertiary'}">${item.critical}</span>
-                    <span class="text-sm text-secondary">${item.systems_affected}</span>
-                    <div>${statusBadgeOwasp(item.status)}</div>
-                </div>
-            `).join('');
-        }
+    function severityBadge(s) {
+        const m = { CRITICAL:'badge-critical', HIGH:'badge-high', MEDIUM:'badge-medium', LOW:'badge-low' };
+        return `<span class="badge ${m[s] || 'badge-neutral'}">${s}</span>`;
+    }
 
-        async function loadAgentic() {
-            const r = await fetch('/api/grc/security/owasp-agentic');
-            const d = await r.json();
-
-            const totalFindings = d.items.reduce((s, i) => s + i.open_findings, 0);
-            const totalCritical = d.items.reduce((s, i) => s + i.critical, 0);
-            const atRisk = d.items.filter(i => i.status === 'CRITICAL' || i.status === 'HIGH_RISK').length;
-            const passing = d.items.filter(i => i.status === 'PASS').length;
-
-            document.getElementById('agenticKpi').innerHTML = `
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${totalFindings}</div><div class="kpi-trend">across 12 categories</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⛔</div><div class="kpi-label">Critical</div></div><div class="kpi-value critical">${totalCritical}</div><div class="kpi-trend">P0 findings</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon high">▲</div><div class="kpi-label">Categories at Risk</div></div><div class="kpi-value high">${atRisk}</div><div class="kpi-trend">of 12 categories</div></div>
-                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${passing}</div><div class="kpi-trend">categories clean</div></div>
-            `;
-
-            document.getElementById('agenticTable').innerHTML = d.items.map(item => `
-                <div class="owasp-row ${severityClass(item.status)}">
-                    <span class="font-mono font-bold">${item.id}</span>
-                    <div class="text-sm font-bold">${item.name}</div>
-                    <span class="text-sm">${item.open_findings}</span>
-                    <span class="text-sm ${item.critical > 0 ? 'text-critical font-bold' : 'text-tertiary'}">${item.critical}</span>
-                    <span class="text-sm text-secondary">${item.systems_affected}</span>
-                    <div>${statusBadgeOwasp(item.status)}</div>
-                </div>
-            `).join('');
-        }
-
-        async function loadAdversarial() {
-            const r = await fetch('/api/security/adversarial/categories');
-            const d = await r.json();
-
-            document.getElementById('advCategories').innerHTML = d.categories.map(c => `
-                <div class="card">
-                    <div class="card-header" style="padding-bottom: 0.5rem;">
-                        <div class="card-title" style="text-transform: capitalize;">${c.name.replace(/_/g, ' ')}</div>
-                        <span class="badge badge-info">${c.probe_count} probes</span>
-                    </div>
-                    <div class="text-xs text-secondary">
-                        ${c.probes.map(p => `<div style="padding: 0.25rem 0;">• ${p}</div>`).join('')}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        document.querySelectorAll('.tab').forEach(t => {
-            t.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                ['llmTab', 'agenticTab', 'adversarialTab'].forEach(id => {
-                    document.getElementById(id).style.display = 'none';
-                });
-                document.getElementById(t.dataset.tab + 'Tab').style.display = 'block';
-            });
+    async function loadScope() {
+        const r = await fetch('/api/grc/ai-systems');
+        const d = await r.json();
+        const sel = document.getElementById('scopeSelect');
+        d.systems.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id; opt.textContent = s.name;
+            sel.appendChild(opt);
         });
+        sel.addEventListener('change', () => { STATE.scope = sel.value; OPEN.clear(); render(); });
+    }
 
-        loadLLM();
-        loadAgentic();
-        loadAdversarial();
+    async function fetchOverview(fw) {
+        const r = await fetch(`/api/grc/framework/${fw}/overview?scope=${encodeURIComponent(STATE.scope)}`);
+        return r.json();
+    }
+
+    function kpiRow(items) {
+        const total = items.length;
+        const noControls = items.filter(i => i.mapped_controls.length === 0).length;
+        const good = items.filter(i => i.coverage_pct >= 80 && i.mapped_controls.length > 0).length;
+        const findings = items.reduce((s, i) => s + i.related_findings.length, 0);
+        const mapped = total - noControls;
+        const avg = mapped ? items.filter(i => i.mapped_controls.length > 0)
+                                  .reduce((s, i) => s + i.coverage_pct, 0) / mapped : 0;
+        return `
+            <div class="kpi-row">
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Categories</div></div><div class="kpi-value">${total}</div><div class="kpi-trend">${noControls} unmapped (real gap)</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Avg Coverage</div></div><div class="kpi-value ${avg >= 80 ? 'pass' : ''}">${Math.round(avg)}%</div><div class="kpi-trend">where mapped</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">●</div><div class="kpi-label">Categories Passing</div></div><div class="kpi-value pass">${good}</div><div class="kpi-trend">>= 80% pass rate</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">⚠</div><div class="kpi-label">Open Findings</div></div><div class="kpi-value critical">${findings}</div><div class="kpi-trend">tied to this framework</div></div>
+            </div>`;
+    }
+
+    function renderItem(item) {
+        const cls = classifyCoverage(item);
+        const isOpen = OPEN.has(item.item_id);
+        const covCls = cls === 'good' ? 'good' : cls === 'warn' ? 'warn' : 'bad';
+        return `
+            <div class="item-row ${cls}" onclick="toggleItem('${item.item_id}')">
+                <div>
+                    <div class="text-sm font-bold">${esc(item.display_name)}</div>
+                    <div class="text-xs text-tertiary mt-1">${esc(item.recommended_owner)}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-secondary mb-1">${esc(item.description)}</div>
+                    <div class="coverage-fill"><div class="${covCls}" style="width: ${item.coverage_pct}%"></div></div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Controls</div>
+                    <div class="text-sm font-bold">${item.mapped_controls.length}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Coverage</div>
+                    <div class="text-sm font-bold">${item.coverage_pct}%</div>
+                </div>
+                <div>
+                    <div class="text-xs text-tertiary">Findings</div>
+                    <div class="text-sm font-bold ${item.related_findings.length > 0 ? 'text-critical' : ''}">${item.related_findings.length}</div>
+                </div>
+                <div class="text-right text-xs text-tertiary">${isOpen ? '▾' : '▸'}</div>
+            </div>
+            ${isOpen ? renderDrill(item) : ''}
+        `;
+    }
+
+    function renderDrill(item) {
+        return `
+            <div class="drill">
+                <h4>Mapped Controls</h4>
+                ${item.mapped_controls.length === 0
+                  ? `<div class="text-xs text-tertiary">No controls mapped to this category — coverage gap.</div>`
+                  : item.mapped_controls.map(c => `
+                    <div class="row">
+                        <span class="font-mono text-xs">${c.control_id}</span>
+                        <span>${esc(c.title)}</span>
+                        <span>${priorityBadge(c.priority)}</span>
+                        <span>${controlStatusBadge(c.status)}</span>
+                    </div>
+                `).join('')}
+
+                <h4 style="margin-top: 0.875rem;">Release Gates Affected</h4>
+                ${item.release_gates_affected.length === 0
+                  ? `<div class="text-xs text-tertiary">No release gates reference this category's controls.</div>`
+                  : `<div class="flex gap-1" style="flex-wrap: wrap;">${item.release_gates_affected.map(g => `<a class="framework-badge" href="/release-gates" style="cursor:pointer;">${g}</a>`).join('')}</div>`
+                }
+
+                <h4 style="margin-top: 0.875rem;">Related Findings (${item.related_findings.length})</h4>
+                ${item.related_findings.length === 0
+                  ? `<div class="text-xs text-tertiary">No open findings.</div>`
+                  : item.related_findings.slice(0, 8).map(f => `
+                    <div class="finding">
+                        <a class="font-mono text-xs" href="/findings?id=${f.id}" style="cursor:pointer;">${f.id}</a>
+                        <span>${esc(f.title)}</span>
+                        <span>${severityBadge(f.severity)}</span>
+                        <span class="text-xs text-tertiary">${f.system_id}</span>
+                    </div>
+                `).join('')}
+
+                <h4 style="margin-top: 0.875rem;">Evidence Completeness</h4>
+                <div class="row">
+                    <span></span>
+                    <div class="coverage-fill"><div class="${item.evidence_completeness >= 0.85 ? 'good' : item.evidence_completeness >= 0.5 ? 'warn' : 'bad'}" style="width: ${item.evidence_completeness * 100}%"></div></div>
+                    <span class="text-sm font-bold">${Math.round(item.evidence_completeness * 100)}%</span>
+                    <span></span>
+                </div>
+
+                <h4 style="margin-top: 0.875rem;">Recommended Remediation</h4>
+                ${item.recommended_remediation.length === 0
+                  ? `<div class="text-xs text-tertiary">None — all mapped controls pass.</div>`
+                  : item.recommended_remediation.slice(0, 8).map(r => `<div class="reco">• ${esc(r)}</div>`).join('')
+                }
+            </div>
+        `;
+    }
+
+    async function renderFramework(fw, mountId, title, sub) {
+        const d = await fetchOverview(fw);
+        document.getElementById(mountId).innerHTML = kpiRow(d.items) +
+            `<div class="card" style="padding: 0; overflow: hidden;">
+                <div class="card-header" style="padding: 1rem 1.25rem;">
+                    <div>
+                        <div class="card-title">${title}</div>
+                        <div class="card-subtitle">${sub} · scope: ${STATE.scope}</div>
+                    </div>
+                </div>
+                <div class="item-row" style="background: var(--bg-elevated); border-bottom: 1px solid var(--border-strong); font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); cursor: default;">
+                    <div>Category / Owner</div><div>Description / Coverage</div><div>Controls</div><div>Coverage</div><div>Findings</div><div></div>
+                </div>
+                ${d.items.map(renderItem).join('')}
+             </div>`;
+    }
+
+    async function render() {
+        await renderFramework('OWASP_LLM_TOP10', 'llmPanel',
+            'OWASP Top 10 for LLM Applications (2025)', '10 categories');
+        await renderFramework('OWASP_AGENTIC_TOP10', 'agenticPanel',
+            'OWASP Top 10 for Agentic AI', '10 categories — tool-using and autonomous agents');
+    }
+
+    function toggleItem(id) {
+        if (OPEN.has(id)) OPEN.delete(id);
+        else OPEN.add(id);
+        render();
+    }
+
+    document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            document.getElementById('llmPanel').style.display = t.dataset.tab === 'llm' ? 'block' : 'none';
+            document.getElementById('agenticPanel').style.display = t.dataset.tab === 'agentic' ? 'block' : 'none';
+        });
+    });
+    document.getElementById('refreshBtn').addEventListener('click', render);
+    window.toggleItem = toggleItem;
+
+    loadScope().then(render);
     </script>
 </body>
 </html>

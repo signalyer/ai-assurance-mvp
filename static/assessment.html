@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Assessment — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .score-hero {
+            display: grid; grid-template-columns: 280px 1fr; gap: 1.25rem; align-items: stretch;
+            margin-bottom: 1.25rem;
+        }
+        @media (max-width: 1000px) { .score-hero { grid-template-columns: 1fr; } }
+        .hero-score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 1.25rem; }
+        .hero-score .num { font-size: 56px; font-weight: 800; letter-spacing: -0.03em; font-feature-settings: 'tnum'; }
+        .hero-score .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+
+        .factor-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem; }
+        @media (max-width: 1100px) { .factor-grid { grid-template-columns: repeat(3, 1fr); } }
+        .factor-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+            padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .factor-card .v { font-size: 22px; font-weight: 700; font-feature-settings: 'tnum'; }
+        .factor-card .l { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .factor-card .bar { height: 4px; background: var(--bg-input); border-radius: 2px; overflow: hidden; margin-top: 0.25rem; }
+        .factor-card .bar > div { height: 100%; background: var(--accent); }
+
+        .ctrl-row {
+            display: grid; grid-template-columns: 90px 1fr 110px 100px 70px;
+            gap: 0.75rem; align-items: center; padding: 0.625rem 0.75rem;
+            border-bottom: 1px solid var(--border); font-size: 13px;
+        }
+        .ctrl-row:hover { background: var(--bg-card-hover); }
+        .ctrl-row:last-child { border-bottom: none; }
+        .ctrl-row.PASS { border-left: 3px solid var(--pass); }
+        .ctrl-row.FAIL { border-left: 3px solid var(--critical); }
+        .ctrl-row.NO_EVIDENCE { border-left: 3px solid var(--medium); }
+        .ctrl-row.PARTIAL { border-left: 3px solid var(--medium); }
+        .ctrl-row.NOT_APPLICABLE { opacity: 0.45; }
+
+        .reco-banner {
+            padding: 1rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem;
+            display: flex; gap: 1rem; align-items: center; border: 1px solid;
+        }
+        .reco-banner.APPROVED        { background: var(--pass-bg);     border-color: var(--pass-border); }
+        .reco-banner.CONDITIONAL_PILOT { background: var(--medium-bg); border-color: var(--medium-border); }
+        .reco-banner.HOLD            { background: var(--high-bg);     border-color: var(--high-border); }
+        .reco-banner.REJECT          { background: var(--critical-bg); border-color: var(--critical-border); }
+        .reco-banner .badge { font-size: 14px; padding: 0.375rem 0.875rem; }
+        .reco-rationale { font-size: 13px; color: var(--text-primary); }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title" id="hdrTitle">Assessment</div>
+                <div class="page-subtitle" id="hdrSubtitle">Run a fresh assessment for a registered AI system</div>
+            </div>
+            <div class="page-actions">
+                <a class="btn btn-sm" href="/ai-systems">← Back to Inventory</a>
+                <button class="btn btn-sm btn-primary" id="rerunBtn">Re-run Assessment</button>
+            </div>
+        </div>
+
+        <div id="content"><div class="loading">Loading…</div></div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/ai-systems');
+
+    function getSystemId() {
+        return new URLSearchParams(window.location.search).get('system');
+    }
+
+    function pct(v) { return Math.round((v || 0) * 100); }
+
+    function recoBadgeCls(d) {
+        return d === 'APPROVED' ? 'badge-pass'
+             : d === 'CONDITIONAL_PILOT' ? 'badge-medium'
+             : d === 'REJECT' ? 'badge-critical'
+             : 'badge-high';
+    }
+
+    function ctrlStatusBadge(s) {
+        const map = { PASS: 'badge-pass', FAIL: 'badge-critical',
+                      PARTIAL: 'badge-medium', NO_EVIDENCE: 'badge-medium',
+                      NOT_APPLICABLE: 'badge-neutral' };
+        return `<span class="badge ${map[s] || 'badge-neutral'}">${s.replace(/_/g, ' ')}</span>`;
+    }
+
+    function priorityBadge(p) {
+        const cls = p === 'P0' ? 'badge-critical' : p === 'P1' ? 'badge-high'
+                  : p === 'P2' ? 'badge-medium' : 'badge-neutral';
+        return `<span class="badge ${cls}">${p}</span>`;
+    }
+
+    function riskCls(r) {
+        return r === 'CRITICAL' ? 'critical' : r === 'HIGH' ? 'high'
+             : r === 'MEDIUM' ? 'medium' : 'pass';
+    }
+
+    async function load() {
+        const id = getSystemId();
+        if (!id) {
+            document.getElementById('content').innerHTML = '<div class="empty-state">No system selected. Open this page from an AI System detail view.</div>';
+            return;
+        }
+        document.getElementById('content').innerHTML = '<div class="loading">Running assessment…</div>';
+        const r = await fetch('/api/grc/assessment/run/' + encodeURIComponent(id), { method: 'POST' });
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            document.getElementById('content').innerHTML = `<div class="empty-state">Assessment failed: ${d.detail || r.statusText}</div>`;
+            return;
+        }
+        const a = await r.json();
+        render(a);
+    }
+
+    function render(a) {
+        document.getElementById('hdrTitle').textContent = `Assessment — ${a.ai_system_name}`;
+        document.getElementById('hdrSubtitle').textContent =
+            `Run at ${a.generated_at} · ${a.ai_system_id} · ${a.control_evaluations.length} controls evaluated`;
+
+        const rr = a.residual_risk;
+        const f = rr.factors;
+
+        const html = `
+            <div class="reco-banner ${a.release_recommendation.decision}">
+                <span class="badge ${recoBadgeCls(a.release_recommendation.decision)}">
+                    ${a.release_recommendation.decision.replace(/_/g, ' ')}
+                </span>
+                <div>
+                    <div class="text-sm font-bold">${escapeHtml(a.release_recommendation.rule_fired)}</div>
+                    <div class="reco-rationale">${escapeHtml(a.release_recommendation.rationale)}</div>
+                    ${a.release_recommendation.conditions && a.release_recommendation.conditions.length > 0 ? `
+                        <ul style="margin: 0.5rem 0 0 1rem; padding: 0; font-size: 12px; color: var(--text-secondary);">
+                            ${a.release_recommendation.conditions.map(c => `<li>${escapeHtml(c)}</li>`).join('')}
+                        </ul>` : ''}
+                </div>
+            </div>
+
+            <div class="score-hero">
+                <div class="card hero-score">
+                    <div class="lbl">Overall Score</div>
+                    <div class="num ${a.overall_score >= 80 ? 'text-pass' : a.overall_score >= 60 ? 'text-medium' : 'text-critical'}">${a.overall_score}</div>
+                    <div class="text-xs text-secondary">Weighted by P0×3, P1×2, P2×1</div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Risk Posture</div>
+                            <div class="card-subtitle">Inherent vs Residual · drivers and scoring factors</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+                        <div>
+                            <div class="text-xs text-secondary">Inherent</div>
+                            <div class="text-2xl font-bold text-${riskCls(a.inherent_risk)}">${a.inherent_risk}</div>
+                            <div class="text-xs text-tertiary">Rules: ${a.inherent_risk_rules.join(', ') || '—'}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-secondary">Residual (${rr.normalized_score}/100)</div>
+                            <div class="text-2xl font-bold text-${riskCls(rr.level)}">${rr.level}</div>
+                            <div class="text-xs text-tertiary">Raw ${rr.raw_score} = ${f.likelihood} × ${f.impact} × ${f.exposure} × ${f.autonomy} × ${f.data_sensitivity} × ${f.control_gap_modifier}</div>
+                        </div>
+                    </div>
+                    <div class="factor-grid">
+                        ${renderFactor('Likelihood', f.likelihood)}
+                        ${renderFactor('Impact', f.impact)}
+                        ${renderFactor('Exposure', f.exposure)}
+                        ${renderFactor('Autonomy', f.autonomy)}
+                        ${renderFactor('Data Sens.', f.data_sensitivity)}
+                        ${renderFactor('Gap Mod.', f.control_gap_modifier, 2.0)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="kpi-row">
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon info">▤</div><div class="kpi-label">Controls Evaluated</div></div><div class="kpi-value">${a.control_evaluations.filter(c => c.status !== 'NOT_APPLICABLE').length}</div><div class="kpi-trend">of 40 in the library</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon pass">✓</div><div class="kpi-label">Passing</div></div><div class="kpi-value pass">${a.control_evaluations.filter(c => c.status === 'PASS').length}</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon critical">✗</div><div class="kpi-label">Failed Controls</div></div><div class="kpi-value critical">${a.failed_controls.length}</div><div class="kpi-trend">P0/P1 drive release rec</div></div>
+                <div class="kpi-card"><div class="kpi-header"><div class="kpi-icon medium">◷</div><div class="kpi-label">Evidence Completeness</div></div><div class="kpi-value">${pct(a.evidence_completeness)}%</div><div class="kpi-trend">required evidence types present</div></div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Framework Coverage</div>
+                            <div class="card-subtitle">Pass rate by mapped framework, across applicable controls</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${a.framework_coverage.map(fc => `
+                            <div style="padding: 0.625rem 0; border-bottom: 1px solid var(--border);">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm font-bold">${fc.framework.replace(/_/g, ' ')}</span>
+                                    <span class="text-sm ${fc.coverage_pct >= 80 ? 'text-pass' : fc.coverage_pct >= 50 ? 'text-medium' : 'text-critical'}">${fc.coverage_pct}%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-fill ${fc.coverage_pct >= 80 ? '' : fc.coverage_pct >= 50 ? 'warn' : 'fail'}" style="width: ${fc.coverage_pct}%"></div>
+                                </div>
+                                <div class="text-xs text-tertiary mt-1">${fc.controls_passing}/${fc.controls_applicable} passing · ${fc.controls_failing} failing</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Required Remediation</div>
+                            <div class="card-subtitle">Auto-generated findings from failed controls — owners assigned by recommended role</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${a.findings.length === 0 ? '<div class="text-sm text-secondary" style="padding: 0.5rem;">No failed controls.</div>' :
+                          a.findings.slice(0, 10).map(f => `
+                            <div style="padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border);">
+                                <div class="flex justify-between items-start gap-2 mb-1">
+                                    <div>
+                                        <span class="font-mono text-xs">${f.control_id}</span>
+                                        <span class="text-sm font-bold ml-2">${escapeHtml(f.title)}</span>
+                                    </div>
+                                    <span class="badge ${f.severity === 'CRITICAL' ? 'badge-critical' : f.severity === 'HIGH' ? 'badge-high' : 'badge-medium'}">${f.severity}</span>
+                                </div>
+                                <div class="text-xs text-secondary">${escapeHtml(f.remediation)}</div>
+                                <div class="text-xs text-tertiary mt-1">Owner: ${f.owner.replace(/_/g, ' ')} · Release impact: ${f.release_impact.replace(/_/g, ' ')}</div>
+                            </div>
+                          `).join('')}
+                        ${a.findings.length > 10 ? `<div class="text-xs text-tertiary" style="padding: 0.5rem;">+ ${a.findings.length - 10} more…</div>` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4" style="padding: 0; overflow: hidden;">
+                <div class="card-header" style="padding: 1rem 1.25rem;">
+                    <div>
+                        <div class="card-title">Per-Control Evaluation</div>
+                        <div class="card-subtitle">Deterministic status per applicable control. Click to expand rationale.</div>
+                    </div>
+                </div>
+                <div class="ctrl-row" style="background: var(--bg-elevated); font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">
+                    <div>Control</div><div>Title</div><div>Domain</div><div>Status</div><div>Pri</div>
+                </div>
+                <div id="ctrlList"></div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Residual Risk — Scoring Factors</div>
+                        <div class="card-subtitle">Transparent breakdown of how the residual risk score was derived</div>
+                    </div>
+                </div>
+                <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary); font-size: 13px;">
+                    ${rr.explanation.map(e => `<li style="padding: 0.25rem 0;">${escapeHtml(e)}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+
+        document.getElementById('content').innerHTML = html;
+
+        const list = document.getElementById('ctrlList');
+        list.innerHTML = a.control_evaluations
+            .filter(c => c.status !== 'NOT_APPLICABLE')
+            .sort((x, y) => {
+                const order = { FAIL: 0, NO_EVIDENCE: 1, PARTIAL: 2, PASS: 3 };
+                return (order[x.status] - order[y.status]) || x.control_id.localeCompare(y.control_id);
+            })
+            .map(c => `
+                <div class="ctrl-row ${c.status}" onclick="toggleRationale('r-${c.control_id}')">
+                    <span class="font-mono font-bold">${c.control_id}</span>
+                    <div>
+                        <div class="text-sm">${escapeHtml(c.title)}</div>
+                        <div class="text-xs text-tertiary" id="r-${c.control_id}" style="display: none; margin-top: 4px;">${escapeHtml(c.rationale)}${c.failed_evals.length ? ' · Failed evals: ' + c.failed_evals.join(', ') : ''}${c.missing_evidence_types.length ? ' · Missing evidence: ' + c.missing_evidence_types.join(', ') : ''}</div>
+                    </div>
+                    <span class="text-xs text-secondary">${c.domain.replace(/_/g, ' ')}</span>
+                    <div>${ctrlStatusBadge(c.status)}</div>
+                    <div>${priorityBadge(c.priority)}</div>
+                </div>
+            `).join('');
+    }
+
+    function renderFactor(label, value, max = 1.0) {
+        const pct = Math.min(100, Math.round((value / max) * 100));
+        return `<div class="factor-card">
+            <div class="l">${label}</div>
+            <div class="v">${value}</div>
+            <div class="bar"><div style="width: ${pct}%"></div></div>
+        </div>`;
+    }
+
+    function toggleRationale(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    document.getElementById('rerunBtn').addEventListener('click', load);
+    load();
+    </script>
+</body>
+</html>

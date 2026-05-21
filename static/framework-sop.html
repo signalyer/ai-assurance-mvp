@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Framework SOP — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* ---- Local layout for the SOP page (reuses shared palette) ---- */
+        .sop-hero {
+            background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(56,189,248,0.06));
+            border: 1px solid rgba(99,102,241,0.25); border-radius: 10px;
+            padding: 1.25rem 1.5rem; margin-bottom: 1rem;
+        }
+        .sop-hero h1 { font-size: 22px; margin: 0 0 6px; }
+        .sop-hero .lede { font-size: 13px; color: var(--text-secondary); max-width: 880px; line-height: 1.55; }
+        .sop-hero .question {
+            display: inline-block; margin-top: 10px;
+            background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.4);
+            color: #c7d2fe; padding: 4px 10px; border-radius: 6px;
+            font-size: 12px; font-weight: 600;
+        }
+        .sop-hero .cta-row { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+        .sop-hero .cta-row a {
+            background: var(--bg-deep); border: 1px solid var(--border);
+            color: var(--text-secondary); padding: 5px 12px; border-radius: 6px;
+            font-size: 12px; text-decoration: none;
+        }
+        .sop-hero .cta-row a:hover { color: var(--text-primary); border-color: rgba(99,102,241,0.4); }
+        .sop-hero .cta-row a.primary {
+            background: rgba(99,102,241,0.18); border-color: rgba(99,102,241,0.5); color: #a5b4fc;
+        }
+
+        .sop-section { margin-bottom: 1.5rem; }
+        .sop-section-num {
+            display: inline-block; font-family: var(--font-mono);
+            font-size: 10px; padding: 1px 7px; border-radius: 4px;
+            background: var(--bg-deep); border: 1px solid var(--border);
+            color: var(--text-tertiary); margin-right: 8px;
+        }
+        .sop-section h2 { font-size: 15px; margin: 0 0 4px; color: var(--text-primary); }
+        .sop-section .section-sub {
+            font-size: 12px; color: var(--text-tertiary); margin-bottom: 10px;
+        }
+
+        /* Flow: AI Workload -> Intake -> ... */
+        .flow-pipeline {
+            display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px 12px;
+        }
+        .flow-pipeline a {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-primary); padding: 6px 10px; border-radius: 6px;
+            font-size: 11px; text-decoration: none; min-width: 110px; text-align: center;
+            border-left: 3px solid rgba(99,102,241,0.5);
+        }
+        .flow-pipeline a:hover { border-color: rgba(99,102,241,0.6); background: var(--bg-hover); }
+        .flow-pipeline .arrow {
+            color: var(--text-tertiary); font-family: var(--font-mono);
+        }
+
+        /* 3-layer framework cards */
+        .layer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.875rem; }
+        .layer-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem; border-top: 3px solid var(--accent, #6366f1);
+        }
+        .layer-card.l2 { border-top-color: var(--amber, #fbbf24); }
+        .layer-card.l3 { border-top-color: var(--green, #4ade80); }
+        .layer-card h3 {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-tertiary); margin: 0 0 4px;
+        }
+        .layer-card .layer-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary); }
+        .layer-card h4 {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-tertiary); margin: 10px 0 4px;
+        }
+        .layer-card .pill {
+            background: var(--bg-deep); border: 1px solid var(--border);
+            color: var(--text-secondary); font-size: 10px;
+            padding: 1px 7px; border-radius: 10px; margin-right: 4px; margin-bottom: 3px;
+            display: inline-block;
+        }
+        .layer-card p, .layer-card ul {
+            font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 0;
+        }
+        .layer-card ul { padding-left: 1rem; }
+        .layer-card ul li { margin-bottom: 2px; }
+
+        /* 12-step lifecycle */
+        .lifecycle {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+        }
+        .lifecycle-step {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.75rem 0.875rem;
+            display: grid; grid-template-columns: 36px 1fr; gap: 12px;
+        }
+        .lifecycle-step .num {
+            background: rgba(99,102,241,0.15); color: #a5b4fc;
+            border-radius: 50%; width: 28px; height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 12px;
+        }
+        .lifecycle-step .title { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
+        .lifecycle-step .field {
+            font-size: 11px; color: var(--text-secondary); margin-top: 2px;
+        }
+        .lifecycle-step .field b { color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+
+        /* SOP table */
+        .sop-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--bg-card); }
+        .sop-table th, .sop-table td {
+            border-bottom: 1px solid var(--border); padding: 8px 10px;
+            text-align: left; vertical-align: top;
+        }
+        .sop-table th {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-tertiary); background: var(--bg-deep);
+            position: sticky; top: 0;
+        }
+        .sop-table tr:hover td { background: var(--bg-hover, rgba(255,255,255,0.02)); }
+        .sop-table code {
+            background: var(--bg-deep); border: 1px solid var(--border);
+            padding: 1px 5px; border-radius: 4px; font-size: 10px;
+            color: var(--text-secondary); font-family: var(--font-mono);
+        }
+
+        /* Checklist */
+        .checklist-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.625rem; }
+        .checklist {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.75rem 0.875rem;
+        }
+        .checklist h4 {
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-tertiary); margin: 0 0 6px;
+        }
+        .checklist ul { list-style: none; padding: 0; margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.7; }
+        .checklist li::before {
+            content: '☐'; color: var(--text-tertiary); margin-right: 5px;
+        }
+
+        /* Decision cards */
+        .decision-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.625rem; }
+        .decision-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.75rem 0.875rem; border-left-width: 3px; border-left-style: solid;
+        }
+        .decision-card.approved        { border-left-color: var(--green, #4ade80); }
+        .decision-card.approved-pilot  { border-left-color: var(--accent, #6366f1); }
+        .decision-card.conditional     { border-left-color: var(--amber, #fbbf24); }
+        .decision-card.hold            { border-left-color: var(--red,   #f87171); }
+        .decision-card.reject          { border-left-color: var(--text-tertiary); }
+        .decision-card h3 {
+            font-size: 12px; margin: 0 0 6px; color: var(--text-primary);
+        }
+        .decision-card ul {
+            padding-left: 1rem; margin: 0; font-size: 11px;
+            color: var(--text-secondary); line-height: 1.55;
+        }
+        .decision-card ul li { margin-bottom: 3px; }
+
+        /* Control rows */
+        .control-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+        }
+        .control-row {
+            background: var(--bg-deep); border: 1px solid var(--border);
+            border-radius: 6px; padding: 8px 10px;
+            display: grid; grid-template-columns: 80px 1fr auto; gap: 10px; align-items: center;
+            font-size: 12px;
+        }
+        .control-row .cid { font-family: var(--font-mono); font-weight: 700; color: var(--text-primary); }
+        .control-row .title { color: var(--text-secondary); }
+
+        /* Assurance plane */
+        .plane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+        .plane-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem;
+        }
+        .plane-card h3 {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-tertiary); margin: 0 0 4px;
+        }
+        .plane-card .plane-name { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+        .plane-card ul { padding-left: 1rem; margin: 4px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+        .plane-card.left  { border-top: 3px solid var(--green, #4ade80); }
+        .plane-card.right { border-top: 3px solid var(--accent, #6366f1); }
+
+        .routing-flow {
+            background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px 12px; margin-top: 0.5rem;
+            display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+        }
+        .routing-flow .step {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-primary); padding: 5px 10px; border-radius: 6px;
+            font-size: 11px; min-width: 110px; text-align: center;
+            border-left: 3px solid rgba(99,102,241,0.5);
+        }
+
+        /* Roles */
+        .role-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.625rem; }
+        .role-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.75rem 0.875rem;
+        }
+        .role-card .role-name {
+            font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;
+        }
+        .role-card ul {
+            padding-left: 1rem; margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.5;
+        }
+
+        /* Walkthrough */
+        .walk-row {
+            display: grid; grid-template-columns: 36px 1fr;
+            gap: 12px; padding: 8px 0; border-bottom: 1px dotted var(--border);
+            font-size: 12px;
+        }
+        .walk-row:last-child { border-bottom: none; }
+        .walk-row .num {
+            background: rgba(245,158,11,0.15); color: var(--amber, #fbbf24);
+            border-radius: 50%; width: 26px; height: 26px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 11px;
+        }
+        .walk-row .what { color: var(--text-primary); font-weight: 600; }
+        .walk-row .meta { color: var(--text-tertiary); font-size: 11px; margin-top: 2px; }
+
+        /* Operating rhythm */
+        .rhythm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.625rem; }
+        .rhythm-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem;
+        }
+        .rhythm-card .cadence {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--accent, #6366f1); font-weight: 700; margin-bottom: 6px;
+        }
+        .rhythm-card ul { padding-left: 1rem; margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.7; }
+
+        /* Action center */
+        .action-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.625rem; margin-top: 0.5rem;
+        }
+        .action-grid a {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 0.875rem 1rem; text-decoration: none; color: var(--text-primary);
+            font-size: 12px; font-weight: 600;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .action-grid a:hover { border-color: rgba(99,102,241,0.5); }
+        .action-grid a span.arrow { color: var(--text-tertiary); }
+
+        @media (max-width: 1200px) {
+            .layer-grid, .lifecycle, .plane-grid { grid-template-columns: 1fr; }
+            .checklist-grid, .decision-grid, .role-grid, .rhythm-grid, .action-grid { grid-template-columns: repeat(2, 1fr); }
+            .control-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">AI Assurance Standard Operating Procedure</div>
+                <div class="page-subtitle">A repeatable framework for governing, securing, evaluating, approving, and monitoring AI workloads in regulated financial-services environments.</div>
+            </div>
+        </div>
+
+        <!-- ================================================================ SECTION 1 -->
+        <section class="sop-hero">
+            <h1>Enterprise AI Assurance Control Plane</h1>
+            <div class="lede">
+                The platform answers one question: <em>Can this AI system safely operate in production?</em><br>
+                It governs, secures, evaluates, approves, monitors, and audits AI workloads. It is not an eval dashboard or a chatbot wrapper. It is the operating system for AI risk operations in a regulated financial-services environment.
+            </div>
+            <span class="question">Primary question: Can this AI system safely operate in production?</span>
+
+            <div class="flow-pipeline" style="margin-top: 14px;">
+                <a href="/ai-systems/new" title="Step 1">AI Workload</a><span class="arrow">→</span>
+                <a href="/ai-systems/new" title="Intake">Intake</a><span class="arrow">→</span>
+                <a href="/ai-systems"     title="Risk Classification">Risk Classification</a><span class="arrow">→</span>
+                <a href="/policies"       title="Required Controls">Required Controls</a><span class="arrow">→</span>
+                <a href="/evals"          title="Evals">Evals</a><span class="arrow">→</span>
+                <a href="/findings"       title="Findings">Findings</a><span class="arrow">→</span>
+                <a href="/release-gates"  title="Release Gates">Release Gates</a><span class="arrow">→</span>
+                <a href="/evidence"       title="Evidence">Evidence</a><span class="arrow">→</span>
+                <a href="/runtime"        title="Runtime">Runtime Monitoring</a><span class="arrow">→</span>
+                <a href="/assessment"     title="Reassessment">Reassessment</a>
+            </div>
+
+            <div class="cta-row">
+                <a class="primary" href="/ai-systems/new">Register AI System</a>
+                <a class="primary" href="/demo">Run Guided Demo</a>
+                <a href="/policies">View Control Library</a>
+                <a href="/release-gates">Open Release Gates</a>
+                <a href="/evidence">View Evidence Gaps</a>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 2 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">02</span>The three-layer assurance framework</h2>
+            <div class="section-sub">Every control, eval, finding, and gate the platform produces is anchored to one of these three layers.</div>
+            <div class="layer-grid">
+                <div class="layer-card">
+                    <h3>Layer 1</h3>
+                    <div class="layer-name">Governance</div>
+                    <p><strong>Frameworks:</strong> <span class="pill">NIST AI RMF</span> <span class="pill">NIST AI 600-1 (GenAI Profile)</span></p>
+                    <p style="margin-top:6px;">Defines accountability, risk classification, ownership, human oversight, data policies, evidence requirements, and lifecycle governance.</p>
+                    <h4>Example controls</h4>
+                    <ul>
+                        <li>AI inventory required</li>
+                        <li>Business + technical owner required</li>
+                        <li>Risk classification required at intake</li>
+                        <li>Human approval required for high-risk actions</li>
+                        <li>Evidence completeness ≥ 85% before pilot</li>
+                    </ul>
+                    <h4>Example evidence</h4>
+                    <ul>
+                        <li>Intake record · ownership record</li>
+                        <li>Risk classification output</li>
+                        <li>Approval history · exception waivers</li>
+                    </ul>
+                </div>
+                <div class="layer-card l2">
+                    <h3>Layer 2</h3>
+                    <div class="layer-name">Security</div>
+                    <p><strong>Frameworks:</strong> <span class="pill">OWASP LLM Top 10</span> <span class="pill">OWASP Agentic AI Top 10</span></p>
+                    <p style="margin-top:6px;">Controls prompt injection, sensitive data leakage, unsafe tool use, excessive agency, RAG poisoning, memory poisoning, delegation abuse, and runtime abuse.</p>
+                    <h4>Example controls</h4>
+                    <ul>
+                        <li>Prompt-injection testing required</li>
+                        <li>RAG source quarantine + version pin</li>
+                        <li>Tool authorization mandatory</li>
+                        <li>Tool allowlisting mandatory</li>
+                        <li>No raw PII/NPI/PCI in prompts</li>
+                    </ul>
+                    <h4>Example evidence</h4>
+                    <ul>
+                        <li>Garak / PyRIT reports</li>
+                        <li>Tool authorization trace</li>
+                        <li>DLP output · RAG quarantine log</li>
+                        <li>Runtime policy events</li>
+                    </ul>
+                </div>
+                <div class="layer-card l3">
+                    <h3>Layer 3</h3>
+                    <div class="layer-name">Runtime Assurance</div>
+                    <p><strong>Capabilities:</strong> <span class="pill">DeepEval</span> <span class="pill">Ragas</span> <span class="pill">Garak</span> <span class="pill">PyRIT</span> <span class="pill">Langfuse</span> <span class="pill">AWS telemetry</span> <span class="pill">Release Gates</span> <span class="pill">Runtime Monitoring</span> <span class="pill">Evidence Repository</span> <span class="pill">Remediation Workflows</span> <span class="pill">Assurance Model Providers</span></p>
+                    <p style="margin-top:6px;">Proves the system behaves safely before and after deployment.</p>
+                    <h4>Example controls</h4>
+                    <ul>
+                        <li>Evals required before release</li>
+                        <li>Runtime monitoring required</li>
+                        <li>Kill switch required per system</li>
+                        <li>Full audit logging required</li>
+                        <li>Model-as-judge usage logged</li>
+                    </ul>
+                    <h4>Example evidence</h4>
+                    <ul>
+                        <li>Eval results · runtime traces</li>
+                        <li>CloudTrail · Security Hub findings</li>
+                        <li>Macie / GuardDuty events</li>
+                        <li>Model Usage Audit records</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 3 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">03</span>AI workload lifecycle — 12 steps</h2>
+            <div class="section-sub">Every governed AI system moves through these 12 steps. Each step creates a typed platform object and has explicit exit criteria.</div>
+            <div class="lifecycle">
+                <!-- 1 --><div class="lifecycle-step"><div class="num">1</div><div>
+                    <div class="title">Register AI System</div>
+                    <div class="field"><b>What happens</b> · Business and technical metadata captured at intake.</div>
+                    <div class="field"><b>Owner</b> · Business Owner + Technical Owner</div>
+                    <div class="field"><b>Object</b> · <code>AISystem</code></div>
+                    <div class="field"><b>Exit</b> · Required intake fields complete.</div>
+                </div></div>
+                <!-- 2 --><div class="lifecycle-step"><div class="num">2</div><div>
+                    <div class="title">Classify Risk</div>
+                    <div class="field"><b>What happens</b> · Six deterministic rules score inherent risk (LOW/MEDIUM/HIGH/CRITICAL).</div>
+                    <div class="field"><b>Owner</b> · AI Governance</div>
+                    <div class="field"><b>Object</b> · <code>RiskClassification</code></div>
+                    <div class="field"><b>Exit</b> · Risk level + rules fired recorded for audit.</div>
+                </div></div>
+                <!-- 3 --><div class="lifecycle-step"><div class="num">3</div><div>
+                    <div class="title">Apply Required Controls</div>
+                    <div class="field"><b>What happens</b> · Platform selects all P0/P1 controls whose applicability predicate matches the system.</div>
+                    <div class="field"><b>Owner</b> · AI Governance + Technical Owner</div>
+                    <div class="field"><b>Object</b> · <code>ControlAssignment</code></div>
+                    <div class="field"><b>Exit</b> · Control set assigned to system.</div>
+                </div></div>
+                <!-- 4 --><div class="lifecycle-step"><div class="num">4</div><div>
+                    <div class="title">Upload Architecture and Evidence</div>
+                    <div class="field"><b>What happens</b> · Architecture diagram, IAM/Terraform/Bedrock snapshots, model + prompt + tool versions attached.</div>
+                    <div class="field"><b>Owner</b> · Technical Owner + Cloud Security</div>
+                    <div class="field"><b>Object</b> · <code>Evidence</code></div>
+                    <div class="field"><b>Exit</b> · Minimum architecture evidence pack present.</div>
+                </div></div>
+                <!-- 5 --><div class="lifecycle-step"><div class="num">5</div><div>
+                    <div class="title">Run Assessment</div>
+                    <div class="field"><b>What happens</b> · Per-control evaluation, residual-risk score, framework coverage, release recommendation.</div>
+                    <div class="field"><b>Owner</b> · Model Risk Management</div>
+                    <div class="field"><b>Object</b> · <code>Assessment</code></div>
+                    <div class="field"><b>Exit</b> · Assessment report stored with rule_fired + rationale.</div>
+                </div></div>
+                <!-- 6 --><div class="lifecycle-step"><div class="num">6</div><div>
+                    <div class="title">Run Eval Suite</div>
+                    <div class="field"><b>What happens</b> · Prompt-injection, groundedness, hallucination, PII-leakage, tool-authorization evals execute.</div>
+                    <div class="field"><b>Owner</b> · MRM + AI Platform</div>
+                    <div class="field"><b>Object</b> · <code>EvalResult</code>, <code>Evidence</code></div>
+                    <div class="field"><b>Exit</b> · All evals completed and thresholds evaluated.</div>
+                </div></div>
+                <!-- 7 --><div class="lifecycle-step"><div class="num">7</div><div>
+                    <div class="title">Generate Findings</div>
+                    <div class="field"><b>What happens</b> · Failed controls + failed evals produce typed findings mapped to ≥1 framework.</div>
+                    <div class="field"><b>Owner</b> · AppSec + AI Platform</div>
+                    <div class="field"><b>Object</b> · <code>Finding</code></div>
+                    <div class="field"><b>Exit</b> · Findings owned + SLA assigned.</div>
+                </div></div>
+                <!-- 8 --><div class="lifecycle-step"><div class="num">8</div><div>
+                    <div class="title">Execute Release Gates</div>
+                    <div class="field"><b>What happens</b> · 10 deterministic gates (RG-001..RG-010) evaluated against live data.</div>
+                    <div class="field"><b>Owner</b> · AI Governance + AppSec + MRM</div>
+                    <div class="field"><b>Object</b> · <code>GateResult</code></div>
+                    <div class="field"><b>Exit</b> · Decision: Approved / Conditional Pilot / Hold / Reject.</div>
+                </div></div>
+                <!-- 9 --><div class="lifecycle-step"><div class="num">9</div><div>
+                    <div class="title">Review Remediation Plan</div>
+                    <div class="field"><b>What happens</b> · Open findings receive remediation tasks + SLAs by severity.</div>
+                    <div class="field"><b>Owner</b> · Technical Owner</div>
+                    <div class="field"><b>Object</b> · <code>RemediationItem</code></div>
+                    <div class="field"><b>Exit</b> · Remediation plan accepted by AI Governance.</div>
+                </div></div>
+                <!-- 10 --><div class="lifecycle-step"><div class="num">10</div><div>
+                    <div class="title">Approve / Hold / Reject</div>
+                    <div class="field"><b>What happens</b> · CRO + CISO + AI Governance Board record approval decision.</div>
+                    <div class="field"><b>Owner</b> · CRO + CISO + AI Governance Board</div>
+                    <div class="field"><b>Object</b> · <code>Approval</code></div>
+                    <div class="field"><b>Exit</b> · Decision logged with conditions + signatures.</div>
+                </div></div>
+                <!-- 11 --><div class="lifecycle-step"><div class="num">11</div><div>
+                    <div class="title">Monitor Runtime Behavior</div>
+                    <div class="field"><b>What happens</b> · Langfuse + Bedrock Guardrails + CloudTrail + Macie + Security Hub feed runtime events.</div>
+                    <div class="field"><b>Owner</b> · AI Platform + AppSec</div>
+                    <div class="field"><b>Object</b> · <code>RuntimeEvent</code></div>
+                    <div class="field"><b>Exit</b> · Kill switch + monitoring + audit logging active.</div>
+                </div></div>
+                <!-- 12 --><div class="lifecycle-step"><div class="num">12</div><div>
+                    <div class="title">Periodically Reassess</div>
+                    <div class="field"><b>What happens</b> · Quarterly (or post-incident) re-run of assessment, evals, and release gates.</div>
+                    <div class="field"><b>Owner</b> · AI Governance + MRM</div>
+                    <div class="field"><b>Object</b> · <code>Assessment</code> (new version)</div>
+                    <div class="field"><b>Exit</b> · Decision refreshed; waivers re-validated.</div>
+                </div></div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 4 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">04</span>Standard Operating Procedure — stage table</h2>
+            <div class="section-sub">The operational playbook a stakeholder follows for any AI system, from intake through monitoring.</div>
+            <div class="card" style="padding: 0; overflow: hidden;">
+                <table class="sop-table">
+                    <thead>
+                        <tr>
+                            <th>Stage</th><th>Required Action</th><th>Owner</th>
+                            <th>Required Evidence</th><th>Platform Object</th><th>Exit Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1. Intake</td>
+                            <td>Submit AI system intake form — business + technical metadata.</td>
+                            <td>Business + Technical Owner</td>
+                            <td>Intake record</td>
+                            <td><code>AISystem</code></td>
+                            <td>Intake fields complete.</td>
+                        </tr>
+                        <tr>
+                            <td>2. Risk Classification</td>
+                            <td>Apply six-rule classifier; record rules fired + inherent risk.</td>
+                            <td>AI Governance</td>
+                            <td>Classification output</td>
+                            <td><code>RiskClassification</code></td>
+                            <td>Risk level recorded.</td>
+                        </tr>
+                        <tr>
+                            <td>3. Architecture Review</td>
+                            <td>Diagram, IAM, network boundary, RAG pipeline, model + prompt + tool versions documented.</td>
+                            <td>Technical Owner + Cloud Security</td>
+                            <td>ARCHITECTURE_DIAGRAM, IAM_POLICY_SNAPSHOT, TERRAFORM_SNAPSHOT, BEDROCK_CONFIG</td>
+                            <td><code>Evidence</code></td>
+                            <td>Architecture pack attached.</td>
+                        </tr>
+                        <tr>
+                            <td>4. Control Mapping</td>
+                            <td>Run applicability predicates; assign all P0/P1 controls.</td>
+                            <td>AI Governance</td>
+                            <td>Control assignment record</td>
+                            <td><code>ControlAssignment</code></td>
+                            <td>Control set assigned.</td>
+                        </tr>
+                        <tr>
+                            <td>5. Security Testing</td>
+                            <td>Run prompt-injection, RAG poisoning, tool authorization, and data-leakage tests.</td>
+                            <td>AppSec</td>
+                            <td>GARAK_REPORT, PYRIT_REPORT, DLP report, tool-authz trace</td>
+                            <td><code>EvalResult</code>, <code>Finding</code>, <code>Evidence</code></td>
+                            <td>No open P0/P1 security blockers.</td>
+                        </tr>
+                        <tr>
+                            <td>6. Eval Testing</td>
+                            <td>Run hallucination / groundedness / answer-relevance / PII / tool-authz evals with thresholds.</td>
+                            <td>MRM + AI Platform</td>
+                            <td>EVAL_RUN records</td>
+                            <td><code>EvalResult</code></td>
+                            <td>All eval thresholds met or findings opened.</td>
+                        </tr>
+                        <tr>
+                            <td>7. Findings Review</td>
+                            <td>Triage open findings; assign owners + SLAs; map to ≥1 control and ≥1 framework.</td>
+                            <td>AI Governance + AppSec + MRM</td>
+                            <td>Finding records + remediation plan</td>
+                            <td><code>Finding</code></td>
+                            <td>Every open finding owned with SLA.</td>
+                        </tr>
+                        <tr>
+                            <td>8. Release Gate Review</td>
+                            <td>Evaluate RG-001..RG-010 against live data; review waivers and exceptions.</td>
+                            <td>AI Governance + AppSec + MRM</td>
+                            <td>GateResult report + exception waivers</td>
+                            <td><code>GateResult</code></td>
+                            <td>Decision: Approved / Conditional Pilot / Hold / Reject.</td>
+                        </tr>
+                        <tr>
+                            <td>9. Approval</td>
+                            <td>Executive sign-off (CRO / CISO / AI Governance Board / Business Owner).</td>
+                            <td>CRO + CISO + AI Governance Board</td>
+                            <td>APPROVAL_RECORD</td>
+                            <td><code>Approval</code></td>
+                            <td>Decision logged with conditions + signatures.</td>
+                        </tr>
+                        <tr>
+                            <td>10. Runtime Monitoring</td>
+                            <td>Activate runtime telemetry, guardrails, kill switch, policy gateways.</td>
+                            <td>AI Platform + AppSec</td>
+                            <td>RUNTIME_TELEMETRY, CLOUDTRAIL_EVENT, MACIE_FINDING</td>
+                            <td><code>RuntimeEvent</code></td>
+                            <td>Monitoring + kill switch + audit logging active.</td>
+                        </tr>
+                        <tr>
+                            <td>11. Reassessment</td>
+                            <td>Quarterly (or post-incident) reassessment: re-run evals, regate, refresh decision.</td>
+                            <td>AI Governance + MRM</td>
+                            <td>New Assessment record</td>
+                            <td><code>Assessment</code></td>
+                            <td>Decision refreshed; waivers re-validated.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 5 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">05</span>Required intake + evidence checklist</h2>
+            <div class="section-sub">A new stakeholder should be able to walk through this list and know exactly what to attach before progressing.</div>
+            <div class="checklist-grid">
+                <div class="checklist">
+                    <h4>Business Context</h4>
+                    <ul>
+                        <li>AI system name</li>
+                        <li>Use case</li>
+                        <li>Business owner</li>
+                        <li>Technical owner</li>
+                        <li>Business domain</li>
+                        <li>Customer impact</li>
+                        <li>Regulatory exposure</li>
+                    </ul>
+                </div>
+                <div class="checklist">
+                    <h4>Architecture</h4>
+                    <ul>
+                        <li>AWS services used</li>
+                        <li>Bedrock / model configuration</li>
+                        <li>RAG pipeline</li>
+                        <li>Vector store</li>
+                        <li>Tools / APIs</li>
+                        <li>IAM roles</li>
+                        <li>Network boundary</li>
+                        <li>Logging architecture</li>
+                    </ul>
+                </div>
+                <div class="checklist">
+                    <h4>Data</h4>
+                    <ul>
+                        <li>PII / NPI / PCI usage</li>
+                        <li>Prompt data exposure</li>
+                        <li>RAG data exposure</li>
+                        <li>Tool-returned data</li>
+                        <li>Logging exposure</li>
+                        <li>Retention rules</li>
+                    </ul>
+                </div>
+                <div class="checklist">
+                    <h4>Runtime</h4>
+                    <ul>
+                        <li>Autonomy level</li>
+                        <li>HITL rules</li>
+                        <li>Approval thresholds</li>
+                        <li>Runtime monitoring</li>
+                        <li>Kill switch owner</li>
+                        <li>Tool execution boundaries</li>
+                    </ul>
+                </div>
+                <div class="checklist">
+                    <h4>Evidence</h4>
+                    <ul>
+                        <li>Architecture diagram</li>
+                        <li>Terraform / CloudFormation</li>
+                        <li>IAM policies</li>
+                        <li>Bedrock configuration</li>
+                        <li>RAG pipeline config</li>
+                        <li>Eval reports</li>
+                        <li>DLP evidence</li>
+                        <li>CloudTrail / Security Hub / Macie</li>
+                        <li>Approval records</li>
+                        <li>Exception waivers</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 6 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">06</span>Release decision rules</h2>
+            <div class="section-sub">Decisions are deterministic — the rule that fires is part of the record.</div>
+            <div class="decision-grid">
+                <div class="decision-card approved">
+                    <h3>Approved Production</h3>
+                    <ul>
+                        <li>All mandatory controls pass</li>
+                        <li>No P0/P1 findings open</li>
+                        <li>Evidence completeness ≥ 95%</li>
+                        <li>Runtime monitoring enabled</li>
+                        <li>Audit logging enabled</li>
+                    </ul>
+                </div>
+                <div class="decision-card approved-pilot">
+                    <h3>Approved Pilot</h3>
+                    <ul>
+                        <li>No P0 blockers</li>
+                        <li>Limited user population</li>
+                        <li>HITL enabled where required</li>
+                        <li>Evidence completeness ≥ 85%</li>
+                    </ul>
+                </div>
+                <div class="decision-card conditional">
+                    <h3>Conditional Pilot</h3>
+                    <ul>
+                        <li>P1/P2 issues remain</li>
+                        <li>Compensating controls approved</li>
+                        <li>Exception expiration date exists</li>
+                        <li>Monitoring level increased</li>
+                    </ul>
+                </div>
+                <div class="decision-card hold">
+                    <h3>Hold</h3>
+                    <ul>
+                        <li>Any P0 finding open</li>
+                        <li>Failed PII-leakage eval</li>
+                        <li>Failed prompt-injection gate</li>
+                        <li>Failed tool-authorization gate</li>
+                        <li>Missing required evidence</li>
+                    </ul>
+                </div>
+                <div class="decision-card reject">
+                    <h3>Reject</h3>
+                    <ul>
+                        <li>Architecture violates hard policy</li>
+                        <li>Autonomous high-risk FS action without HITL</li>
+                        <li>Raw restricted data in model context by design</li>
+                        <li>Required trust boundary cannot be met</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 7 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">07</span>Control library overview</h2>
+            <div class="section-sub">Controls are the executable form of the framework. They convert NIST, OWASP, AWS, and FS expectations into required tests, gates, evidence, and remediation. Each control carries an applicability predicate, evidence_required list, gate_expression, failure_impact, and recommended_owner.</div>
+            <div class="control-grid">
+                <div class="control-row"><span class="cid">AI-001</span><span class="title">No raw PII/NPI/PCI in prompts</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-002</span><span class="title">DLP before model context assembly</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-003</span><span class="title">Prompt-injection testing required</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-004</span><span class="title">RAG source quarantine required</span><span class="badge badge-high">P1</span></div>
+                <div class="control-row"><span class="cid">AI-005</span><span class="title">Tool allowlisting mandatory</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-006</span><span class="title">Tool authorization mandatory</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-007</span><span class="title">Human approval required for high-risk actions</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-008</span><span class="title">Evals required before release</span><span class="badge badge-high">P1</span></div>
+                <div class="control-row"><span class="cid">AI-009</span><span class="title">Full audit logging required</span><span class="badge badge-critical">P0</span></div>
+                <div class="control-row"><span class="cid">AI-010</span><span class="title">Critical findings block production release</span><span class="badge badge-critical">P0</span></div>
+            </div>
+            <div style="margin-top:10px;">
+                <a class="btn btn-sm btn-primary" href="/policies">View Full Control Library ›</a>
+                <a class="btn btn-sm" href="/governance">Open Governance dashboard</a>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 8 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">08</span>Assurance Model Providers — governed model-as-judge</h2>
+            <div class="section-sub">The platform may use models to evaluate, summarize, explain, and draft governance artifacts, but provider usage is governed by data policies, trust boundaries, sanitization, and audit logging. Production runtime models are separate from assurance runtime models.</div>
+            <div class="plane-grid">
+                <div class="plane-card left">
+                    <h3>Production Runtime Models</h3>
+                    <div class="plane-name">Used by AI systems themselves</div>
+                    <ul>
+                        <li>Invoked by customer-facing AI agents</li>
+                        <li>May execute business workflows / move money / open accounts</li>
+                        <li>Stricter trust boundaries</li>
+                        <li>Bedrock or Local/VPC models preferred for regulated workloads</li>
+                        <li>Subject to release gates + runtime monitoring</li>
+                    </ul>
+                </div>
+                <div class="plane-card right">
+                    <h3>Assurance Runtime Models</h3>
+                    <div class="plane-name">Used by the platform to govern AI</div>
+                    <ul>
+                        <li>Eval judging · hallucination / groundedness grading</li>
+                        <li>Findings summarization · release-decision narratives</li>
+                        <li>Evidence summarization · executive report drafting</li>
+                        <li>Receive sanitized traces, synthetic prompts, redacted evidence, metadata</li>
+                        <li>OpenAI / Anthropic allowed only for sanitized data</li>
+                    </ul>
+                </div>
+            </div>
+            <h4 style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-tertiary);margin: 14px 0 4px;">Routing rules</h4>
+            <ul style="font-size:12px;color:var(--text-secondary);line-height:1.7;margin:0 0 12px 1.2rem;">
+                <li>Public / Internal data → any approved provider.</li>
+                <li>Sanitized confidential → OpenAI / Anthropic allowed if policy permits.</li>
+                <li>Raw PII / NPI / PCI / payment / AML / KYC / credit data → Bedrock or Local/VPC only (exception otherwise).</li>
+                <li>Every model-assisted analysis creates a Model Usage Audit event.</li>
+                <li>Blocked provider use must explain why and recommend alternatives + remediation.</li>
+            </ul>
+            <div class="routing-flow">
+                <span class="step">AI System</span><span style="color:var(--text-tertiary);">→</span>
+                <span class="step">Sanitization Layer</span><span style="color:var(--text-tertiary);">→</span>
+                <span class="step">Provider Routing Policy</span><span style="color:var(--text-tertiary);">→</span>
+                <span class="step">Assurance Model</span><span style="color:var(--text-tertiary);">→</span>
+                <span class="step">Eval / Finding / Report</span><span style="color:var(--text-tertiary);">→</span>
+                <span class="step">Model Usage Audit</span>
+            </div>
+            <div style="margin-top:10px;">
+                <a class="btn btn-sm btn-primary" href="/assurance-providers">Configure Assurance Providers ›</a>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 9 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">09</span>Roles and responsibilities</h2>
+            <div class="section-sub">Every step of the SOP names an owner. These are the recurring roles.</div>
+            <div class="role-grid">
+                <div class="role-card"><div class="role-name">Business Owner</div>
+                    <ul><li>Owns the business use case</li><li>Accepts operational business risk</li><li>Participates in approval decisions</li></ul></div>
+                <div class="role-card"><div class="role-name">Technical Owner</div>
+                    <ul><li>Owns the architecture</li><li>Provides evidence artifacts</li><li>Remediates technical findings</li></ul></div>
+                <div class="role-card"><div class="role-name">AI Governance</div>
+                    <ul><li>Owns policy + lifecycle governance</li><li>Approves exception waivers (≤90 days)</li><li>Chairs release governance reviews</li></ul></div>
+                <div class="role-card"><div class="role-name">AppSec</div>
+                    <ul><li>Validates OWASP controls</li><li>Reviews prompt injection, RAG, tool, and runtime risks</li><li>Owns red-team campaigns</li></ul></div>
+                <div class="role-card"><div class="role-name">Model Risk Management</div>
+                    <ul><li>Validates eval methodology + thresholds</li><li>Reviews hallucination, groundedness, model behavior</li><li>Independent assurance role</li></ul></div>
+                <div class="role-card"><div class="role-name">Cloud Security</div>
+                    <ul><li>Validates AWS posture</li><li>Reviews IAM, KMS, CloudTrail, Macie, Security Hub, GuardDuty</li><li>Owns network boundary controls</li></ul></div>
+                <div class="role-card"><div class="role-name">Internal Audit</div>
+                    <ul><li>Reviews evidence completeness</li><li>Validates control operation</li><li>Checks approval lineage end-to-end</li></ul></div>
+                <div class="role-card"><div class="role-name">AI Platform</div>
+                    <ul><li>Operates model providers + eval pipelines</li><li>Maintains runtime governance + telemetry connectors</li><li>Provides the platform infrastructure</li></ul></div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 10 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">10</span>Example walkthrough — Payments Exception Review Agent</h2>
+            <div class="section-sub">The seeded demo system; the full path is runnable from the Guided Demo page.</div>
+            <div class="card" style="padding: 0.875rem 1rem;">
+                <div class="walk-row"><div class="num">1</div><div>
+                    <div class="what">System submitted at intake.</div>
+                    <div class="meta">Object created: <code>AISystem</code> (ai-sys-001) · status: DESIGN</div>
+                </div></div>
+                <div class="walk-row"><div class="num">2</div><div>
+                    <div class="what">Classified HIGH risk — sensitive data + RAG + tools + FS regulatory exposure.</div>
+                    <div class="meta">Rules fired: R1, R5, R2b · Object: <code>RiskClassification</code></div>
+                </div></div>
+                <div class="walk-row"><div class="num">3</div><div>
+                    <div class="what">21 required P0/P1 controls applied.</div>
+                    <div class="meta">Includes AI-001 (no raw PII in prompts), AI-006 (tool authz), AI-007 (HITL required).</div>
+                </div></div>
+                <div class="walk-row"><div class="num">4</div><div>
+                    <div class="what">Prompt-injection eval failed — Garak suite shows 2/100 bypasses on instruction-in-memo.</div>
+                    <div class="meta">Object: <code>EvalResult</code> eval-001-pi · score 0.87 vs threshold 0.95</div>
+                </div></div>
+                <div class="walk-row"><div class="num">5</div><div>
+                    <div class="what">PII/NPI leakage risk detected in cross-customer context bleed.</div>
+                    <div class="meta">Finding FIND-2026-0133 · severity HIGH · control AI-002</div>
+                </div></div>
+                <div class="walk-row"><div class="num">6</div><div>
+                    <div class="what">Release gates failed: RG-002 (prompt injection), RG-004 (tool authz), RG-007 (evidence 38%).</div>
+                    <div class="meta">Object: <code>GateResult</code> · 3 blocking failures</div>
+                </div></div>
+                <div class="walk-row"><div class="num">7</div><div>
+                    <div class="what">Decision = HOLD — rule R-Hold-P0-Open fired.</div>
+                    <div class="meta">CISO recorded REJECT on approval pending remediation.</div>
+                </div></div>
+                <div class="walk-row"><div class="num">8</div><div>
+                    <div class="what">Remediation plan: 3 open findings owned by David Kumar with SLAs.</div>
+                    <div class="meta">Object: <code>RemediationItem</code></div>
+                </div></div>
+                <div class="walk-row"><div class="num">9</div><div>
+                    <div class="what">Evidence uploaded: RAG_CONFIG manifest, Macie scan, remediation verification, approval record.</div>
+                    <div class="meta">Object: 4 new <code>Evidence</code> records · completeness 25% → 38%</div>
+                </div></div>
+                <div class="walk-row"><div class="num">10</div><div>
+                    <div class="what">Reassessment moves the decision to CONDITIONAL_PILOT — rule R-Conditional-P1-with-HITL.</div>
+                    <div class="meta">CRITICAL finding closed, HIGH remediated, HITL in force on release_payment.</div>
+                </div></div>
+                <div style="margin-top:10px;">
+                    <a class="btn btn-sm btn-primary" href="/demo">Run Payments Agent Guided Demo ›</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 11 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">11</span>Operating rhythm</h2>
+            <div class="section-sub">The cadence governance teams run on top of the platform.</div>
+            <div class="rhythm-grid">
+                <div class="rhythm-card">
+                    <div class="cadence">Daily</div>
+                    <ul>
+                        <li>Review runtime incidents</li>
+                        <li>Triage critical findings</li>
+                        <li>Review blocked tool calls</li>
+                        <li>Review DLP detections</li>
+                    </ul>
+                </div>
+                <div class="rhythm-card">
+                    <div class="cadence">Weekly</div>
+                    <ul>
+                        <li>Assess new AI systems in intake</li>
+                        <li>Review release holds</li>
+                        <li>Validate remediation SLAs</li>
+                        <li>Review evidence gaps</li>
+                        <li>Run eval suites for high-risk systems</li>
+                    </ul>
+                </div>
+                <div class="rhythm-card">
+                    <div class="cadence">Monthly</div>
+                    <ul>
+                        <li>Review framework coverage</li>
+                        <li>Review exceptions / waivers</li>
+                        <li>Reassess high-risk systems</li>
+                        <li>Generate AI Governance Board report</li>
+                    </ul>
+                </div>
+                <div class="rhythm-card">
+                    <div class="cadence">Quarterly</div>
+                    <ul>
+                        <li>Update control library</li>
+                        <li>Review eval thresholds</li>
+                        <li>Run red-team campaign</li>
+                        <li>Validate provider routing policies</li>
+                        <li>Produce audit-ready evidence pack</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SECTION 12 -->
+        <section class="sop-section">
+            <h2><span class="sop-section-num">12</span>Action center — start here</h2>
+            <div class="section-sub">The seven primary actions for any stakeholder. Each opens an existing page in the platform.</div>
+            <div class="action-grid">
+                <a href="/ai-systems/new">Register AI System <span class="arrow">›</span></a>
+                <a href="/demo">Run Guided Demo <span class="arrow">›</span></a>
+                <a href="/policies">View Control Library <span class="arrow">›</span></a>
+                <a href="/release-gates">Open Release Gates <span class="arrow">›</span></a>
+                <a href="/evidence">View Evidence Gaps <span class="arrow">›</span></a>
+                <a href="/assurance-providers">Configure Assurance Providers <span class="arrow">›</span></a>
+                <a href="/reports">Generate Executive Report <span class="arrow">›</span></a>
+                <a href="/findings">Review Open Findings <span class="arrow">›</span></a>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    initPage('/framework-sop');
+    </script>
+</body>
+</html>

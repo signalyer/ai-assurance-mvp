@@ -28,12 +28,29 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.traces import router as traces_router
 from api.evaluate import router as evaluate_router
-from api.demo_run import router as demo_router
+from api.demo_run import router as demo_run_router
 from api.analytics import router as analytics_router
 from api.security import router as security_router
 from api.domains_api import router as domains_api_router
 from api.batch import router as batch_router
 from api.grc import router as grc_router
+from api.intake import router as intake_router
+from api.assessment import router as assessment_router
+from api.release_gates import router as release_gates_v2_router
+from api.evals_v2 import router as evals_v2_router
+from api.framework import router as framework_router
+from api.evidence import router as evidence_v2_router
+from api.findings_v2 import router as findings_v2_router
+from api.runtime_v2 import router as runtime_v2_router
+from api.connectors import router as connectors_router
+from api.demo import router as demo_router
+from api.reports import router as reports_router
+from api.guide import router as guide_router
+from api.assurance_model import router as assurance_model_router, providers_router as assurance_providers_router
+from api.usage import router as usage_router
+from api.ai_system_edit import router as ai_system_edit_router
+from api.aws_demo import router as aws_demo_router
+from middleware.auth import SessionAuthMiddleware, router as auth_router
 
 load_dotenv()
 
@@ -105,15 +122,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Session-cookie auth gate (no-op unless AUTH_ENABLED=true)
+app.add_middleware(SessionAuthMiddleware)
+app.include_router(auth_router)
+
 # Include API routers
 app.include_router(traces_router)
 app.include_router(evaluate_router)
-app.include_router(demo_router)
+app.include_router(demo_run_router)
 app.include_router(analytics_router)
 app.include_router(security_router)
 app.include_router(domains_api_router)
 app.include_router(batch_router)
 app.include_router(grc_router)
+app.include_router(intake_router)
+app.include_router(assessment_router)
+app.include_router(release_gates_v2_router)
+app.include_router(evals_v2_router)
+app.include_router(framework_router)
+app.include_router(evidence_v2_router)
+app.include_router(findings_v2_router)
+app.include_router(runtime_v2_router)
+app.include_router(connectors_router)
+app.include_router(demo_router)
+app.include_router(reports_router)
+app.include_router(guide_router)
+app.include_router(assurance_model_router)
+app.include_router(assurance_providers_router)
+app.include_router(usage_router)
+app.include_router(ai_system_edit_router)
+app.include_router(aws_demo_router)
 
 
 @app.get("/api/health")
@@ -175,6 +213,41 @@ async def page_ai_systems():
     return _page("ai-systems.html")
 
 
+@app.get("/ai-systems/new")
+async def page_ai_systems_new():
+    return _page("ai-systems-new.html")
+
+
+@app.get("/assessment")
+async def page_assessment():
+    return _page("assessment.html")
+
+
+@app.get("/connectors")
+async def page_connectors():
+    return _page("connectors.html")
+
+
+@app.get("/demo")
+async def page_demo():
+    return _page("demo.html")
+
+
+@app.get("/reports")
+async def page_reports():
+    return _page("reports.html")
+
+
+@app.get("/assurance-providers")
+async def page_assurance_providers():
+    return _page("assurance-providers.html")
+
+
+@app.get("/framework-sop")
+async def page_framework_sop():
+    return _page("framework-sop.html")
+
+
 @app.get("/governance")
 async def page_governance():
     return _page("governance.html")
@@ -229,6 +302,16 @@ async def page_domains():
 @app.get("/compare")
 async def page_compare():
     return _page("compare.html")
+
+
+@app.get("/analytics-usage")
+async def page_analytics_usage():
+    return _page("analytics-usage.html")
+
+
+@app.get("/demo-aws-analyzer")
+async def page_demo_aws_analyzer():
+    return _page("demo-aws-analyzer.html")
 
 
 if __name__ == "__main__":
