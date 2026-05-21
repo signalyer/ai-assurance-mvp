@@ -54,28 +54,24 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `assurance-providers.html`, `framework-sop.html`, `analytics.html`,
 `demo.html`, `demo-aws-analyzer.html`, `login.html`, `shared.js`, `shared.css`
 
-## Files — Built (2026-05-21, Session 01a + 01b)
+## Files — Built (2026-05-21, Sessions 01a + 01b + 02)
 ### Session 01a (PII scrubbing core)
 `scrubber.py` (Presidio NER + regex layer, fail-closed), `domain/deid_vault.py` (Fernet encrypted vault with TTL)
 
 ### Session 01b (decorator wiring + tracer patch)
 `middleware/scrubber.py` (@scrub_pii decorator), `tracer.py` (hardened: vault_id required when SCRUBBER_ENABLED), `api/demo_run.py` (scrubs prompts before trace_call, vault_id in metadata)
 
+### Session 02 (policy engine + OPA)
+`domain/policy_engine.py` (OPA HTTP client + local Python fallback, 5 categories, fail-closed), `domain/trust_scorer.py` (time-decayed trust score from policy history, half-life 7 days), `middleware/policy.py` (@policy_gate decorator, raises PolicyDeniedError on DENY), `policies/base.rego` (org-mandatory), `policies/pii.rego` (posture: us-finserv, gdpr, hipaa), `policies/agent_tools.rego` (team tool authorization), `policies/financial_advisor.rego` (risk-tier critical handling)
+
 ## Files — In Progress
-None — Session 01 fully complete.
+None — Sessions 01 and 02 fully complete.
 
 ### RAG-related (Session 04)
 - `api/rag.py` — new
 - `static/rag-governance.html` — new
 
 ## Files — Planned
-### Session 02 — Policy Engine
-- `domain/policy_engine.py` — OPA client wrapper
-- `domain/trust_scorer.py` — workload trust score from policy outcomes
-- `middleware/policy.py` — `@policy_gate` decorator
-- `policies/base.rego`, `policies/pii.rego`, `policies/agent_tools.rego`,
-  `policies/financial_advisor.rego`
-
 ### Session 03 — Guardrails
 - `middleware/injection.py` — prompt-injection detection
 - `guardrails.py` extension — NeMo + Llama Guard 3 adapters
@@ -119,6 +115,10 @@ None — Session 01 fully complete.
 - `POSTGRES_USER=pgadmin`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE=postgres`
 - `DATABASE_URL=postgresql://...` — Full connection string with sslmode=require
 - `RAG_EMBEDDING_MODEL=text-embedding-3-small`, `RAG_TOP_K=5`
+
+### Added (Session 02)
+- `POLICIES_ENABLED=true` — Policy engine + @policy_gate decorator active
+- `OPA_URL` (optional) — OPA sidecar HTTP endpoint; falls back to local Python evaluator
 
 ### To add (per upcoming sessions)
 - `SCRUBBER_BACKEND=presidio` (Session 05)
