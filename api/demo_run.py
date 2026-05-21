@@ -2,7 +2,11 @@
 
 PERFORMANCE: Claude and GPT-4o are called concurrently via asyncio.gather.
 Wall time is roughly max(claude_latency, openai_latency) instead of the sum.
+
+DECORATOR CHAIN (Session 03):
+@policy_gate (if wired) → @scrub_pii (if wired) → @guardrails (NEW) → @trace_llm_call (in _build_run) → @evaluate_response
 """
+from __future__ import annotations
 
 import asyncio
 import time
@@ -22,6 +26,7 @@ from storage import save_run
 from audit import log_evaluation
 from guardrails import apply_guardrails, filter_output
 from scrubber import tokenise_payload
+from middleware.guardrails import guardrails
 
 # Load env vars from project root .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -208,40 +213,80 @@ async def run_live_demo(domain: str = Query(None)):
             return {"runs": [], "error": f"Failed to load domain '{domain}': {str(e)[:100]}"}
 
     # Run Claude and GPT-4o IN PARALLEL via asyncio.gather
-    async def _run_claude():
+    @guardrails(
+        enable_injection=True,
+        enable_nemo=True,
+        enable_llama_guard=True,
+        strict=True,
+        workload_id_arg="workload_id",
+    )
+    async def _run_claude(
+        prompt_text: str,
+        model_name: str = "claude-sonnet-4-6",
+        workload_id: str = "financial_advisor",
+    ) -> str:
+        """Run Claude with guardrails enforcement."""
         try:
             client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             start = time.time()
             message = await client.messages.create(
-                model="claude-sonnet-4-6",
+                model=model_name,
                 max_tokens=500,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": prompt_text}],
             )
             latency = int((time.time() - start) * 1000)
             response_text = message.content[0].text
             tokens = message.usage.input_tokens + message.usage.output_tokens
-            return _build_run("claude-sonnet-4-6", response_text, latency, tokens, prompt, context, domain, domain_name)
+            return _build_run(model_name, response_text, latency, tokens, prompt_text, context, domain, domain_name)
         except Exception as e:
             return {"error": f"Claude: {str(e)[:200]}"}
 
-    async def _run_openai():
+    async def _run_claude_wrapper():
+        """Wrapper to pass guardrails parameters."""
+        return await _run_claude(
+            prompt_text=prompt,
+            model_name="claude-sonnet-4-6",
+            workload_id="financial_advisor",
+        )
+
+    @guardrails(
+        enable_injection=True,
+        enable_nemo=True,
+        enable_llama_guard=True,
+        strict=True,
+        workload_id_arg="workload_id",
+    )
+    async def _run_openai(
+        prompt_text: str,
+        model_name: str = "gpt-4o-mini",
+        workload_id: str = "financial_advisor",
+    ) -> str:
+        """Run OpenAI with guardrails enforcement."""
         try:
             client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             start = time.time()
             response = await client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model_name,
                 max_tokens=500,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": prompt_text}],
             )
             latency = int((time.time() - start) * 1000)
             response_text = response.choices[0].message.content
             tokens = response.usage.prompt_tokens + response.usage.completion_tokens
-            return _build_run("gpt-4o-mini", response_text, latency, tokens, prompt, context, domain, domain_name)
+            return _build_run(model_name, response_text, latency, tokens, prompt_text, context, domain, domain_name)
         except Exception as e:
             return {"error": f"OpenAI: {str(e)[:200]}"}
 
+    async def _run_openai_wrapper():
+        """Wrapper to pass guardrails parameters."""
+        return await _run_openai(
+            prompt_text=prompt,
+            model_name="gpt-4o-mini",
+            workload_id="financial_advisor",
+        )
+
     # Both API calls fire simultaneously
-    claude_result, openai_result = await asyncio.gather(_run_claude(), _run_openai())
+    claude_result, openai_result = await asyncio.gather(_run_claude_wrapper(), _run_openai_wrapper())
 
     for result in (claude_result, openai_result):
         if "error" in result:

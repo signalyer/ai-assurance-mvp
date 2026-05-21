@@ -16,12 +16,12 @@ Adversarial: Garak — `adversarial.py`
 Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 
 ## Architectural decisions (non-negotiable)
-- Decorator order: `@policy_gate` → `@scrub_pii` → `@trace_llm_call` → `@evaluate_response`
+- Decorator order: `@policy_gate` → `@scrub_pii` → `@guardrails` → `@trace_llm_call` → `@evaluate_response`
 - Scrubber: `tokenise_payload()` runs BEFORE `trace_call()` — hard constraint
 - Langfuse: receives `scrubbed_prompt` only — never raw prompt
 - Policy engine: OPA fail-closed — error → DENY, never ALLOW
+- Guardrails: self-hosted only — no SaaS tools in prompt path; fail-closed on injection/topic/safety violations
 - RAG corpus: pre-scrubbed at index time — `index_document()` rejects PII > 0.7
-- Guardrails: self-hosted only — no SaaS tools in prompt path
 - Memory tiers: T1 in-context · T2 episodic JSONL · T3 RAG (Azure AI Search) · T4 procedural
 - DeepEval 6-metric suite: hallucination, relevancy, faithfulness, toxicity, PII leakage, scrub score
 - Single-tenant for v1; multi-tenant later
@@ -64,19 +64,17 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 ### Session 02 (policy engine + OPA)
 `domain/policy_engine.py` (OPA HTTP client + local Python fallback, 5 categories, fail-closed), `domain/trust_scorer.py` (time-decayed trust score from policy history, half-life 7 days), `middleware/policy.py` (@policy_gate decorator, raises PolicyDeniedError on DENY), `policies/base.rego` (org-mandatory), `policies/pii.rego` (posture: us-finserv, gdpr, hipaa), `policies/agent_tools.rego` (team tool authorization), `policies/financial_advisor.rego` (risk-tier critical handling)
 
+### Session 03 (guardrails — NeMo + Llama Guard 3)
+`middleware/injection.py` (prompt injection detection via regex + heuristics), `middleware/guardrails.py` (@guardrails decorator orchestrating injection/topic/safety checks), `guardrails/nemo_adapters.py` (topic classification + topic enforcement), `guardrails/llama_guard_adapter.py` (content safety evaluation — 8 categories), `guardrails/financial_advisor_rail.py` (topic rail + guardrail rules for financial advisor), `guardrails/config/financial_advisor_rails.yaml` (NeMo topic rail YAML config)
+
 ## Files — In Progress
-None — Sessions 01 and 02 fully complete.
+None — Sessions 01, 02, and 03 fully complete.
 
 ### RAG-related (Session 04)
 - `api/rag.py` — new
 - `static/rag-governance.html` — new
 
 ## Files — Planned
-### Session 03 — Guardrails
-- `middleware/injection.py` — prompt-injection detection
-- `guardrails.py` extension — NeMo + Llama Guard 3 adapters
-- `guardrails/topic_rail.py`, `guardrails/financial_advisor.co`
-
 ### Session 04 — Memory + RAG
 - `domain/agent_memory.py` — `build_context()`, `write_episode()`,
   `compress_episode()`, `selective_recall()`
@@ -120,6 +118,12 @@ None — Sessions 01 and 02 fully complete.
 - `POLICIES_ENABLED=true` — Policy engine + @policy_gate decorator active
 - `OPA_URL` (optional) — OPA sidecar HTTP endpoint; falls back to local Python evaluator
 
+### Added (Session 03)
+- `GUARDRAILS_ENABLED=true` — Guardrails enforcement active (injection/topic/safety)
+- `INJECTION_DETECTION=true` — Prompt injection detection enabled
+- `TOPIC_ENFORCEMENT=true` — Topic validation for workloads enabled
+- `LLAMA_GUARD_ENABLED=true` — Llama Guard 3 content safety enabled
+
 ### To add (per upcoming sessions)
 - `SCRUBBER_BACKEND=presidio` (Session 05)
 - `TRACER_BACKEND=langfuse` (Session 05)
@@ -140,11 +144,16 @@ Side-by-side: Claude Sonnet 4.6 vs GPT-4o-mini.
 python -c "import scrubber; print('scrubber OK')"                              # after Session 01a
 python -c "from domain.deid_vault import vault_stats; print('vault OK')"       # after Session 01a
 python -c "from domain.policy_engine import evaluate; print('policy OK')"      # after Session 02
+python -c "from middleware.injection import detect_injection; print('injection OK')"  # after Session 03
+python -c "from middleware.guardrails import guardrails; print('guardrails OK')"     # after Session 03
+python -c "from guardrails.nemo_adapters import validate_topic; print('nemo OK')"   # after Session 03
+python -c "from guardrails.llama_guard_adapter import evaluate_content; print('llama_guard OK')"  # after Session 03
 python -c "from domain.agent_memory import build_context; print('memory OK')"  # after Session 04
 python -c "from domain.rag_engine import rag_stats; print('rag OK')"           # after Session 04
 uvicorn dashboard:app --port 8001 &
 curl -s http://localhost:8001/api/rag/stats                                    # after Session 04
 curl -s http://localhost:8001/api/policies/stats                               # after Session 02
+curl -s http://localhost:8001/api/guardrails/stats                             # after Session 03
 
 # End-to-end scrubber smoke (after Session 01a)
 python -c "

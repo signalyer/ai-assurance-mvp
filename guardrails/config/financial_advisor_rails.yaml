@@ -1,0 +1,173 @@
+# NeMo Guardrails Configuration for Financial Advisor Workload
+# Session 03 — Keyword-based topic rail configuration
+# Integration with Claude API for LLM-based evaluation (Session 05+)
+
+metadata:
+  name: "Financial Advisor Rails"
+  description: "Topic enforcement and safety rails for financial advisor workload"
+  version: "1.0"
+  created: "2026-05-21"
+
+# Topic definitions
+topics:
+  market_analysis:
+    description: "Market trends, index performance, economic analysis"
+    allowed: true
+    keywords:
+      - "market"
+      - "index"
+      - "trend"
+      - "analysis"
+      - "economic"
+      - "performance"
+    sample_intents:
+      - "What are recent market trends?"
+      - "Explain the S&P 500 performance"
+
+  investment_strategy:
+    description: "Portfolio management, allocation, diversification, rebalancing"
+    allowed: true
+    keywords:
+      - "strategy"
+      - "portfolio"
+      - "allocation"
+      - "diversification"
+      - "rebalance"
+    sample_intents:
+      - "How should I diversify my portfolio?"
+      - "Explain asset allocation strategies"
+
+  risk_assessment:
+    description: "Risk evaluation, volatility analysis, hedging techniques"
+    allowed: true
+    keywords:
+      - "risk"
+      - "volatility"
+      - "downside"
+      - "exposure"
+      - "hedging"
+    sample_intents:
+      - "What is my portfolio risk?"
+      - "Explain risk management approaches"
+
+  financial_education:
+    description: "Education, learning fundamentals, explaining concepts"
+    allowed: true
+    keywords:
+      - "learn"
+      - "understand"
+      - "explain"
+      - "basics"
+      - "fundamentals"
+      - "education"
+    sample_intents:
+      - "Explain how bonds work"
+      - "Teach me about mutual funds"
+
+  compliance:
+    description: "Regulatory requirements, compliance, SEC/FINRA rules"
+    allowed: true
+    keywords:
+      - "compliance"
+      - "regulation"
+      - "sec"
+      - "finra"
+      - "aml"
+      - "kyc"
+    sample_intents:
+      - "What are SEC requirements?"
+      - "Explain FINRA rules"
+
+  stock_tips:
+    description: "Stock picking, buy/sell recommendations, hot tips"
+    allowed: false
+    severity: "high"
+    keywords:
+      - "stock"
+      - "pick"
+      - "recommendation"
+      - "buy"
+      - "sell"
+      - "tip"
+    sample_violations:
+      - "Buy Apple stock now"
+      - "I recommend these 3 stocks"
+
+  guaranteed_returns:
+    description: "Claims of guaranteed returns, risk-free investing"
+    allowed: false
+    severity: "critical"
+    keywords:
+      - "guaranteed"
+      - "promise"
+      - "certain"
+      - "assured"
+      - "will return"
+      - "risk-free"
+    sample_violations:
+      - "This strategy guarantees 10% returns"
+      - "You will never lose money"
+
+# Safety rules (Llama Guard 3 integration)
+safety_rules:
+  violence:
+    enabled: true
+    severity: "critical"
+    message: "Violent content is not allowed"
+
+  harassment:
+    enabled: true
+    severity: "high"
+    message: "Harassing content is not allowed"
+
+  self_harm:
+    enabled: true
+    severity: "critical"
+    message: "Self-harm content is not allowed"
+
+  illegal_activity:
+    enabled: true
+    severity: "high"
+    message: "Illegal activity is not allowed"
+
+# Guardrail enforcement configuration
+enforcement:
+  input_checks:
+    - injection_detection      # Prompt injection
+    - topic_validation         # Topic rail
+    - forbidden_phrases        # Strict phrase matching
+
+  output_checks:
+    - content_safety           # Llama Guard 3
+    - forbidden_phrases        # No guaranteed returns in response
+    - disclaimer_check         # Require disclaimers on recommendations
+
+  action_on_violation:
+    input: "deny"              # Block the prompt
+    output: "deny"             # Block the response
+    severity: "critical"       # Fail-closed
+
+# Integration points
+integrations:
+  policy_engine:
+    enabled: true
+    policy_category: "RISK_TIER"
+    critical_tier_requires: "human_review"
+
+  risk_classifier:
+    enabled: true
+    risk_tiers:
+      - name: "CRITICAL"
+        triggers: ["guaranteed_returns", "stock_tips"]
+        action: "human_review"
+
+  audit_logging:
+    enabled: true
+    log_path: "data/guardrail_violations.jsonl"
+    log_level: "info"
+
+# Forward compatibility notes (Session 05+)
+# - NeMo Guardrails client integration (HTTP)
+# - Multi-language support
+# - Custom LLM-based topic classification
+# - Integration with Claude API for rule evaluation
