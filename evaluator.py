@@ -12,10 +12,23 @@ Architecture (Session 05):
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Optional
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
+
+# Observability counter hook (non-raising fallback if package absent)
+try:
+    from observability.counters import record_eval_failure as _record_eval_failure
+except ImportError:
+    try:
+        from observability_compat import record_eval_failure as _record_eval_failure
+    except ImportError:
+        def _record_eval_failure() -> None:  # type: ignore[misc]
+            """Local no-op fallback."""
 
 
 def _deepeval():
@@ -232,6 +245,14 @@ def _evaluate_impl(
         "skipped": False,
         "details": f"Found {pii_matches} PII match(es)" if pii_matches > 0 else "No PII detected",
     }
+
+    # Emit observability counter for each metric that is below threshold
+    for _metric_name, _metric_result in results.items():
+        if not _metric_result.get("skipped", False) and not _metric_result.get("passed", True):
+            try:
+                _record_eval_failure()
+            except Exception as _obs_exc:  # noqa: BLE001
+                logger.warning("_evaluate_impl: record_eval_failure raised: %s", _obs_exc)
 
     return results
 

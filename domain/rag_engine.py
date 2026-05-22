@@ -874,33 +874,58 @@ def purge_chunks(subject_id: str) -> dict:
         return {"chunks_removed": 0, "sha256_digest_after": digest}
 
     try:
-        # Step 1 — search for docs belonging to subject_id
-        # The metadata field is stored as a JSON string; we filter by substring.
-        search_payload: dict[str, Any] = {
-            "search": "*",
-            "top": 1000,
-            "select": "id,metadata",
-        }
+        # Step 1 — search for docs belonging to subject_id using $skip pagination.
+        # Azure Search caps top=1000 per request; iterate with $skip until the
+        # response value array is empty.  Bound at 100 iterations (100k chunks)
+        # as a sanity cap.  Log when the cap is hit.
+        _PAGE_SIZE: int = 1000
+        _MAX_ITERATIONS: int = 100  # 100 * 1000 = 100k chunks per subject max
 
         matched_ids: list[str] = []
+        skip: int = 0
 
         with httpx.Client(timeout=30.0) as client:
             search_url = _index_url("/docs/search")
-            resp = client.post(
-                search_url, headers=_search_headers(), json=search_payload
-            )
-            resp.raise_for_status()
-
-        raw_docs: list[dict[str, Any]] = resp.json().get("value", [])
-
-        for doc in raw_docs:
-            raw_meta = doc.get("metadata", "{}")
-            try:
-                meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
-            except json.JSONDecodeError:
-                meta = {}
-            if meta.get("source_id") == subject_id:
-                matched_ids.append(doc["id"])
+            for iteration in range(_MAX_ITERATIONS):
+                search_payload: dict[str, Any] = {
+                    "search": "*",
+                    "top": _PAGE_SIZE,
+                    "skip": skip,
+                    "select": "id,metadata",
+                }
+                resp = client.post(
+                    search_url, headers=_search_headers(), json=search_payload
+                )
+                resp.raise_for_status()
+                raw_docs: list[dict[str, Any]] = resp.json().get("value", [])
+                if not raw_docs:
+                    break
+                for doc in raw_docs:
+                    raw_meta = doc.get("metadata", "{}")
+                    try:
+                        meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+                    except json.JSONDecodeError:
+                        meta = {}
+                    if meta.get("source_id") == subject_id:
+                        matched_ids.append(doc["id"])
+                skip += len(raw_docs)
+                if len(raw_docs) < _PAGE_SIZE:
+                    break
+            else:
+                # Fail-closed: hitting the iteration cap means we cannot guarantee
+                # complete erasure for this subject. Raising propagates as cascade
+                # PARTIAL_FAILURE — operator must increase the cap or split the purge.
+                # Returning a "completed" result here would silently violate GDPR
+                # erasure for the chunks beyond the cap.
+                logger.error(
+                    "purge_chunks: $skip pagination hit %d-iteration cap for subject_id=%s; "
+                    "raising to force PARTIAL_FAILURE",
+                    _MAX_ITERATIONS, subject_id,
+                )
+                raise RuntimeError(
+                    f"purge_chunks pagination cap exceeded for subject_id={subject_id}; "
+                    f"increase _MAX_ITERATIONS or split the purge"
+                )
 
         if not matched_ids:
             digest = hashlib.sha256(

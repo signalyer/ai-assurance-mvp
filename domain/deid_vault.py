@@ -182,7 +182,25 @@ def lookup(vault_id: str) -> Optional[dict[str, str]]:
                 # Decrypt
                 ciphertext = record.get("ciphertext")
                 if ciphertext:
-                    plaintext = cipher.decrypt(ciphertext.encode()).decode()
+                    try:
+                        plaintext = cipher.decrypt(ciphertext.encode()).decode()
+                    except Exception as _dec_exc:
+                        logger.error(
+                            "Vault Fernet decryption failed vault_id=%s: %s",
+                            vault_id, _dec_exc,
+                        )
+                        try:
+                            from observability.counters import record_vault_error as _rec_ve
+                        except ImportError:
+                            try:
+                                from observability_compat import record_vault_error as _rec_ve
+                            except ImportError:
+                                def _rec_ve() -> None: pass  # type: ignore[misc]
+                        try:
+                            _rec_ve()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        return None
                     mapping = json.loads(plaintext)
                     logger.debug(f"Retrieved vault entry {vault_id}")
                     return mapping

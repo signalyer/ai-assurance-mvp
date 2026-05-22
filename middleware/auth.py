@@ -198,6 +198,70 @@ async def logout(request: Request):
     return resp
 
 
+# ---------------------------------------------------------------------------
+# RBAC dependency factory
+# ---------------------------------------------------------------------------
+
+from fastapi import HTTPException  # noqa: E402 -- after router definition
+
+
+def require_role(*allowed_roles: str):
+    """Return a FastAPI dependency that enforces role-based access control.
+
+    When ``AUTH_ENABLED=false`` (dev mode) the check is skipped and the
+    dependency returns ``None`` so tests do not need credentials.
+
+    The role is read from the ``X-Role`` header (test/SDK path) or from the
+    signed session cookie (browser path, when AUTH_ENABLED=true).
+
+    Args:
+        *allowed_roles: One or more role names that are permitted.
+                        The check is case-insensitive.
+
+    Returns:
+        A FastAPI dependency callable.  Raises HTTP 403 when the caller's role
+        is absent or not in *allowed_roles*.
+
+    Example::
+
+        @router.get("/api/audit/events")
+        async def list_events(
+            _role: None = Depends(require_role("auditor", "ciso")),
+        ) -> ...:
+            ...
+    """
+    if not allowed_roles:
+        raise ValueError(
+            "require_role() must be called with at least one role. "
+            "Empty allowed_roles short-circuits the dev-mode check, opening access."
+        )
+    allowed = frozenset(r.lower() for r in allowed_roles)
+
+    async def _check(request: Request) -> None:
+        """Inner dependency -- enforces role membership."""
+        if not _is_enabled():
+            # AUTH_ENABLED=false: accept X-Role header for testing convenience.
+            role_header = request.headers.get("X-Role", "").lower()
+            if role_header and allowed and role_header not in allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail="insufficient_role",
+                )
+            return
+
+        # AUTH_ENABLED=true: role is embedded in session cookie.
+        payload = _read_cookie(request)
+        if not payload:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        user: str = (payload.get("u") or "").lower()
+        # Role is the suffix after "demo-" (e.g. "demo-ciso" -> "ciso").
+        role = user.replace("demo-", "", 1)
+        if role not in allowed:
+            raise HTTPException(status_code=403, detail="insufficient_role")
+
+    return _check
+
+
 @router.get("/api/auth/whoami")
 async def whoami(request: Request):
     if not _is_enabled():

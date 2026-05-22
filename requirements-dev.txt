@@ -1,0 +1,9 @@
+# Development and testing dependencies — NOT installed in production
+# Separate from requirements.txt to avoid bloating the Azure App Service deploy package.
+
+# Load testing
+locust>=2.30
+
+# Security scanning
+bandit>=1.7
+pip-audit>=2.7

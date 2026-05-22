@@ -414,3 +414,65 @@ Why: Fully typed locks the schema for every event-type evolution → migration c
 Constrains: New hot columns are migration-gated (no schema-on-write). All non-hot fields
      stay in the JSONB column. Whitelist of view names in `/api/projection/views/{view}`
      enforced via `PROJECTION_VIEWS` frozenset before any SQL interpolation.
+
+## 2026-05-22 — Single uvicorn worker, no Redis (Session 10 Q1)
+Decision: Deploy as a SINGLE uvicorn worker. In-memory nonce cache stays
+         in-process. No Redis dependency.
+Alternatives: Gunicorn + uvicorn workers + Redis-backed nonce cache · Gunicorn
+         multi-worker WITHOUT shared store
+Why: The locked SKU is B1 (~$13/mo, single small core). Running multiple workers
+     on one core thrashes instead of scaling. Paying for Azure Cache for Redis
+     (~$16/mo) only to coordinate workers that physically can't run in parallel
+     is wasted budget. Multi-worker without shared store is documented as a
+     security hole (per-worker nonce caches lose replay protection across
+     processes) and explicitly rejected. Single worker is the coherent demo
+     posture.
+Constrains: `middleware/hmac_auth.py` `_nonce_cache` is per-process and is
+     documented as such. Migrating to Redis is a Phase 2 task before any scale-out.
+     `STRICT_HMAC_BOOT=true` enforces secret presence at startup; staging
+     deployments MUST set this.
+
+## 2026-05-22 — SDK Azure Artifacts feed deferred to post-demo (Session 10 Q2)
+Decision: `publish.ps1` remains DRY-RUN gated. Azure Artifacts feed
+         provisioning checklist captured in `docs/RUNBOOK.md` § "Azure Artifacts
+         feed provisioning" (6 steps). Demo distribution path is editable install
+         (`pip install -e ./sdk`) plus wheel handoff.
+Alternatives: Provision feed during Session 10 (~2-3h CI plumbing) · Public PyPI release
+Why: Demo audience sees the platform UI, not `pip install` output. The 2-3h cost
+     of provisioning the feed + PAT in CI carries no demo-visible value and
+     directly competes with Day 10's already-loaded scope (24 new files, 18 debt
+     fixes, IaC, load tests). Editable install + wheel handoff is a credible
+     answer to any "how do customers install this?" question during demo.
+Constrains: When the team is ready to publish, `sdk/pyproject.toml` is wheel-ready
+     and `publish.ps1` only needs the DRY-RUN guard removed and a PAT injected.
+
+## 2026-05-22 — Load test target B1, A7 acceptance adjusted to 25 RPS (Session 10 Q3)
+Decision: App Service Plan stays at B1 (~$13/mo). Load test acceptance A7 is
+         "25 RPS sustained for 10 min, p95 < 2s, zero errors" (NOT the original
+         100 RPS target). 100 RPS deferred to Phase 2 on S1 + autoscale.
+Alternatives: Upgrade to S1 + autoscale 1-3 instances (~$70/mo) · drop the load
+         test entirely
+Why: The 100 RPS target on B1 is physically not achievable — single small core,
+     no autoscale. Pretending it is would produce a test that always fails or a
+     load profile that doesn't reflect demo conditions. The honest documented
+     limit (25 RPS, B1) matches what the demo will actually serve. S1 + autoscale
+     is the right answer for a real production cutover; not for a 12-day demo.
+Constrains: `loadtests/locustfile.py` is wired for 25 RPS (`-u 25 -r 5`).
+     `loadtests/README.md` documents the SKU caveat. The original 100 RPS
+     command is kept as a comment for future S1 deploys.
+
+## 2026-05-22 — New Log Analytics workspace `log-aigovern-prod` (Session 10 Q4)
+Decision: Provision a NEW Log Analytics workspace named `log-aigovern-prod` and
+         a NEW App Insights component `appi-aigovern-prod`, both via
+         `deploy/bicep/`. Provisioned in `rg-aigovern-dev` for v1 but named "prod"
+         intentionally — they become the future-prod observability backbone.
+Alternatives: Reuse existing `log-aigovern-dev` workspace · App Insights with
+         no workspace
+Why: Cleaner separation; matches a future prod cutover where the workspace
+     stays put and only the App Service identity flips. Workspace-less App
+     Insights loses Kusto/KQL access — half the value of the 8 alerts becomes
+     unobservable.
+Constrains: `deploy/bicep/main.bicep` outputs `appInsightsConnectionString` as a
+     `@secure()` output; post-deploy script injects it into App Service settings
+     as `APPLICATIONINSIGHTS_CONNECTION_STRING`. All 8 alerts in
+     `deploy/bicep/alerts.bicep` query this workspace via `scheduledQueryRules`.

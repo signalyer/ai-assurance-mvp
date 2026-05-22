@@ -2,27 +2,44 @@
 
 Executes a four-store purge in order:
 
-1. **vault**    — Fernet-encrypted PII token mappings in ``domain/deid_vault.py``
-2. **tier2**    — Postgres episodic memory in ``domain/agent_memory.py``
-3. **tier3**    — Azure AI Search RAG chunks in ``domain/rag_engine.py``
-4. **langfuse** — Langfuse trace store (PHASE-2 STUB — flag-gated via
+1. **vault**    -- Fernet-encrypted PII token mappings in ``domain/deid_vault.py``
+2. **tier2**    -- Postgres episodic memory in ``domain/agent_memory.py``
+3. **tier3**    -- Azure AI Search RAG chunks in ``domain/rag_engine.py``
+4. **langfuse** -- Langfuse trace store (PHASE-2 STUB -- flag-gated via
                   ``LANGFUSE_DELETE_ENABLED`` env var; default disabled)
 
 Architecture constraints
 ------------------------
-* **Fail-closed** — if ANY step fails, the cascade stops, emits
+* **Fail-closed** -- if ANY step fails, the cascade stops, emits
   ``RTF_CASCADE_FAILED``, and returns ``PARTIAL_FAILURE``.
   ``RTF_CASCADE_COMPLETED`` is only emitted when ALL four steps succeed.
-* **Idempotent** — re-submitting the same ``cascade_id`` returns
+* **Idempotent** -- re-submitting the same ``cascade_id`` returns
   ``ALREADY_COMPLETED`` with the stored result; no second purge is executed.
+  Completed cascade IDs are indexed in a sidecar file
+  ``data/rtf_completed_index.jsonl`` to avoid a full events.jsonl tail-scan
+  for long-running deployments.
 * Every event is written through :func:`domain.audit_chain.append_chained_event`
   so the full cascade is part of the tamper-evident audit trail.
+
+Session 10 hardening
+--------------------
+* ``_find_completed_cascade`` now consults a sidecar index file
+  ``data/rtf_completed_index.jsonl`` instead of scanning the last 5000
+  ``events.jsonl`` entries.  Older cascades beyond the 5000-event window
+  were silently missed before this fix.
+* ``_store_funcs`` callable check removed -- it was dead code (the list is
+  always callable).
+* ``_completed_cache`` bounded to LRU max 1000 entries via
+  ``cachetools.LRUCache`` (falls back to an unbounded ``dict`` if
+  ``cachetools`` is not installed).
+* ``cascade()`` calls
+  ``observability.counters.record_rtf_cascade(status)`` at exit.
 
 Environment variables
 ---------------------
 ``LANGFUSE_DELETE_ENABLED``
     Set to ``"true"`` to enable real Langfuse API deletes (Phase 2).
-    Default ``"false"`` — returns a simulated digest and ``items_removed=0``.
+    Default ``"false"`` -- returns a simulated digest and ``items_removed=0``.
 """
 
 from __future__ import annotations
@@ -33,6 +50,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -40,11 +58,40 @@ from pydantic import BaseModel, ConfigDict
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Module-level idempotency cache
+# Sidecar index file for completed cascade IDs
+# ---------------------------------------------------------------------------
+
+_DATA_DIR: Path = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR.mkdir(exist_ok=True)
+
+_RTF_INDEX_FILE: Path = _DATA_DIR / "rtf_completed_index.jsonl"
+
+# ---------------------------------------------------------------------------
+# Module-level idempotency cache (LRU-bounded)
 # key = cascade_id; value = CascadeResult for completed cascades
 # ---------------------------------------------------------------------------
 
-_completed_cache: dict[str, "CascadeResult"] = {}
+try:
+    from cachetools import LRUCache
+    _completed_cache: LRUCache | dict = LRUCache(maxsize=1000)  # type: ignore[type-arg]
+except ImportError:
+    # cachetools not installed -- fall back to unbounded dict (acceptable in
+    # dev/test; production should have cachetools from requirements.txt).
+    _completed_cache = {}
+
+# ---------------------------------------------------------------------------
+# Observability counter hooks (non-raising)
+# ---------------------------------------------------------------------------
+
+try:
+    from observability.counters import record_rtf_cascade as _record_rtf_cascade
+except ImportError:
+    try:
+        from observability_compat import record_rtf_cascade as _record_rtf_cascade
+    except ImportError:
+        def _record_rtf_cascade(status: str) -> None:  # type: ignore[misc]
+            """Local no-op fallback."""
+
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -81,14 +128,23 @@ class CascadeResult(BaseModel):
 
 
 def _sha256_str(data: str) -> str:
-    """Return the SHA-256 hex digest of *data* encoded as UTF-8."""
+    """Return the SHA-256 hex digest of *data* encoded as UTF-8.
+
+    Args:
+        data: The string to hash.
+    """
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 def _emit(event_type: str, payload: dict) -> None:
-    """Emit a chained audit event, logging errors but never raising."""
+    """Emit a chained audit event, logging errors but never raising.
+
+    Args:
+        event_type: Audit event type string.
+        payload:    Payload dict merged into the event record.
+    """
     try:
-        from domain.audit_chain import append_chained_event  # late import — avoids circular
+        from domain.audit_chain import append_chained_event  # late import -- avoids circular
         append_chained_event(event_type, payload)
     except Exception as exc:  # noqa: BLE001
         logger.error(
@@ -98,8 +154,42 @@ def _emit(event_type: str, payload: dict) -> None:
 
 
 def _canonical_json(obj: dict) -> str:
-    """Return compact canonical JSON."""
+    """Return compact canonical JSON.
+
+    Args:
+        obj: Dict to serialise.
+    """
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _write_to_index(cascade_id: str, result: CascadeResult) -> None:
+    """Append a completed cascade entry to the sidecar index file.
+
+    Writes a minimal record containing ``cascade_id``, ``subject_id``, and
+    ``completed_at`` so that ``_find_completed_cascade`` can consult the index
+    without scanning ``events.jsonl``.  Errors are logged but not re-raised --
+    the sidecar is an optimisation, not the source of truth.
+
+    Args:
+        cascade_id: UUID of the completed cascade.
+        result:     The full :class:`CascadeResult`.
+    """
+    try:
+        _RTF_INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "cascade_id": cascade_id,
+            "subject_id": result.subject_id,
+            "completed_at": result.completed_at,
+            "steps": {k: v.model_dump() for k, v in result.steps.items()},
+            "started_at": result.started_at,
+        }
+        with _RTF_INDEX_FILE.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, default=str) + "\n")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "_write_to_index: failed to write sidecar entry cascade_id=%s: %s",
+            cascade_id, exc,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +316,7 @@ def _purge_langfuse(subject_id: str) -> PurgeResult:
 
     **Phase-2 stub.**  When ``LANGFUSE_DELETE_ENABLED`` is not ``"true"`` (the
     default), this returns a simulated digest and ``items_removed=0`` without
-    making any external API call.  The intent is recorded in the audit chain
-    via the caller.
+    making any external API call.
 
     Args:
         subject_id: Subject identifier to purge.
@@ -238,11 +327,10 @@ def _purge_langfuse(subject_id: str) -> PurgeResult:
     langfuse_enabled = os.environ.get("LANGFUSE_DELETE_ENABLED", "false").lower() == "true"
 
     if not langfuse_enabled:
-        # Phase-2 stub: flag disabled — return simulated digest
         simulated_digest = _sha256_str(f"disabled:{subject_id}")
         logger.info(
-            "_purge_langfuse: LANGFUSE_DELETE_ENABLED=false — stub return "
-            "subject_id=%s digest=%s…", subject_id, simulated_digest[:12],
+            "_purge_langfuse: LANGFUSE_DELETE_ENABLED=false -- stub return "
+            "subject_id=%s digest=%s...", subject_id, simulated_digest[:12],
         )
         return PurgeResult(
             store="langfuse",
@@ -250,7 +338,6 @@ def _purge_langfuse(subject_id: str) -> PurgeResult:
             sha256_digest_after=simulated_digest,
         )
 
-    # Phase 2: real Langfuse delete (wired but only reached when flag=true)
     logger.info("_purge_langfuse: real delete path subject_id=%s", subject_id)
     try:
         langfuse_host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
@@ -318,28 +405,69 @@ def _purge_langfuse(subject_id: str) -> PurgeResult:
 def _find_completed_cascade(cascade_id: str) -> CascadeResult | None:
     """Return a completed CascadeResult for *cascade_id*, or None.
 
-    Checks the module-level in-memory cache first, then falls back to a
-    backwards scan of ``data/events.jsonl`` looking for
-    ``RTF_CASCADE_COMPLETED`` events.  Matched results are cached so the scan
-    only happens once per process lifetime per cascade_id.
+    Checks the module-level in-memory LRU cache first, then consults the
+    sidecar file ``data/rtf_completed_index.jsonl`` (written when each cascade
+    completes).  Falls back to a backwards scan of ``events.jsonl`` only when
+    the sidecar file is absent (e.g. a cascade completed before this migration
+    was deployed).
+
+    Matched results are cached in the LRU cache so subsequent lookups are O(1).
+
+    Args:
+        cascade_id: UUID of the cascade to look up.
+
+    Returns:
+        :class:`CascadeResult` or None.
     """
     if cascade_id in _completed_cache:
-        return _completed_cache[cascade_id]
+        return _completed_cache[cascade_id]  # type: ignore[return-value]
 
-    # Backward scan of the event log
+    # Consult sidecar index first (O(n_completed) scan but file is small)
+    if _RTF_INDEX_FILE.exists():
+        try:
+            with _RTF_INDEX_FILE.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if entry.get("cascade_id") != cascade_id:
+                        continue
+                    steps_raw: dict = entry.get("steps", {})
+                    steps: dict[str, PurgeResult] = {
+                        store: PurgeResult.model_validate(step)
+                        for store, step in steps_raw.items()
+                    }
+                    result = CascadeResult(
+                        cascade_id=cascade_id,
+                        subject_id=entry.get("subject_id", ""),
+                        status="COMPLETED",
+                        steps=steps,
+                        started_at=entry.get("started_at", ""),
+                        completed_at=entry.get("completed_at", ""),
+                    )
+                    _completed_cache[cascade_id] = result
+                    return result
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "_find_completed_cascade: failed to read sidecar index: %s", exc
+            )
+
+    # Fallback: backward scan of events.jsonl (for pre-migration cascades)
     from domain.audit_chain import read_chain_tail  # late import
 
-    # Scan in blocks; 5000 recent events should cover recent activity
     tail = read_chain_tail(5000)
     for ev in reversed(tail):
         if ev.get("event_type") != "RTF_CASCADE_COMPLETED":
             continue
         if ev.get("cascade_id") != cascade_id:
             continue
-        # Reconstruct CascadeResult from the payload stored on the event
         try:
-            steps_raw: dict = ev.get("steps", {})
-            steps: dict[str, PurgeResult] = {
+            steps_raw = ev.get("steps", {})
+            steps = {
                 store: PurgeResult.model_validate(step)
                 for store, step in steps_raw.items()
             }
@@ -358,6 +486,17 @@ def _find_completed_cascade(cascade_id: str) -> CascadeResult | None:
                 "_find_completed_cascade: failed to reconstruct result "
                 "cascade_id=%s: %s", cascade_id, exc,
             )
+
+    # Sidecar/events disagreement: the sidecar index exists but does NOT name this
+    # cascade, and the tail scan also missed it. Log loudly so operators can detect
+    # a sidecar write gap. We return None (re-execute), which is the safer of the
+    # two failure modes — re-execution is idempotent at each store layer.
+    if _RTF_INDEX_FILE.exists():
+        logger.warning(
+            "_find_completed_cascade: cascade_id=%s not found in sidecar or "
+            "%d-event tail; cascade will re-execute. Possible sidecar write gap.",
+            cascade_id, 5000,
+        )
     return None
 
 
@@ -375,11 +514,14 @@ def cascade(
     """Execute a Right-to-Forget cascade for *subject_id* across all four stores.
 
     If *cascade_id* is supplied and a ``RTF_CASCADE_COMPLETED`` event already
-    exists for it, returns ``ALREADY_COMPLETED`` immediately (idempotency).
+    exists for it (via sidecar index or LRU cache), returns ``ALREADY_COMPLETED``
+    immediately (idempotency).
 
-    Otherwise, runs the stores in order: vault → tier2 → tier3 → langfuse.
+    Otherwise, runs the stores in order: vault -> tier2 -> tier3 -> langfuse.
     If any step fails, the cascade returns ``PARTIAL_FAILURE`` without emitting
     ``RTF_CASCADE_COMPLETED``.
+
+    Calls ``observability.counters.record_rtf_cascade(status)`` at exit.
 
     Args:
         subject_id:       Identifier of the data subject (e.g. customer UUID).
@@ -397,15 +539,13 @@ def cascade(
         subject_id, reason, cascade_id,
     )
 
-    # Capture the langfuse-enable choice as a local — never mutate os.environ
-    # (would race across concurrent requests). Pass into _purge_langfuse below.
     _langfuse_flag_local: bool = (
         langfuse_enabled
         if langfuse_enabled is not None
         else os.environ.get("LANGFUSE_DELETE_ENABLED", "false").lower() == "true"
     )
 
-    # Idempotency check — must happen before generating a new cascade_id
+    # Idempotency check -- must happen before generating a new cascade_id
     if cascade_id:
         prior = _find_completed_cascade(cascade_id)
         if prior is not None:
@@ -413,7 +553,7 @@ def cascade(
                 "cascade: ALREADY_COMPLETED cascade_id=%s subject_id=%s",
                 cascade_id, subject_id,
             )
-            return CascadeResult(
+            result = CascadeResult(
                 cascade_id=cascade_id,
                 subject_id=subject_id,
                 status="ALREADY_COMPLETED",
@@ -421,6 +561,11 @@ def cascade(
                 started_at=prior.started_at,
                 completed_at=prior.completed_at,
             )
+            try:
+                _record_rtf_cascade("ALREADY_COMPLETED")
+            except Exception as _obs_exc:  # noqa: BLE001
+                logger.warning("cascade: record_rtf_cascade raised: %s", _obs_exc)
+            return result
 
     if not cascade_id:
         cascade_id = str(uuid.uuid4())
@@ -435,14 +580,15 @@ def cascade(
     })
 
     steps: dict[str, PurgeResult] = {}
-    _store_funcs: list[tuple[str, object]] = [
+    # _store_funcs dead code removed in Session 10; inline list is the single source of truth.
+    _purge_steps: list[tuple[str, object]] = [
         ("vault", _purge_vault),
         ("tier2", _purge_tier2),
         ("tier3", _purge_tier3),
         ("langfuse", _purge_langfuse),
     ]
 
-    for store_name, purge_fn in _store_funcs:
+    for store_name, purge_fn in _purge_steps:
         _emit("RTF_STEP_STARTED", {
             "cascade_id": cascade_id,
             "subject_id": subject_id,
@@ -450,11 +596,7 @@ def cascade(
         })
 
         try:
-            import inspect
-            if inspect.isfunction(purge_fn) or callable(purge_fn):
-                step_result: PurgeResult = purge_fn(subject_id)  # type: ignore[operator]
-            else:
-                raise TypeError(f"purge_fn for {store_name} is not callable")
+            step_result: PurgeResult = purge_fn(subject_id)  # type: ignore[operator]
         except Exception as exc:  # noqa: BLE001
             step_result = PurgeResult(
                 store=store_name,
@@ -487,7 +629,7 @@ def cascade(
                 "cascade: PARTIAL_FAILURE cascade_id=%s failed_store=%s error=%s",
                 cascade_id, store_name, step_result.error,
             )
-            return CascadeResult(
+            result = CascadeResult(
                 cascade_id=cascade_id,
                 subject_id=subject_id,
                 status="PARTIAL_FAILURE",
@@ -495,6 +637,11 @@ def cascade(
                 started_at=started_at,
                 completed_at=completed_at,
             )
+            try:
+                _record_rtf_cascade("PARTIAL_FAILURE")
+            except Exception as _obs_exc:  # noqa: BLE001
+                logger.warning("cascade: record_rtf_cascade raised: %s", _obs_exc)
+            return result
 
         _emit("RTF_STEP_COMPLETED", {
             "cascade_id": cascade_id,
@@ -506,7 +653,6 @@ def cascade(
 
     # All steps succeeded
     completed_at = datetime.now(timezone.utc).isoformat()
-
     steps_serialisable = {k: v.model_dump() for k, v in steps.items()}
 
     _emit("RTF_CASCADE_COMPLETED", {
@@ -533,13 +679,20 @@ def cascade(
         completed_at=completed_at,
     )
 
-    # Cache for idempotency
+    # Cache for idempotency (LRU-bounded)
     _completed_cache[cascade_id] = result
+
+    # Write sidecar index entry for fast future lookups
+    _write_to_index(cascade_id, result)
 
     logger.info(
         "cascade: exit COMPLETED cascade_id=%s subject_id=%s",
         cascade_id, subject_id,
     )
+    try:
+        _record_rtf_cascade("COMPLETED")
+    except Exception as _obs_exc:  # noqa: BLE001
+        logger.warning("cascade: record_rtf_cascade raised: %s", _obs_exc)
     return result
 
 
@@ -566,9 +719,6 @@ def list_cascades() -> list[CascadeResult]:
     Returns:
         List of :class:`CascadeResult` ordered oldest-first.
     """
-    from domain.audit_chain import read_chain_tail  # late import
-
-    # Read all events — necessary for full historical list
     from domain.audit_chain import _read_jsonl, EVENTS_FILE  # late import
 
     all_events = _read_jsonl(EVENTS_FILE)

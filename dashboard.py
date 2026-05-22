@@ -1,5 +1,7 @@
 """FastAPI dashboard for AI Assurance Platform."""
 
+from __future__ import annotations
+
 import sys
 import io
 import os
@@ -9,18 +11,20 @@ from pathlib import Path
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# Load environment variables FIRST - before any other imports
-env_path = Path(__file__).parent / ".env"
-if env_path.exists():
-    env_content = env_path.read_text()
-    for line in env_content.split('\n'):
-        line = line.strip()
-        if '=' in line and not line.startswith('#'):
-            key, value = line.split('=', 1)
-            os.environ[key] = value
-
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=str(env_path), override=True)
+
+# Load environment variables FIRST -- before any other domain imports.
+# The previous hand-rolled .env parser (reading local.env manually) was dead
+# code after load_dotenv(override=True) ran anyway. Removed in Session 10.
+_env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=str(_env_path), override=True)
+
+# Initialise App Insights telemetry (no-op when connection string is absent).
+try:
+    from observability.app_insights import init_app_insights as _init_ai
+    _init_ai(os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
+except ImportError:
+    pass  # observability package not yet installed -- safe to skip
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -61,7 +65,21 @@ from api.projection import router as projection_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
 
-load_dotenv()
+# Metrics router -- 404 when METRICS_ENABLED != "true"
+try:
+    from api.metrics import router as _metrics_router
+    _HAS_METRICS = True
+except ImportError:
+    _HAS_METRICS = False
+    _metrics_router = None  # type: ignore[assignment]
+
+# RequestContextMiddleware -- stamps X-Request-Id into ContextVar for structured logging
+try:
+    from observability.middleware import RequestContextMiddleware
+    _HAS_REQUEST_CTX = True
+except ImportError:
+    _HAS_REQUEST_CTX = False
+    RequestContextMiddleware = None  # type: ignore[assignment]
 
 
 def validate_api_keys() -> dict[str, bool]:
@@ -92,7 +110,7 @@ def validate_api_keys() -> dict[str, bool]:
     return status
 
 
-def print_startup_status():
+def print_startup_status() -> bool:
     """Print API key validation status on startup."""
     status = validate_api_keys()
 
@@ -101,17 +119,16 @@ def print_startup_status():
     print("=" * 65)
 
     for key, is_valid in status.items():
-        symbol = "✓" if is_valid else "✗"
-        status_text = "OK" if is_valid else "MISSING"
-        print(f"{symbol} {key:<25} {status_text}")
+        symbol = "OK" if is_valid else "MISSING"
+        print(f"  {key:<25} {symbol}")
 
-    all_required = status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY")
+    all_required = bool(status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY"))
 
     print("=" * 65)
     if all_required:
-        print("✓ All required keys configured. Dashboard ready.")
+        print("All required keys configured. Dashboard ready.")
     else:
-        print("✗ Missing required API keys. Edit .env and restart.")
+        print("Missing required API keys. Edit .env and restart.")
     print("=" * 65 + "\n")
 
     return all_required
@@ -132,14 +149,18 @@ app.add_middleware(
 )
 
 # Middleware execution order (Starlette: last add_middleware = outermost = first to execute).
-# SessionAuth added first (innermost), HMAC added last (outermost).
-# Request flow: HMACAuthMiddleware -> SessionAuthMiddleware -> routes.
-# /api/sdk/ is in SessionAuth PUBLIC_PREFIXES so it passes through after HMAC verifies it.
+# RequestContextMiddleware added first (innermost of the request-id tier),
+# SessionAuth added next (auth gate), HMAC added last (outermost SDK gate).
+# Request flow: HMACAuthMiddleware -> SessionAuthMiddleware -> RequestContextMiddleware -> routes.
 
-# Session-cookie auth gate (no-op unless AUTH_ENABLED=true) — innermost
+# RequestContextMiddleware -- generates X-Request-Id, stamps into ContextVar (innermost)
+if _HAS_REQUEST_CTX:
+    app.add_middleware(RequestContextMiddleware)
+
+# Session-cookie auth gate (no-op unless AUTH_ENABLED=true)
 app.add_middleware(SessionAuthMiddleware)
 
-# HMAC auth for /api/sdk/* — outermost, executes first on every request
+# HMAC auth for /api/sdk/* -- outermost, executes first on every request
 app.add_middleware(HMACAuthMiddleware)
 app.include_router(auth_router)
 
@@ -177,17 +198,22 @@ app.include_router(agent_notifications_router)
 app.include_router(rtf_router)
 app.include_router(audit_verify_router)
 app.include_router(projection_router)
+if _HAS_METRICS and _metrics_router is not None:
+    app.include_router(_metrics_router)
 
 
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Return API health status and validation results."""
+    """Return API health status.
+
+    Returns only {"status": "ready" | "incomplete"}.
+    The previous api_keys disclosure (a map of configured-key flags) has been
+    removed in Session 10 -- it leaked security-relevant configuration to
+    unauthenticated callers (SECURITY DEBT -- Session 09, closed here).
+    """
     status = validate_api_keys()
-    all_required = status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY")
-    return {
-        "status": "ready" if all_required else "incomplete",
-        "api_keys": status,
-    }
+    all_required = bool(status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY"))
+    return {"status": "ready" if all_required else "incomplete"}
 
 
 @app.get("/api/report/compliance")
@@ -362,6 +388,12 @@ async def page_audit_events():
     return _page("audit-events.html")
 
 
+@app.get("/projection")
+async def page_projection():
+    """Serve the event projection read-side UI."""
+    return _page("projection.html")
+
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -372,6 +404,6 @@ if __name__ == "__main__":
     print("=" * 65 + "\n")
 
     # Validate API keys on startup
-    all_configured = print_startup_status()
+    print_startup_status()
 
     uvicorn.run(app, host="127.0.0.1", port=9007, log_level="info")

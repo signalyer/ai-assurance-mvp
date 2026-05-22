@@ -5,12 +5,18 @@ Priority order (highest to lowest):
   2. Credentials file: ~/.signallayer/credentials.json
 
 Fails loudly if required values are missing.
+
+Session 10 hardening: ``save_credentials`` uses ``os.open`` with
+``O_CREAT | O_WRONLY | O_TRUNC`` and mode ``0o600`` atomically on POSIX so
+there is never a window where the file exists but is world-readable. This closes
+the TOCTOU race in the previous ``write_text + chmod`` pattern.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import TypedDict
 
@@ -67,6 +73,15 @@ def load_credentials() -> Credentials:
 def save_credentials(api_key: str, base_url: str, key_id: str) -> Path:
     """Persist credentials to ~/.signallayer/credentials.json with mode 0600.
 
+    On POSIX the file is created atomically with mode 0600 via ``os.open`` with
+    ``O_CREAT | O_WRONLY | O_TRUNC``. This closes the TOCTOU window that existed
+    in the previous ``write_text + chmod`` approach where the file was temporarily
+    world-readable between creation and permission tightening.
+
+    On Windows the file is written normally; NTFS ACLs must be tightened manually:
+        icacls "%USERPROFILE%\\.signallayer\\credentials.json"
+            /inheritance:r /grant:r "%USERNAME%:(R,W)"
+
     Args:
         api_key: The HMAC secret / API key.
         base_url: The platform base URL.
@@ -76,17 +91,24 @@ def save_credentials(api_key: str, base_url: str, key_id: str) -> Path:
         Path to the credentials file written.
     """
     CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"api_key": api_key, "base_url": base_url, "key_id": key_id}
-    CREDENTIALS_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    payload = json.dumps({"api_key": api_key, "base_url": base_url, "key_id": key_id}, indent=2)
 
-    # Restrict permissions — POSIX only; Windows falls back to NTFS ACL note.
-    try:
-        os.chmod(CREDENTIALS_FILE, 0o600)
-    except (AttributeError, NotImplementedError, OSError):
-        # On Windows, chmod is a no-op for most permission bits.
-        # Callers on Windows should secure the file via icacls manually:
-        #   icacls "%USERPROFILE%\.signallayer\credentials.json" /inheritance:r
-        #         /grant:r "%USERNAME%:(R,W)"
-        pass
+    if sys.platform != "win32":
+        # POSIX: open with mode 0o600 atomically -- no world-readable window.
+        fd = os.open(
+            str(CREDENTIALS_FILE),
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        try:
+            os.write(fd, payload.encode("utf-8"))
+        finally:
+            os.close(fd)
+    else:
+        # Windows: os.open mode bits are not enforced; write normally.
+        # Callers on Windows should secure the file via icacls:
+        #   icacls "%USERPROFILE%\.signallayer\credentials.json"
+        #          /inheritance:r /grant:r "%USERNAME%:(R,W)"
+        CREDENTIALS_FILE.write_text(payload, encoding="utf-8")
 
     return CREDENTIALS_FILE

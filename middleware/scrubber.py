@@ -20,6 +20,16 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# Observability counter hook (non-raising fallback if package absent)
+try:
+    from observability.counters import record_scrub as _record_scrub
+except ImportError:
+    try:
+        from observability_compat import record_scrub as _record_scrub
+    except ImportError:
+        def _record_scrub(detected_count: int = 0) -> None:  # type: ignore[misc]
+            """Local no-op fallback."""
+
 
 def scrub_pii(scope: str = "default") -> Callable:
     """
@@ -150,6 +160,12 @@ def _scrub_args(
             import hashlib
             vault_id = f"{scope}_nopii_{hashlib.sha256(prompt.encode()).hexdigest()[:12]}"
 
+        # Count detected PII entities by comparing token placeholders
+        detected_count = len([t for t in scrubbed.split() if t.startswith("[") and t.endswith("]")]) if scrubbed != prompt else 0
+        try:
+            _record_scrub(detected_count)
+        except Exception as _obs_exc:  # noqa: BLE001
+            logger.warning("@scrub_pii: record_scrub raised: %s", _obs_exc)
         logger.debug(f"@scrub_pii: scrubbed prompt in {func.__name__}, vault_id={vault_id}")
         return scrubbed, vault_id
 

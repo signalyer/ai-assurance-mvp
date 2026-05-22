@@ -187,6 +187,17 @@ def _evaluate_via_opa(
 
         except requests.exceptions.RequestException as e:
             logger.warning(f"OPA query failed for {category.value}: {e}; falling back to local")
+            try:
+                from observability.counters import record_opa_unreachable as _rec_opa
+            except ImportError:
+                try:
+                    from observability_compat import record_opa_unreachable as _rec_opa
+                except ImportError:
+                    def _rec_opa() -> None: pass  # type: ignore[misc]
+            try:
+                _rec_opa()
+            except Exception:  # noqa: BLE001
+                pass
             return _evaluate_local(workload_id, action, input_data, [category])
 
     # All categories ALLOW

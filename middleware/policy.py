@@ -17,6 +17,16 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+# Observability counter hook (non-raising fallback if package absent)
+try:
+    from observability.counters import record_policy_deny as _record_policy_deny
+except ImportError:
+    try:
+        from observability_compat import record_policy_deny as _record_policy_deny
+    except ImportError:
+        def _record_policy_deny() -> None:  # type: ignore[misc]
+            """Local no-op fallback."""
+
 
 class PolicyDeniedError(Exception):
     """Raised when a policy_gate evaluates to DENY."""
@@ -68,6 +78,10 @@ def policy_gate(
                 policy_result = _evaluate_policy(func, args, kwargs, action, workload_id_arg)
 
                 if not _should_proceed(policy_result, allow_review, strict, func.__name__):
+                    try:
+                        _record_policy_deny()
+                    except Exception as _obs_exc:  # noqa: BLE001
+                        logger.warning("@policy_gate: record_policy_deny raised: %s", _obs_exc)
                     raise PolicyDeniedError(
                         policy_name=policy_result.policy_name,
                         reason=policy_result.reason,
@@ -88,6 +102,10 @@ def policy_gate(
                 policy_result = _evaluate_policy(func, args, kwargs, action, workload_id_arg)
 
                 if not _should_proceed(policy_result, allow_review, strict, func.__name__):
+                    try:
+                        _record_policy_deny()
+                    except Exception as _obs_exc:  # noqa: BLE001
+                        logger.warning("@policy_gate: record_policy_deny raised: %s", _obs_exc)
                     raise PolicyDeniedError(
                         policy_name=policy_result.policy_name,
                         reason=policy_result.reason,

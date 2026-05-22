@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 from . import __version__
@@ -40,7 +38,7 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def root(
     ctx: typer.Context,
-    version: Optional[bool] = typer.Option(  # noqa: UP007
+    version: bool | None = typer.Option(
         None,
         "--version",
         "-v",

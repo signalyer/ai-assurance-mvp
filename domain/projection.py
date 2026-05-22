@@ -261,23 +261,9 @@ def _upsert_policy_evaluation(event: dict, conn: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Dispatch table
+# Dispatch table (removed in Session 10 -- was dead code alongside _dispatch()
+# if/elif body; the if/elif body is the single source of truth).
 # ---------------------------------------------------------------------------
-
-#: Maps event_type prefix/exact strings to handler functions.
-#: Checked in order; first match wins.
-_DISPATCH: dict[str, str] = {
-    "AGENT_CREATED":              "_upsert_ai_system",
-    "AGENT_PUBLISHED":            "_upsert_ai_system",
-    "EVAL_RUN_STARTED":           "_upsert_eval_run_started",
-    "EVAL_RUN_COMPLETED":         "_upsert_eval_run_completed",
-    "FINDING_CREATED":            "_upsert_finding",
-    "FINDING_STATUS_CHANGED":     "_upsert_finding",
-    "RELEASE_DECISION_RECORDED":  "_upsert_release_decision",
-    "POLICY_EVALUATED":           "_upsert_policy_evaluation",
-    "RTF_CASCADE_STARTED":        "_upsert_finding",
-    "RTF_CASCADE_COMPLETED":      "_upsert_finding",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +314,14 @@ def project_event(event: dict, conn: Any) -> None:
         logger.debug("project_event: exit event_id=%s event_type=%s committed", event_id, event_type)
 
     except Exception:
-        conn.rollback()
+        # Wrap rollback in its own try/except so a secondary rollback failure
+        # does not replace the original exception (Session 10 debt fix).
+        try:
+            conn.rollback()
+        except Exception as _rb_exc:  # noqa: BLE001
+            logger.warning(
+                "project_event: rollback failed event_id=%s: %s", event_id, _rb_exc
+            )
         logger.exception(
             "project_event: rollback event_id=%s event_type=%s", event_id, event_type
         )

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -9,6 +10,18 @@ from enum import Enum
 from typing import Optional
 
 from storage import _append_jsonl
+
+logger = logging.getLogger(__name__)
+
+# Observability counter hook (non-raising fallback if package absent)
+try:
+    from observability.counters import record_pii_leak as _record_pii_leak
+except ImportError:
+    try:
+        from observability_compat import record_pii_leak as _record_pii_leak
+    except ImportError:
+        def _record_pii_leak() -> None:  # type: ignore[misc]
+            """Local no-op fallback."""
 
 
 class InjectionAttackType(str, Enum):
@@ -165,7 +178,14 @@ def detect_injection(text: str, model_name: str = "gpt-4o-mini") -> InjectionRes
         }
         _append_jsonl("data/injection_attempts.jsonl", log_entry)
     except Exception as e:
-        print(f"Warning: injection logging failed: {e}")
+        logger.warning("detect_injection: logging failed: %s", e)
+
+    # Observability counter: count detection attempts (positive or negative)
+    if result.is_injection:
+        try:
+            _record_pii_leak()
+        except Exception as _obs_exc:  # noqa: BLE001
+            logger.warning("detect_injection: record_pii_leak raised: %s", _obs_exc)
 
     return result
 

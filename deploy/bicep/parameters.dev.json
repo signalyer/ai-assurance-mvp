@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "appName": {
+      "value": "app-aigovern-dev"
+    },
+    "workspaceName": {
+      "value": "log-aigovern-prod"
+    },
+    "appInsightsName": {
+      "value": "appi-aigovern-prod"
+    },
+    "actionGroupId": {
+      "value": ""
+    }
+  }
+}

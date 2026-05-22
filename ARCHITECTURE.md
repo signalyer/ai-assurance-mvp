@@ -109,10 +109,32 @@ Modified: `dashboard.py` (mounts api.projection.router + adds HMACAuthMiddleware
 
 Test count: 179 passing (170 from prior + 9 new integration), 1 skipped (Windows file-mode), 0 errors. Run with `--basetemp=./data/_pytest_tmp` to avoid Windows tmp ACL issue on pre-Session-08 tests.
 
+## Files — Built (2026-05-22, Session 10)
+### Session 10 (Production Hardening + Load Tests + IaC — Day 10)
+Observability layer (`observability/`): `counters.py` (8 Prometheus Counters with idempotent registration + no-op fallback when prometheus_client absent), `app_insights.py` (`init_app_insights(connection_string)` — idempotent, never raises, never logs any portion of the conn string), `structured_log.py` (JSON-formatted logger; ContextVar-based `request_id` / `role` injection; `default=str` for JSON safety), `middleware.py` (`RequestContextMiddleware` — generates `X-Request-Id` if absent, ContextVar reset in `finally`), `api/metrics.py` (GET /api/metrics — 404 when disabled, 401 with constant-time token compare, Prometheus exposition format).
+
+IaC (`deploy/bicep/`): `main.bicep` (composes workspace + App Insights + 8 alerts; `@secure()` connection-string output; references existing ASP/web-app as `Ignore` rather than recreating), `appinsights.bicep` (Log Analytics workspace `log-aigovern-prod` PerGB2018 30-day retention + workspace-based App Insights), `alerts.bicep` (8 scheduledQueryRules: pii-leak, opa-unreachable, vault-error, audit-chain-broken, http-5xx-rate, p95-latency, rtf-partial-failure, scrub-rate-regression), `parameters.dev.json`, `README.md`.
+
+Load tests (`loadtests/`): `locustfile.py` (4 weighted tasks: scrub 60%, policy 20%, framework 10%, health 10%; 25 RPS sustained per Q3 B1 decision), `scrubber_perf.py` (10k payload microbench, p95 < 100ms; trial p95 = 6.3ms), `opa_p95.py` (1000 policy evals, p95 < 50ms), `framework_coverage_perf.py` (50 framework_matrix calls, median < 2s, exit 2 if no seeded systems), `README.md` (thresholds + SKU caveat).
+
+Security scan + smoke: `deploy/security_scan.ps1` (bandit + pip-audit + secrets-grep with patterns for AWS/Anthropic/OpenAI/Slack/GitHub/GitLab/Postgres/Azure Storage; aggregate report to `data/security_scan_report.json`), `deploy/smoke_e2e.ps1` (6 demo scenario probes; dev/staging allowlist guard refuses to send synthetic PII to prod URLs unless `SMOKE_ALLOW_PROD=true`).
+
+Runbook: `docs/RUNBOOK.md` (8 alert definitions + paging; rollback steps; KQL snippets for trace lookup, PII detections, RTF audit; Azure Artifacts feed 6-step checklist; STRICT_HMAC_BOOT toggle).
+
+Tests: `tests/test_session10_hardening.py` (HMAC byte-equality across 3 signers; STRICT_HMAC_BOOT; /api/health no api_keys leak; audit chain writer-lock; 100-thread concurrent appenders → CLEAN; RTF sidecar; audit_events role gate; save_credentials atomic open POSIX), `tests/test_session10_observability.py` (25 tests: counter idempotency + missing-library fallback, App Insights no-op + bad-config tolerance, RequestContextMiddleware ContextVar reset, /api/metrics gate matrix), `tests/test_session10_perf_smoke.py` (12 tests: microbench importability, threshold constants frozen as module-level guards, graceful skip when systems not seeded).
+
+Debt fixes closed (18 items): hmac_auth `_SECRET` cached at import + `STRICT_HMAC_BOOT`; cli/sl/config atomic `os.open(O_CREAT|O_WRONLY|O_TRUNC, 0o600)`; dashboard.py `.env` parser removed + `/api/health` strips `api_keys` + RequestContextMiddleware mounted + metrics router + App Insights init; projection.py dead `_DISPATCH` removed + rollback wrapped; cli/sl/main.py `bool | None`; api/audit_verify.py `require_role("auditor", "ciso")` + `public_mode` (RECURSIVE strip — fixed post-review) + absolute `from_index`; agent_memory `metadata->>'subject_id' = %s` + `idx_episodes_subject_id`; rag_engine `$skip` pagination (FAIL-CLOSED on cap exhaustion — fixed post-review); audit_chain module-level prev_hash + chained_count cache + `portalocker` advisory lock + warm-start docstring honest (fixed post-review); right_to_forget sidecar `rtf_completed_index.jsonl` + LRU 1000 cache + `_store_funcs` removed + warning log on sidecar/events disagreement (fixed post-review); counter hooks added to scrubber/policy/injection/policy_engine/deid_vault/audit_chain/right_to_forget/evaluator.
+
+Critical post-review fixes: (1) `require_role()` with empty `allowed_roles` now raises `ValueError` (previously short-circuited and opened access in dev). (2) `_strip_public` is now recursive — nested PII inside `payload` sub-dicts is stripped at every depth. (3) `purge_chunks` cap raises `RuntimeError` instead of warn-and-continue — forces RTF cascade `PARTIAL_FAILURE`. (4) App Insights conn-string prefix no longer logged. (5) `smoke_e2e.ps1` host allowlist guard prevents accidental PII send to prod. (6) secrets-grep patterns broadened (Anthropic, Postgres, Azure Storage, SAS). (7) `_seed_cache_from_file` docstring corrected (full file scan, not reverse-tail).
+
+Modified: `requirements.txt` (+opentelemetry-sdk, +azure-monitor-opentelemetry-exporter, +prometheus-client, +portalocker, +cachetools), `requirements-dev.txt` NEW (+locust, +bandit, +pip-audit), `local.env` placeholders for APPLICATIONINSIGHTS_CONNECTION_STRING / METRICS_ENABLED / METRICS_TOKEN / STRICT_HMAC_BOOT / LOCUST_TARGET.
+
+Test count: 224 passing (179 prior regression + 45 new across hardening/observability/perf-smoke), 3 skipped (Windows file-mode-0600 POSIX-only + seeded-systems perf bench + one prior skip), 0 errors.
+
 ## Files — Planned
-### Sessions 10+ — Hardening, Demo, Final Deploy
+### Sessions 11-12 — Demo Orchestration + Final Deploy
 - See docs/plans/12-DAY-PRODUCTION-SPRINT.md
-- Session 10: Production Hardening + Deploy (Day 10)
+- Session 11: Demo Orchestration + ISO/SR-11-7/FFIEC PDF Packs (Day 11)
 - Session 11: Demo Orchestration + ISO/SR-11-7/FFIEC PDF Packs (Day 11)
 - Session 12: Stakeholder Dry-Run + Final Deploy (Day 12)
 

@@ -104,6 +104,9 @@ CREATE INDEX IF NOT EXISTS idx_episodes_expires
 CREATE INDEX IF NOT EXISTS idx_episodes_fts
     ON episodes
     USING gin(to_tsvector('english', prompt || ' ' || response));
+
+CREATE INDEX IF NOT EXISTS idx_episodes_subject_id
+    ON episodes ((metadata->>'subject_id'));
 """
 
 
@@ -903,14 +906,17 @@ def purge_episodes(
         try:
             from sqlalchemy import text
 
-            # Build filter clause — parameterized, never f-string SQL
+            # Build filter clause using JSONB extraction operator to avoid
+            # false-positive purges from short subject_ids that are substrings
+            # of other fields (Session 10 debt fix -- replaces LIKE %subject_id%).
+            # Uses idx_episodes_subject_id index (created in schema bootstrap below).
             if workload_id:
                 select_sql = text(
                     """
                     SELECT episode_id, workload_id
                     FROM episodes
                     WHERE workload_id = :workload_id
-                      AND metadata::text LIKE :subject_pattern
+                      AND metadata->>'subject_id' = :subject_id
                     """
                 )
                 rows = []
@@ -919,7 +925,7 @@ def purge_episodes(
                         select_sql,
                         {
                             "workload_id": workload_id,
-                            "subject_pattern": f"%{subject_id}%",
+                            "subject_id": subject_id,
                         },
                     ).fetchall()
             else:
@@ -927,13 +933,13 @@ def purge_episodes(
                     """
                     SELECT episode_id, workload_id
                     FROM episodes
-                    WHERE metadata::text LIKE :subject_pattern
+                    WHERE metadata->>'subject_id' = :subject_id
                     """
                 )
                 with _engine.connect() as conn:
                     rows = conn.execute(
                         select_sql,
-                        {"subject_pattern": f"%{subject_id}%"},
+                        {"subject_id": subject_id},
                     ).fetchall()
 
             purge_sql = text(
