@@ -181,9 +181,57 @@ def assessments_for(system_id: str) -> list[Assessment]:
     return seeded + intake
 
 
+EVENTS_FILE = _DATA_DIR / "events.jsonl"
+
+
+def _append_jsonl(path: Path, record: dict) -> None:
+    """Append a single JSON record as a line to path, creating parent dirs if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def append_agent_event(event_type: str, payload: dict) -> None:
+    """Append an agent lifecycle event to data/events.jsonl.
+
+    Every event receives an ISO timestamp at write time.  This JSONL file is
+    the immutable audit trail for the agent registry — Postgres is the live
+    query store; this file is the append-only record for compliance purposes.
+
+    Args:
+        event_type: e.g. 'AGENT_CREATED', 'AGENT_PUBLISHED', 'AGENT_BINDING_CREATED'
+        payload:    Arbitrary dict of context fields (agent_id, version_id, etc.)
+    """
+    from datetime import datetime, timezone
+
+    record = {
+        "event_type": event_type,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        **payload,
+    }
+    _append_jsonl(EVENTS_FILE, record)
+
+
+def read_agent_events(event_type: str | None = None) -> list[dict]:
+    """Read agent lifecycle events from data/events.jsonl.
+
+    Args:
+        event_type: Optional filter; if supplied only events matching this type
+                    are returned.  Pass None to return all events.
+
+    Returns:
+        List of event dicts ordered oldest-first (file insertion order).
+    """
+    records = _read_jsonl(EVENTS_FILE)
+    if event_type is None:
+        return records
+    return [r for r in records if r.get("event_type") == event_type]
+
+
 __all__ = [
     "list_ai_systems", "get_ai_system",
     "findings_for", "evidence_for", "eval_results_for",
     "runtime_events_for", "release_gates_for", "assessments_for",
     "DEMO_OVERLAY_FILE", "FINDINGS_EVENTS_FILE",
+    "append_agent_event", "read_agent_events", "EVENTS_FILE",
 ]

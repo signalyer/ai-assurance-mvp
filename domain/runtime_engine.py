@@ -376,6 +376,130 @@ def update_incident(incident_id: str, new_status: str, actor: str, note: str | N
     return next(i for i in list_incidents() if i.id == incident_id)
 
 
+# ---------------------------------------------------------------------------
+# Agent-specific memory loading — Session 07 additions
+# ---------------------------------------------------------------------------
+
+def get_agent_context(
+    system_id: str,
+    agent_id: str,
+    version_id: str,
+    query: str,
+    limit: int = 5,
+) -> str:
+    """Load Tier 2 episodic memory for a specific agent bound to a system.
+
+    Uses the composite workload_id ``"{system_id}__{agent_id}__{version_id}"``
+    so agent episodes are stored and retrieved independently from system-level
+    episodes.
+
+    Args:
+        system_id:  The AI system identifier.
+        agent_id:   The agent identifier (e.g. ``"ai-agent-pay-fraud"``).
+        version_id: The agent semver (e.g. ``"v1.0.0"``).
+        query:      Search/recall query string (passed to build_context).
+        limit:      Maximum number of T2 episodes to include (default 5).
+
+    Returns:
+        Context string from :func:`domain.agent_memory.build_context` using
+        the composite workload_id.  Returns empty string on failure.
+    """
+    workload_id = f"{system_id}__{agent_id}__{version_id}"
+    try:
+        from domain.agent_memory import build_context  # type: ignore[import]
+
+        return build_context(
+            workload_id=workload_id,
+            max_episodes=limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).error(
+            f"get_agent_context: failed for {workload_id}: {exc}", exc_info=True
+        )
+        return ""
+
+
+def assemble_context(
+    system_id: str,
+    query: str,
+    memory_limit: int = 10,
+    agent_memory_limit: int = 5,
+) -> "dict | str":
+    """Assemble a multi-tier runtime context for a system and all its bound agents.
+
+    Behavior:
+    - **No bound agents** (or agent modules unavailable): loads Tier 2 episodic
+      memory at system level (``workload_id = system_id``) and returns the
+      context string directly.  Backward compatible with pre-Session 07 callers.
+    - **With bound agents**: returns a dict::
+
+          {
+              "system_context": "<system T2+T3+T4 context string>",
+              "per_agent_contexts": {
+                  "<agent_id>": "<agent T2 context string>",
+                  ...
+              }
+          }
+
+    In both cases the system-level context is always included; agents
+    inherit it plus their own episode tier.
+
+    Args:
+        system_id:         The AI system identifier.
+        query:             Query string for semantic recall context.
+        memory_limit:      Max system-level T2 episodes (default 10).
+        agent_memory_limit: Max per-agent T2 episodes (default 5).
+
+    Returns:
+        Either a plain context string (no bindings) or a dict
+        (bindings present).
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    # Always build system-level context
+    system_context: str = ""
+    try:
+        from domain.agent_memory import build_context  # type: ignore[import]
+
+        system_context = build_context(
+            workload_id=system_id,
+            max_episodes=memory_limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log.error(f"assemble_context: system context failed for {system_id}: {exc}", exc_info=True)
+        system_context = ""
+
+    # Attempt to load bound agents
+    try:
+        from domain.agent_bindings import list_bindings_for_system  # type: ignore[import]
+
+        bindings = list_bindings_for_system(system_id)
+        if not bindings:
+            # No agents bound — return system context string directly (backward compat)
+            return system_context
+
+        per_agent_contexts: dict[str, str] = {}
+        for binding in bindings:
+            per_agent_contexts[binding.agent_id] = get_agent_context(
+                system_id=system_id,
+                agent_id=binding.agent_id,
+                version_id=binding.version_id,
+                query=query,
+                limit=agent_memory_limit,
+            )
+
+        return {
+            "system_context": system_context,
+            "per_agent_contexts": per_agent_contexts,
+        }
+
+    except (ImportError, Exception):  # noqa: BLE001
+        # Implementer 1 modules not yet present — return system context only
+        return system_context
+
+
 __all__ = [
     "MonitoringLevel", "ApprovalStatus", "IncidentStatus",
     "RuntimeAction", "SystemRuntimeState", "ApprovalRequest", "Incident",
@@ -383,4 +507,5 @@ __all__ = [
     "set_monitoring_level",
     "require_human_approval", "resolve_approval", "list_approvals",
     "create_incident", "update_incident", "list_incidents",
+    "get_agent_context", "assemble_context",
 ]

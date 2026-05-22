@@ -751,9 +751,229 @@ def apply_exception(
     return ex
 
 
+# ---------------------------------------------------------------------------
+# Agent-aware gate evaluation — Session 07 additions
+# ---------------------------------------------------------------------------
+
+def evaluate_agent_gates(
+    agent_id: str,
+    version_id: str,
+    gates: list[str] | None = None,
+) -> dict[str, GateResult]:
+    """Evaluate release gates for a single agent version.
+
+    Uses the agent's eval scores (EvalStatus fields) stored on the agent model
+    to assess each gate.  Absent or erroring eval scores default to FAIL
+    (fail-closed per spec).
+
+    Args:
+        agent_id:   Agent identifier (e.g. ``"ai-agent-pay-fraud"``).
+        version_id: Semver string of the published version (e.g. ``"v1.0.0"``).
+        gates:      Optional list of gate_ids to evaluate.  ``None`` = all 10.
+
+    Returns:
+        Dict mapping gate_id -> :class:`GateResult`.  Missing gates are
+        represented as FAIL with reason ``"Gate not found"``.
+    """
+    gate_ids: list[str] = gates if gates is not None else list(GATE_DEFS.keys())
+    results: dict[str, GateResult] = {}
+
+    for gate_id in gate_ids:
+        definition = GATE_DEFS.get(gate_id)
+        if definition is None:
+            results[gate_id] = GateResult(
+                gate_id=gate_id, name=gate_id,
+                status=GateStatus.FAIL, blocking=True,
+                failed_reason="Gate not found",
+                mapped_controls=[], mapped_frameworks=[],
+                evidence_required=[], remediation_required=[],
+            )
+            continue
+
+        try:
+            from domain.agents import get_agent  # type: ignore[import]
+
+            agent = get_agent(agent_id)
+            if agent is None:
+                raise ValueError(f"Agent not found: {agent_id}")
+
+            # Derive gate status from agent's eval_scores if available
+            eval_scores: dict = getattr(agent, "eval_scores", {}) or {}
+            # Map gate -> expected eval key
+            _GATE_EVAL_MAP: dict[str, str] = {
+                "RG-001": "pii_leakage",
+                "RG-002": "prompt_injection",
+                "RG-003": "rag_security",
+                "RG-004": "tool_authorization",
+                "RG-005": "human_approval",
+                "RG-006": "critical_findings",
+                "RG-007": "evidence_completeness",
+                "RG-008": "runtime_monitoring",
+                "RG-009": "aws_telemetry",
+                "RG-010": "auditability",
+            }
+            eval_key = _GATE_EVAL_MAP.get(gate_id)
+            score_val = eval_scores.get(eval_key) if eval_key else None
+
+            if score_val is None:
+                # No eval data — treat as NOT_APPLICABLE at agent level
+                status = GateStatus.NOT_APPLICABLE
+                reason: str | None = None
+            elif isinstance(score_val, bool):
+                status = GateStatus.PASS if score_val else GateStatus.FAIL
+                reason = None if score_val else f"Agent {agent_id} (v{version_id}): {definition.name} failed"
+            elif isinstance(score_val, (int, float)):
+                # Numeric score: PASS >= 0.7, else FAIL (conservative threshold)
+                if float(score_val) >= 0.7:
+                    status = GateStatus.PASS
+                    reason = None
+                else:
+                    status = GateStatus.FAIL
+                    reason = (
+                        f"Agent {agent_id} (v{version_id}): {definition.name} failed "
+                        f"(score {score_val:.2f} < 0.70 threshold)"
+                    )
+            else:
+                # String EvalStatus
+                ev_val = str(score_val).upper()
+                if ev_val in ("PASS", "WARN"):
+                    status = GateStatus.PASS
+                    reason = None
+                else:
+                    status = GateStatus.FAIL
+                    reason = f"Agent {agent_id} (v{version_id}): {definition.name} failed (eval={ev_val})"
+
+        except (ImportError, Exception) as exc:  # noqa: BLE001
+            status = GateStatus.FAIL
+            reason = f"Evaluation error: {exc}"
+
+        results[gate_id] = GateResult(
+            gate_id=gate_id, name=definition.name,
+            status=status,
+            blocking=definition.default_blocking and status == GateStatus.FAIL,
+            failed_reason=reason,
+            mapped_controls=definition.mapped_controls,
+            mapped_frameworks=definition.mapped_frameworks,
+            evidence_required=definition.evidence_required,
+            remediation_required=_remediation_for(definition.mapped_controls) if status == GateStatus.FAIL else [],
+        )
+
+    return results
+
+
+def evaluate_system_gates(ai_system_id: str, target_environment: str = "PILOT") -> GateReport:
+    """Evaluate all release gates for a system, including all bound agents.
+
+    Calls the base :func:`evaluate_gates` for the system-level evaluation, then
+    iterates every bound agent.  If any bound agent fails a gate, that gate's
+    status in the report is overridden to FAIL with a reason naming the weakest
+    agent (the one with the highest inherent_risk).
+
+    When no agents are bound, this function is identical to
+    :func:`evaluate_gates` — backward compatible.
+
+    Args:
+        ai_system_id:       The AI system identifier.
+        target_environment: ``"PILOT"`` (default) or ``"PRODUCTION"``.
+
+    Returns:
+        :class:`GateReport` with agent-aware gate statuses.
+    """
+    # Base system-level evaluation (existing logic, unchanged)
+    report = evaluate_gates(ai_system_id, target_environment)
+
+    # Agent-aware override pass
+    try:
+        from domain.agent_bindings import list_bindings_for_system  # type: ignore[import]
+        from domain.agents import get_agent  # type: ignore[import]
+
+        bindings = list_bindings_for_system(ai_system_id)
+        if not bindings:
+            return report  # No agents — return base report unchanged
+
+        # Determine weakest (highest-risk) agent for naming in failure reasons
+        _RISK_ORDER: dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+        weakest_agent_name = "unknown-agent"
+        weakest_risk_order = -1
+        for binding in bindings:
+            ag = get_agent(binding.agent_id)
+            if ag is None:
+                continue
+            risk_val: str = getattr(ag, "inherent_risk", "LOW")
+            if hasattr(risk_val, "value"):
+                risk_val = risk_val.value
+            if _RISK_ORDER.get(risk_val, 0) >= weakest_risk_order:
+                weakest_risk_order = _RISK_ORDER.get(risk_val, 0)
+                weakest_agent_name = getattr(ag, "name", binding.agent_id)
+
+        # Build updated gate results list
+        updated_gates: list[GateResult] = []
+        for gate_result in report.gates:
+            override_gate = gate_result
+            for binding in bindings:
+                ag = get_agent(binding.agent_id)
+                if ag is None:
+                    continue
+                agent_name: str = getattr(ag, "name", binding.agent_id)
+                semver: str = binding.version_id
+
+                # Evaluate this gate for this agent
+                agent_gate_results = evaluate_agent_gates(binding.agent_id, semver, [gate_result.gate_id])
+                ag_gate = agent_gate_results.get(gate_result.gate_id)
+                if ag_gate is None:
+                    continue
+
+                # If agent fails the gate and the system currently passes, override to FAIL
+                if ag_gate.status == GateStatus.FAIL and override_gate.status != GateStatus.FAIL:
+                    definition = GATE_DEFS.get(gate_result.gate_id)
+                    override_gate = GateResult(
+                        gate_id=gate_result.gate_id,
+                        name=gate_result.name,
+                        status=GateStatus.FAIL,
+                        blocking=definition.default_blocking if definition else True,
+                        failed_reason=(
+                            f"Agent {agent_name} (v{semver}): {gate_result.name} failed"
+                        ),
+                        mapped_controls=gate_result.mapped_controls,
+                        mapped_frameworks=gate_result.mapped_frameworks,
+                        evidence_required=gate_result.evidence_required,
+                        remediation_required=gate_result.remediation_required,
+                        exception_id=gate_result.exception_id,
+                    )
+
+            updated_gates.append(override_gate)
+
+        # Recompute summary stats
+        pass_count = sum(1 for g in updated_gates if g.status == GateStatus.PASS)
+        fail_count = sum(1 for g in updated_gates if g.status == GateStatus.FAIL)
+        warning_count = sum(1 for g in updated_gates if g.status == GateStatus.WARNING)
+        blocking_failures = sum(1 for g in updated_gates if g.blocking)
+
+        decision, rationale = _decision_from_gates(updated_gates, report.evidence_completeness)
+
+        return GateReport(
+            ai_system_id=report.ai_system_id,
+            ai_system_name=report.ai_system_name,
+            target_environment=report.target_environment,
+            generated_at=report.generated_at,
+            gates=updated_gates,
+            release_decision=decision,
+            release_rationale=rationale,
+            pass_count=pass_count,
+            fail_count=fail_count,
+            warning_count=warning_count,
+            blocking_failures=blocking_failures,
+            evidence_completeness=report.evidence_completeness,
+        )
+
+    except (ImportError, Exception):  # noqa: BLE001
+        # Implementer 1 modules not yet present — fall back to system-only report
+        return report
+
+
 __all__ = [
     "GateStatus", "GateDefinition", "GateResult", "GateException", "GateReport",
-    "define_gates", "evaluate_gates",
+    "define_gates", "evaluate_gates", "evaluate_system_gates", "evaluate_agent_gates",
     "apply_exception", "list_exceptions",
     "GATE_DEFS",
 ]

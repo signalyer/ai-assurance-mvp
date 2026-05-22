@@ -588,11 +588,270 @@ def framework_display_name(slug: str) -> str:
 _framework_display = framework_display_name
 
 
+# ---------------------------------------------------------------------------
+# Agent-aware matrix computation — Session 07 additions
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AgentCoverageBreakdown:
+    """Per-agent framework coverage row within an enriched matrix result."""
+
+    agent_id: str
+    agent_name: str
+    semver: str
+    cells: dict[str, float]  # framework_slug -> coverage_pct
+
+
+@dataclass
+class EnrichedMatrixRow:
+    """Matrix row with per-agent coverage breakdown (worst-case cells)."""
+
+    system_id: str
+    system_name: str
+    cells: dict[str, float]          # worst-of(system, all agents) per slug
+    system_cells: dict[str, float]   # system's own coverage, pre-aggregation
+    agent_rows: list[AgentCoverageBreakdown]
+
+
+@dataclass
+class EnrichedMatrixResult:
+    """Enriched coverage matrix result that includes per-agent breakdowns.
+
+    Supports both attribute access and dict-style subscript access
+    (``result['frameworks']`` / ``result['rows']``) for consistency with
+    :class:`MatrixResult`.
+    """
+
+    frameworks: list[dict]          # [{slug, display_name}]
+    rows: list[EnrichedMatrixRow]
+
+    def __getitem__(self, key: str) -> object:
+        """Allow dict-style access: result['frameworks'] / result['rows']."""
+        if key == "frameworks":
+            return self.frameworks
+        if key == "rows":
+            return self.rows
+        raise KeyError(key)
+
+
+def _agent_framework_coverage(agent_id: str, semver: str, catalog_key: str) -> float:
+    """Return mean framework coverage for a single agent version.
+
+    Agents don't have their own findings/evidence — we approximate coverage
+    from their ``framework_refs`` field (list of ``{framework, clause}`` dicts).
+    A ref matching a framework item's exact_clause or prefix_clause counts as
+    COVERED for that item.  Coverage = covered_items / total_items.
+
+    Falls back to 0.0 on any error so the aggregation remains robust.
+    """
+    try:
+        # Late import — Implementer 1's module may not exist during test monkeypatching
+        from domain.agent_bindings import list_bindings_for_system  # noqa: F401  (unused here)
+        from domain.agents import get_agent  # type: ignore[import]
+
+        agent = get_agent(agent_id)
+        if agent is None:
+            return 0.0
+
+        framework_refs: list = getattr(agent, "framework_refs", []) or []
+        if not framework_refs:
+            return 0.0
+
+        items = framework_catalog(catalog_key)
+        if not items:
+            return 0.0
+
+        # Parse refs into (framework, clause) tuples. Supports two shapes:
+        #   list[str]  — "FRAMEWORK:CLAUSE" (Implementer 1 seed format)
+        #   list[dict] — {"framework": "...", "clause": "..."}
+        parsed_clauses: list[str] = []
+        for ref in framework_refs:
+            if isinstance(ref, str):
+                if ":" in ref:
+                    _fw, _, clause = ref.partition(":")
+                    if clause:
+                        parsed_clauses.append(clause)
+            elif isinstance(ref, dict):
+                clause = ref.get("clause", "")
+                if clause:
+                    parsed_clauses.append(clause)
+
+        if not parsed_clauses:
+            return 0.0
+
+        covered = 0
+        for item in items:
+            for clause in parsed_clauses:
+                if clause in item.exact_clauses:
+                    covered += 1
+                    break
+                if any(clause.startswith(p) for p in item.prefix_clauses):
+                    covered += 1
+                    break
+
+        return round(covered / len(items) * 100.0, 1) if items else 0.0
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def framework_matrix_with_agents(system_ids: list[str] | None = None) -> EnrichedMatrixResult:
+    """Compute enriched coverage matrix with per-agent breakdown.
+
+    For each system:
+    1. Computes the system's own per-framework coverage.
+    2. For each bound agent, computes that agent's per-framework coverage
+       derived from its ``framework_refs``.
+    3. Returns the WORST (minimum) coverage across system + all bound agents
+       for each framework cell.
+
+    When a system has no bound agents the enriched row still includes
+    ``agent_rows=[]`` and the cells equal the system's own coverage — backward
+    compatible with the plain :func:`framework_matrix` shape.
+
+    Args:
+        system_ids: Optional list of system IDs to include. ``None`` = all
+                    governed systems in the repository.
+
+    Returns:
+        :class:`EnrichedMatrixResult` with per-agent breakdown per system.
+    """
+    repo_systems = repository.list_ai_systems()
+    repo_by_id = {s.id: s for s in repo_systems}
+
+    framework_meta = [
+        {"slug": slug, "display_name": framework_display_name(slug)}
+        for slug, _fn in MATRIX_FRAMEWORKS
+    ]
+
+    if system_ids is not None:
+        target_ids: list[str] = system_ids
+    else:
+        target_ids = [s.id for s in repo_systems]
+
+    rows: list[EnrichedMatrixRow] = []
+    for sid in target_ids:
+        system = repo_by_id.get(sid)
+
+        # System's own per-slug coverage
+        system_cells: dict[str, float] = {}
+        for slug, _fn in MATRIX_FRAMEWORKS:
+            if system is None:
+                system_cells[slug] = 0.0
+            else:
+                catalog_key = _FRAMEWORK_SLUG_TO_CATALOG_KEY.get(slug)
+                system_cells[slug] = (
+                    _system_framework_coverage(system.id, catalog_key) if catalog_key else 0.0
+                )
+
+        # Per-agent coverage
+        agent_rows: list[AgentCoverageBreakdown] = []
+        try:
+            from domain.agent_bindings import list_bindings_for_system  # type: ignore[import]
+            from domain.agents import get_agent  # type: ignore[import]
+
+            bindings = list_bindings_for_system(sid)
+            for binding in bindings:
+                agent = get_agent(binding.agent_id)
+                if agent is None:
+                    continue
+                agent_cells: dict[str, float] = {}
+                for slug, _fn in MATRIX_FRAMEWORKS:
+                    catalog_key = _FRAMEWORK_SLUG_TO_CATALOG_KEY.get(slug)
+                    agent_cells[slug] = (
+                        _agent_framework_coverage(binding.agent_id, binding.version_id, catalog_key)
+                        if catalog_key else 0.0
+                    )
+                agent_rows.append(AgentCoverageBreakdown(
+                    agent_id=binding.agent_id,
+                    agent_name=getattr(agent, "name", binding.agent_id),
+                    semver=binding.version_id,
+                    cells=agent_cells,
+                ))
+        except (ImportError, Exception):  # noqa: BLE001
+            # Implementer 1's modules not yet present, or no bindings
+            pass
+
+        # Worst-link aggregation: worst-of(system, each agent) per slug
+        final_cells: dict[str, float] = {}
+        for slug, _fn in MATRIX_FRAMEWORKS:
+            worst = system_cells[slug]
+            for ar in agent_rows:
+                if ar.cells.get(slug, 100.0) < worst:
+                    worst = ar.cells[slug]
+            final_cells[slug] = worst
+
+        rows.append(EnrichedMatrixRow(
+            system_id=sid,
+            system_name=system.name if system else sid,
+            cells=final_cells,
+            system_cells=system_cells,
+            agent_rows=agent_rows,
+        ))
+
+    return EnrichedMatrixResult(frameworks=framework_meta, rows=rows)
+
+
+def aggregate_agent_risk_tier(system_id: str) -> "RiskLevel":
+    """Return the MAX(agent.inherent_risk) across all bound agents.
+
+    Implements the weakest-link rule: one CRITICAL agent makes the system
+    CRITICAL regardless of the system's own declared inherent_risk.
+
+    When no agents are bound (or the agent modules are unavailable), returns
+    the system's own inherent_risk — backward compatible.
+
+    Args:
+        system_id: The AI system identifier.
+
+    Returns:
+        The effective :class:`~domain.models.RiskLevel` for governance purposes.
+    """
+    from domain.models import RiskLevel
+
+    _RISK_ORDER: dict[str, int] = {
+        RiskLevel.LOW.value: 0,
+        RiskLevel.MEDIUM.value: 1,
+        RiskLevel.HIGH.value: 2,
+        RiskLevel.CRITICAL.value: 3,
+    }
+
+    system = repository.get_ai_system(system_id)
+    base_risk: str = system.inherent_risk.value if system else RiskLevel.LOW.value
+
+    try:
+        from domain.agent_bindings import list_bindings_for_system  # type: ignore[import]
+        from domain.agents import get_agent  # type: ignore[import]
+
+        bindings = list_bindings_for_system(system_id)
+        if not bindings:
+            risk_value = base_risk
+        else:
+            max_risk = base_risk
+            for binding in bindings:
+                agent = get_agent(binding.agent_id)
+                if agent is None:
+                    continue
+                agent_risk: str = getattr(agent, "inherent_risk", RiskLevel.LOW.value)
+                # Normalise to .value if it's an enum instance
+                if hasattr(agent_risk, "value"):
+                    agent_risk = agent_risk.value
+                if _RISK_ORDER.get(agent_risk, 0) > _RISK_ORDER.get(max_risk, 0):
+                    max_risk = agent_risk
+            risk_value = max_risk
+    except (ImportError, Exception):  # noqa: BLE001
+        risk_value = base_risk
+
+    # Return the RiskLevel enum member for the computed value
+    return RiskLevel(risk_value)
+
+
 __all__ = [
     "FrameworkItem", "ControlRollup", "FindingSummary", "ItemCoverage",
     "MatrixRow", "MatrixResult",
+    "AgentCoverageBreakdown", "EnrichedMatrixRow", "EnrichedMatrixResult",
     "framework_catalog", "controls_for_item",
     "item_coverage", "framework_overview", "framework_matrix",
+    "framework_matrix_with_agents", "aggregate_agent_risk_tier",
     "framework_display_name",
     "NIST_RMF_ITEMS", "NIST_600_1_ITEMS", "OWASP_LLM_ITEMS", "OWASP_AGENTIC_ITEMS",
     "MATRIX_FRAMEWORKS",

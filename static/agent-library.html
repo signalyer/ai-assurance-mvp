@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agent Library — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* Filter chips */
+        .chip-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.25rem;
+            align-items: center;
+        }
+        .chip {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .chip:hover { border-color: var(--accent); color: var(--accent); }
+        .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+        /* Agent grid */
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .agent-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: border-color 0.15s, transform 0.1s;
+        }
+        .agent-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+        .agent-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .agent-name {
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        .agent-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+
+        .agent-meta {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .badge-reusable {
+            background: rgba(99,102,241,0.12);
+            border: 1px solid rgba(99,102,241,0.35);
+            color: #a5b4fc;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .badge-custom {
+            background: rgba(20,184,166,0.12);
+            border: 1px solid rgba(20,184,166,0.35);
+            color: #5eead4;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .badge-team {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+        .badge-risk-LOW      { background: var(--pass-bg);     color: var(--pass);     border:1px solid var(--pass-border);     font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; text-transform:uppercase; }
+        .badge-risk-MEDIUM   { background: var(--medium-bg);   color: var(--medium);   border:1px solid var(--medium-border);   font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; text-transform:uppercase; }
+        .badge-risk-HIGH     { background: var(--high-bg);     color: var(--high);     border:1px solid var(--high-border);     font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; text-transform:uppercase; }
+        .badge-risk-CRITICAL { background: var(--critical-bg); color: var(--critical); border:1px solid var(--critical-border); font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; text-transform:uppercase; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: min(820px, 96vw);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .modal-title { font-weight: 700; font-size: 14px; }
+        .modal-close {
+            background: none; border: none; color: var(--text-secondary);
+            font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1;
+        }
+        .modal-close:hover { color: var(--text); }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 1.25rem;
+        }
+
+        .modal-footer {
+            padding: 0.75rem 1.25rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* Tabs inside modal */
+        .modal-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .modal-tab {
+            padding: 0.4rem 0.85rem;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+        .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .modal-tab:hover:not(.active) { color: var(--text); }
+
+        /* Version table */
+        .version-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .version-table th {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .version-table td {
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        .version-table tr:last-child td { border-bottom: none; }
+        .version-table tr:hover td { background: var(--bg-elevated); }
+
+        /* Publish form */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 0.85rem;
+        }
+        .form-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .form-input, .form-textarea {
+            background: var(--bg-deep);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .form-textarea { min-height: 64px; resize: vertical; }
+
+        /* Upgrade banner */
+        .upgrade-banner {
+            background: rgba(245,158,11,0.10);
+            border: 1px solid rgba(245,158,11,0.35);
+            border-radius: 5px;
+            padding: 0.5rem 0.75rem;
+            font-size: 11px;
+            color: #fcd34d;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state-inline {
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: 12px;
+            padding: 1.5rem 0;
+        }
+
+        /* SSE indicator */
+        .sse-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--text-tertiary);
+            display: inline-block;
+            margin-right: 4px;
+        }
+        .sse-dot.connected { background: var(--pass); }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Agent Library</div>
+                <div class="page-subtitle">Publish, subscribe, and govern reusable AI agents across systems</div>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-sm btn-primary" id="newAgentBtn">+ Register Agent</button>
+            </div>
+        </div>
+
+        <!-- Filter chips -->
+        <div class="chip-row" id="chipRow">
+            <span class="chip active" data-filter="">All</span>
+            <span class="chip" data-filter="REUSABLE">Reusable</span>
+            <span class="chip" data-filter="CUSTOM">Custom</span>
+            <span class="chip" data-filter-team="" id="teamChipPlaceholder" style="display:none;"></span>
+        </div>
+
+        <!-- Search -->
+        <div class="filter-bar" style="margin-bottom:1rem;">
+            <input type="text" class="filter-input" id="searchInput" placeholder="Search agents…">
+            <select class="filter-select" id="teamFilter">
+                <option value="">All teams</option>
+            </select>
+        </div>
+
+        <!-- Agent grid -->
+        <div class="agent-grid" id="agentGrid">
+            <div class="empty-state-inline" id="gridLoading">Loading agents…</div>
+        </div>
+    </div>
+
+    <!-- Agent detail modal -->
+    <div class="modal-overlay" id="agentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="modalAgentName">Agent Details</div>
+                    <div id="modalAgentBadges" class="agent-badges" style="margin-top:4px;"></div>
+                </div>
+                <button class="modal-close" id="modalCloseBtn">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="modal-tabs">
+                    <div class="modal-tab active" data-tab="overview" id="tabOverview">Overview</div>
+                    <div class="modal-tab" data-tab="versions" id="tabVersions">Version History</div>
+                    <div class="modal-tab" data-tab="subscribers" id="tabSubscribers">Subscribers</div>
+                    <div class="modal-tab" data-tab="publish" id="tabPublish">Publish New Version</div>
+                </div>
+                <div id="tabContent">Loading…</div>
+            </div>
+            <div class="modal-footer" id="modalFooter">
+                <span style="font-size:11px; color:var(--text-tertiary);">
+                    <span class="sse-dot" id="sseDot"></span>
+                    <span id="sseStatus">Disconnected</span>
+                </span>
+                <div style="flex:1;"></div>
+                <button class="btn btn-sm btn-secondary" id="modalCloseFooterBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Agent modal -->
+    <div class="modal-overlay" id="registerModal">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <div class="modal-title">Register New Agent</div>
+                <button class="modal-close" id="registerModalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Name</label>
+                    <input class="form-input" id="regName" placeholder="e.g. payments-fraud-detector">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-textarea" id="regDescription" placeholder="What does this agent do?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Team</label>
+                    <input class="form-input" id="regTeam" placeholder="e.g. payments">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Owner Type</label>
+                    <select class="form-input" id="regOwnerType">
+                        <option value="CUSTOM">CUSTOM — team-owned</option>
+                        <option value="REUSABLE">REUSABLE — shared across teams</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Inherent Risk</label>
+                    <select class="form-input" id="regRisk">
+                        <option value="LOW">LOW</option>
+                        <option value="MEDIUM" selected>MEDIUM</option>
+                        <option value="HIGH">HIGH</option>
+                        <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                </div>
+                <div id="regError" class="text-xs" style="color:#fca5a5; display:none; margin-top:4px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-sm btn-primary" id="regSubmitBtn">Register</button>
+                <button class="btn btn-sm btn-secondary" id="regCancelBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+        initPage('/agent-library');
+
+        // -------------------------------------------------------------------------
+        // XSS-safe escaping (same pattern as frameworks.html)
+        // -------------------------------------------------------------------------
+        function escHtml(s) {
+            if (s == null) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // -------------------------------------------------------------------------
+        // State
+        // -------------------------------------------------------------------------
+        let ALL_AGENTS = [];
+        let CURRENT_AGENT = null;
+        let CURRENT_TAB = 'overview';
+        let SSE_SOURCE = null;
+        let REFRESH_TIMER = null;
+
+        // -------------------------------------------------------------------------
+        // Load
+        // -------------------------------------------------------------------------
+        async function load() {
+            try {
+                const r = await fetch('/api/agents');
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                ALL_AGENTS = await r.json();
+                buildTeamFilter();
+                renderGrid();
+            } catch (e) {
+                document.getElementById('agentGrid').innerHTML =
+                    `<div class="empty-state-inline">Failed to load agents: ${escHtml(e.message)}</div>`;
+            }
+        }
+
+        function buildTeamFilter() {
+            const teams = [...new Set(ALL_AGENTS.map(a => a.team).filter(Boolean))].sort();
+            const sel = document.getElementById('teamFilter');
+            teams.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                sel.appendChild(opt);
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // Render grid
+        // -------------------------------------------------------------------------
+        function renderGrid() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const team = document.getElementById('teamFilter').value;
+            const activeChip = document.querySelector('.chip.active');
+            const ownerFilter = activeChip ? activeChip.getAttribute('data-filter') : '';
+
+            const filtered = ALL_AGENTS.filter(a =>
+                (!search || (a.name || '').toLowerCase().includes(search) ||
+                             (a.team || '').toLowerCase().includes(search) ||
+                             (a.description || '').toLowerCase().includes(search)) &&
+                (!team || a.team === team) &&
+                (!ownerFilter || a.owner_type === ownerFilter)
+            );
+
+            const grid = document.getElementById('agentGrid');
+            if (!filtered.length) {
+                grid.innerHTML = '<div class="empty-state-inline">No agents match filters.</div>';
+                return;
+            }
+
+            grid.innerHTML = '';
+            filtered.forEach(agent => {
+                const card = document.createElement('div');
+                card.className = 'agent-card';
+                card.setAttribute('data-agent-id', escHtml(agent.id || ''));
+
+                const riskClass = `badge-risk-${escHtml(agent.inherent_risk || 'MEDIUM')}`;
+                const ownerClass = agent.owner_type === 'REUSABLE' ? 'badge-reusable' : 'badge-custom';
+                const semver = escHtml(agent.latest_semver || agent.latest_version || '—');
+                const subCount = typeof agent.subscriber_count === 'number' ? agent.subscriber_count : 0;
+                const lastPub = escHtml(agent.last_published_at
+                    ? new Date(agent.last_published_at).toLocaleDateString()
+                    : '—');
+
+                card.innerHTML = `
+                    <div class="agent-card-header">
+                        <div class="agent-name">${escHtml(agent.name || '')}</div>
+                    </div>
+                    <div class="agent-badges">
+                        <span class="${ownerClass}">${escHtml(agent.owner_type || '')}</span>
+                        <span class="badge-team">${escHtml(agent.team || '')}</span>
+                        <span class="${riskClass}">${escHtml(agent.inherent_risk || '')}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-secondary); margin-top:6px; line-height:1.4;">
+                        ${escHtml((agent.description || '').slice(0, 80))}${(agent.description || '').length > 80 ? '…' : ''}
+                    </div>
+                    <div class="agent-meta">
+                        <span>v ${semver}</span>
+                        <span>${subCount} subscriber${subCount !== 1 ? 's' : ''}</span>
+                        <span>Published ${lastPub}</span>
+                    </div>`;
+                grid.appendChild(card);
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // Open modal
+        // -------------------------------------------------------------------------
+        async function openAgentModal(agentId) {
+            document.getElementById('agentModal').classList.add('open');
+            document.getElementById('modalAgentName').textContent = 'Loading…';
+            document.getElementById('modalAgentBadges').innerHTML = '';
+            document.getElementById('tabContent').innerHTML = '<div class="empty-state-inline">Loading…</div>';
+            setTab('overview');
+
+            try {
+                const r = await fetch(`/api/agents/${encodeURIComponent(agentId)}`);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                CURRENT_AGENT = await r.json();
+            } catch (e) {
+                document.getElementById('tabContent').innerHTML =
+                    `<div class="empty-state-inline">Failed to load agent: ${escHtml(e.message)}</div>`;
+                return;
+            }
+
+            const a = CURRENT_AGENT;
+            document.getElementById('modalAgentName').textContent = a.name || agentId;
+            const ownerClass = a.owner_type === 'REUSABLE' ? 'badge-reusable' : 'badge-custom';
+            const riskClass = `badge-risk-${a.inherent_risk || 'MEDIUM'}`;
+            document.getElementById('modalAgentBadges').innerHTML = `
+                <span class="${escHtml(ownerClass)}">${escHtml(a.owner_type || '')}</span>
+                <span class="badge-team">${escHtml(a.team || '')}</span>
+                <span class="${escHtml(riskClass)}">${escHtml(a.inherent_risk || '')}</span>`;
+
+            renderTab(CURRENT_TAB);
+            openSse(agentId);
+        }
+
+        function closeAgentModal() {
+            document.getElementById('agentModal').classList.remove('open');
+            closeSse();
+            CURRENT_AGENT = null;
+        }
+
+        // -------------------------------------------------------------------------
+        // Tabs
+        // -------------------------------------------------------------------------
+        function setTab(tab) {
+            CURRENT_TAB = tab;
+            document.querySelectorAll('.modal-tab').forEach(el => {
+                el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+            });
+        }
+
+        function renderTab(tab) {
+            setTab(tab);
+            if (!CURRENT_AGENT) return;
+            const slot = document.getElementById('tabContent');
+            switch (tab) {
+                case 'overview':    slot.innerHTML = renderOverview(CURRENT_AGENT); break;
+                case 'versions':    slot.innerHTML = renderVersionHistory(CURRENT_AGENT.versions || []); break;
+                case 'subscribers': slot.innerHTML = renderSubscribers(CURRENT_AGENT.subscribers || []); break;
+                case 'publish':     slot.innerHTML = renderPublishForm(); wirePublishForm(); break;
+            }
+        }
+
+        function renderOverview(a) {
+            const lastPub = a.last_published_at
+                ? new Date(a.last_published_at).toLocaleString()
+                : '—';
+            return `
+                <dl class="def-list">
+                    <dt>ID</dt><dd class="font-mono">${escHtml(a.id || '')}</dd>
+                    <dt>Description</dt><dd>${escHtml(a.description || '—')}</dd>
+                    <dt>Team</dt><dd>${escHtml(a.team || '—')}</dd>
+                    <dt>Owner Type</dt><dd>${escHtml(a.owner_type || '—')}</dd>
+                    <dt>Inherent Risk</dt><dd>${escHtml(a.inherent_risk || '—')}</dd>
+                    <dt>Latest Version</dt><dd class="font-mono">${escHtml(a.latest_semver || a.latest_version || '—')}</dd>
+                    <dt>Subscribers</dt><dd>${escHtml(String((a.subscribers || []).length))}</dd>
+                    <dt>Last Published</dt><dd>${escHtml(lastPub)}</dd>
+                    <dt>Status</dt><dd>${escHtml(a.status || '—')}</dd>
+                </dl>`;
+        }
+
+        function renderVersionHistory(versions) {
+            if (!versions.length) {
+                return '<div class="empty-state-inline">No versions published yet.</div>';
+            }
+            const rows = versions.map(v => {
+                const pubAt = v.published_at ? new Date(v.published_at).toLocaleString() : '—';
+                const statusClass = v.status === 'PUBLISHED' ? 'pass' : 'text-secondary';
+                return `<tr>
+                    <td class="font-mono">${escHtml(v.semver || v.version || '')}</td>
+                    <td style="color:var(--${escHtml(statusClass)})">${escHtml(v.status || '')}</td>
+                    <td>${escHtml(pubAt)}</td>
+                    <td style="max-width:250px; word-break:break-word;">${escHtml(v.changelog || '—')}</td>
+                </tr>`;
+            });
+            return `<table class="version-table">
+                <thead>
+                    <tr>
+                        <th>Semver</th>
+                        <th>Status</th>
+                        <th>Published At</th>
+                        <th>Changelog</th>
+                    </tr>
+                </thead>
+                <tbody>${rows.join('')}</tbody>
+            </table>`;
+        }
+
+        function renderSubscribers(subscribers) {
+            if (!subscribers.length) {
+                return '<div class="empty-state-inline">No subscribers yet.</div>';
+            }
+            const rows = subscribers.map(s => {
+                const upgBanner = s.upgrade_available_version_id
+                    ? `<div class="upgrade-banner" style="margin-top:4px;">
+                           New version available
+                           <span style="font-size:10px; opacity:0.7;">${escHtml(s.upgrade_available_version_id)}</span>
+                       </div>`
+                    : '';
+                return `<tr>
+                    <td>${escHtml(s.system_id || s.system_name || '')}</td>
+                    <td class="font-mono">${escHtml(s.pinned_version || s.version_id || '—')}</td>
+                    <td>${s.pinned ? '<span style="color:var(--medium);">Pinned</span>' : '<span style="color:var(--pass);">Auto</span>'}</td>
+                    <td>${upgBanner || '—'}</td>
+                </tr>`;
+            });
+            return `<table class="version-table">
+                <thead>
+                    <tr>
+                        <th>System</th>
+                        <th>Version</th>
+                        <th>Pin Mode</th>
+                        <th>Upgrade</th>
+                    </tr>
+                </thead>
+                <tbody>${rows.join('')}</tbody>
+            </table>`;
+        }
+
+        function renderPublishForm() {
+            return `
+                <div class="form-group">
+                    <label class="form-label">Semver (e.g. 1.2.0)</label>
+                    <input class="form-input" id="pubSemver" placeholder="1.2.0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Changelog</label>
+                    <textarea class="form-textarea" id="pubChangelog" placeholder="What changed in this version?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Config JSON (optional)</label>
+                    <textarea class="form-textarea" id="pubConfig" placeholder='{}'></textarea>
+                </div>
+                <div id="pubError" class="text-xs" style="color:#fca5a5; display:none; margin-top:4px;"></div>
+                <div id="pubSuccess" class="text-xs" style="color:#86efac; display:none; margin-top:4px;"></div>
+                <div style="margin-top:0.75rem;">
+                    <button class="btn btn-sm btn-primary" id="pubSubmitBtn">Publish Version</button>
+                </div>`;
+        }
+
+        function wirePublishForm() {
+            const btn = document.getElementById('pubSubmitBtn');
+            if (!btn) return;
+            btn.addEventListener('click', async () => {
+                const errEl = document.getElementById('pubError');
+                const okEl = document.getElementById('pubSuccess');
+                errEl.style.display = 'none';
+                okEl.style.display = 'none';
+
+                const semver = (document.getElementById('pubSemver').value || '').trim();
+                const changelog = (document.getElementById('pubChangelog').value || '').trim();
+                const configRaw = (document.getElementById('pubConfig').value || '').trim() || '{}';
+
+                if (!semver) { errEl.textContent = 'Semver is required.'; errEl.style.display = ''; return; }
+
+                let config = {};
+                try { config = JSON.parse(configRaw); } catch (e) {
+                    errEl.textContent = 'Config JSON is invalid.'; errEl.style.display = ''; return;
+                }
+
+                btn.disabled = true;
+                btn.textContent = 'Publishing…';
+                try {
+                    const r = await fetch(`/api/agents/${encodeURIComponent(CURRENT_AGENT.id)}/publish`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ semver, changelog, config }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) {
+                        const msg = (j.detail && (j.detail.error || JSON.stringify(j.detail))) || JSON.stringify(j);
+                        errEl.textContent = msg;
+                        errEl.style.display = '';
+                    } else {
+                        okEl.textContent = `Published v${escHtml(j.semver || semver)} successfully.`;
+                        okEl.style.display = '';
+                        // Reload agent data
+                        const r2 = await fetch(`/api/agents/${encodeURIComponent(CURRENT_AGENT.id)}`);
+                        if (r2.ok) { CURRENT_AGENT = await r2.json(); }
+                    }
+                } catch (e) {
+                    errEl.textContent = e.message;
+                    errEl.style.display = '';
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Publish Version';
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // SSE connection for real-time updates
+        // -------------------------------------------------------------------------
+        function openSse(agentId) {
+            closeSse();
+            const dot = document.getElementById('sseDot');
+            const status = document.getElementById('sseStatus');
+            try {
+                SSE_SOURCE = new EventSource(`/api/agents/${encodeURIComponent(agentId)}/listen`);
+                SSE_SOURCE.addEventListener('agent_update', (e) => {
+                    let payload = {};
+                    try { payload = JSON.parse(e.data); } catch (_) {}
+                    status.textContent = `Update received: v${escHtml(payload.new_version_id || '?')}`;
+                    // Refresh agent data
+                    fetch(`/api/agents/${encodeURIComponent(agentId)}`).then(r => r.ok ? r.json() : null).then(data => {
+                        if (data) {
+                            CURRENT_AGENT = data;
+                            renderTab(CURRENT_TAB);
+                        }
+                    }).catch(() => {});
+                });
+                SSE_SOURCE.addEventListener('error', () => {
+                    dot.className = 'sse-dot';
+                    status.textContent = 'Disconnected';
+                });
+                SSE_SOURCE.onopen = () => {
+                    dot.className = 'sse-dot connected';
+                    status.textContent = 'Live';
+                };
+            } catch (e) {
+                dot.className = 'sse-dot';
+                status.textContent = 'SSE unavailable';
+            }
+        }
+
+        function closeSse() {
+            if (SSE_SOURCE) {
+                SSE_SOURCE.close();
+                SSE_SOURCE = null;
+            }
+            const dot = document.getElementById('sseDot');
+            const status = document.getElementById('sseStatus');
+            if (dot) dot.className = 'sse-dot';
+            if (status) status.textContent = 'Disconnected';
+        }
+
+        // -------------------------------------------------------------------------
+        // Auto-refresh every 15s (polling fallback)
+        // -------------------------------------------------------------------------
+        function startAutoRefresh() {
+            REFRESH_TIMER = setInterval(async () => {
+                if (CURRENT_AGENT) {
+                    try {
+                        const r = await fetch(`/api/agents/${encodeURIComponent(CURRENT_AGENT.id)}`);
+                        if (r.ok) { CURRENT_AGENT = await r.json(); renderTab(CURRENT_TAB); }
+                    } catch (_) {}
+                }
+            }, 15000);
+        }
+
+        function stopAutoRefresh() {
+            if (REFRESH_TIMER) clearInterval(REFRESH_TIMER);
+            REFRESH_TIMER = null;
+        }
+
+        // -------------------------------------------------------------------------
+        // Register agent
+        // -------------------------------------------------------------------------
+        document.getElementById('newAgentBtn').addEventListener('click', () => {
+            document.getElementById('registerModal').classList.add('open');
+        });
+        document.getElementById('registerModalCloseBtn').addEventListener('click', () => {
+            document.getElementById('registerModal').classList.remove('open');
+        });
+        document.getElementById('regCancelBtn').addEventListener('click', () => {
+            document.getElementById('registerModal').classList.remove('open');
+        });
+        document.getElementById('regSubmitBtn').addEventListener('click', async () => {
+            const errEl = document.getElementById('regError');
+            errEl.style.display = 'none';
+            const name = (document.getElementById('regName').value || '').trim();
+            const description = (document.getElementById('regDescription').value || '').trim();
+            const team = (document.getElementById('regTeam').value || '').trim();
+            const owner_type = document.getElementById('regOwnerType').value;
+            const inherent_risk = document.getElementById('regRisk').value;
+            if (!name) { errEl.textContent = 'Name is required.'; errEl.style.display = ''; return; }
+            if (!team) { errEl.textContent = 'Team is required.'; errEl.style.display = ''; return; }
+            try {
+                const r = await fetch('/api/agents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ name, description, team, owner_type, inherent_risk }),
+                });
+                const j = await r.json();
+                if (!r.ok) {
+                    errEl.textContent = (j.detail && (j.detail.error || JSON.stringify(j.detail))) || JSON.stringify(j);
+                    errEl.style.display = ''; return;
+                }
+                document.getElementById('registerModal').classList.remove('open');
+                await load();
+            } catch (e) {
+                errEl.textContent = e.message; errEl.style.display = '';
+            }
+        });
+
+        // -------------------------------------------------------------------------
+        // Event delegation — agent grid click
+        // -------------------------------------------------------------------------
+        document.getElementById('agentGrid').addEventListener('click', (e) => {
+            const card = e.target.closest('[data-agent-id]');
+            if (card) openAgentModal(card.getAttribute('data-agent-id'));
+        });
+
+        // -------------------------------------------------------------------------
+        // Modal close
+        // -------------------------------------------------------------------------
+        document.getElementById('modalCloseBtn').addEventListener('click', closeAgentModal);
+        document.getElementById('modalCloseFooterBtn').addEventListener('click', closeAgentModal);
+        document.getElementById('agentModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('agentModal')) closeAgentModal();
+        });
+
+        // -------------------------------------------------------------------------
+        // Tab delegation
+        // -------------------------------------------------------------------------
+        document.getElementById('modalBody').addEventListener('click', (e) => {
+            const tab = e.target.closest('.modal-tab');
+            if (tab) renderTab(tab.getAttribute('data-tab'));
+        });
+
+        // -------------------------------------------------------------------------
+        // Filter chips delegation
+        // -------------------------------------------------------------------------
+        document.getElementById('chipRow').addEventListener('click', (e) => {
+            const chip = e.target.closest('.chip');
+            if (!chip) return;
+            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            renderGrid();
+        });
+
+        // -------------------------------------------------------------------------
+        // Search + team filter
+        // -------------------------------------------------------------------------
+        document.getElementById('searchInput').addEventListener('input', renderGrid);
+        document.getElementById('teamFilter').addEventListener('change', renderGrid);
+
+        // -------------------------------------------------------------------------
+        // Init
+        // -------------------------------------------------------------------------
+        load();
+        startAutoRefresh();
+    </script>
+</body>
+</html>

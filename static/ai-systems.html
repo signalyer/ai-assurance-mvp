@@ -228,11 +228,15 @@
                 <!-- Frameworks tab section -->
                 <div class="drawer-section" id="frameworksTabSection" style="display:none;"></div>
 
+                <!-- Bound Agents section -->
+                <div class="drawer-section" id="boundAgentsSection" style="display:none;"></div>
+
                 <div class="drawer-section" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <a class="btn btn-sm btn-primary" href="/assessment?system=${s.id}">Run Assessment</a>
                     <button class="btn btn-sm btn-secondary" onclick="toggleEditForm()">Edit System</button>
                     <button class="btn btn-sm btn-secondary" onclick="loadRevisions()">Revision History</button>
                     <button class="btn btn-sm btn-secondary" data-tab="frameworks" id="frameworksTabBtn" onclick="toggleFrameworksTab()">Frameworks</button>
+                    <button class="btn btn-sm btn-secondary" id="boundAgentsTabBtn" data-system-id="${s.id}" onclick="toggleBoundAgents()">Bound Agents</button>
                 </div>
             `;
 
@@ -532,6 +536,189 @@
             document.getElementById('drawerOverlay').classList.remove('open');
             document.getElementById('drawer').classList.remove('open');
             window.history.replaceState({}, '', '/ai-systems');
+        }
+
+        // ============ Bound Agents section ===================================
+
+        function _escHtmlAis(s) {
+            if (s == null) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function toggleBoundAgents() {
+            const slot = document.getElementById('boundAgentsSection');
+            if (!slot) return;
+            if (slot.style.display !== 'none') {
+                slot.style.display = 'none';
+                return;
+            }
+            slot.style.display = '';
+            slot.innerHTML = `<div class="drawer-section-title">Bound Agents</div><div class="text-xs text-secondary">Loading…</div>`;
+            slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const systemId = CURRENT_SYSTEM && CURRENT_SYSTEM.id;
+            if (!systemId) { slot.innerHTML = '<div class="text-xs text-tertiary">No system selected.</div>'; return; }
+
+            let bindings = [];
+            try {
+                const r = await fetch(`/api/systems/${encodeURIComponent(systemId)}/bindings`);
+                if (r.ok) bindings = await r.json();
+            } catch (e) {
+                slot.innerHTML = `<div class="drawer-section-title">Bound Agents</div><div class="text-xs text-tertiary">Failed to load bindings.</div>`;
+                return;
+            }
+
+            let allAgents = [];
+            try {
+                const ra = await fetch('/api/agents');
+                if (ra.ok) allAgents = await ra.json();
+            } catch (e) { /* non-fatal — agent picker still works */ }
+
+            const bindingCards = bindings.map(b => {
+                const upgBanner = b.upgrade_available_version_id
+                    ? `<div style="background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.35); border-radius:4px; padding:5px 8px; font-size:11px; color:#fcd34d; display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                           <span>New version available</span>
+                           <span style="display:flex; gap:4px;">
+                               <button class="btn btn-sm btn-primary"
+                                       data-action="accept-upgrade"
+                                       data-system-id="${_escHtmlAis(systemId)}"
+                                       data-binding-id="${_escHtmlAis(b.id || b.binding_id || '')}">Accept</button>
+                               <button class="btn btn-sm btn-secondary"
+                                       data-action="pin-binding"
+                                       data-system-id="${_escHtmlAis(systemId)}"
+                                       data-binding-id="${_escHtmlAis(b.id || b.binding_id || '')}">Pin v${_escHtmlAis(b.version_semver || b.version_id || '')}</button>
+                           </span>
+                       </div>`
+                    : '';
+                const pinnedBadge = b.pinned
+                    ? `<span style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); color:#fcd34d; font-size:10px; font-weight:700; padding:1px 5px; border-radius:3px; text-transform:uppercase;">Pinned</span>`
+                    : '';
+                return `<div style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-deep); margin-bottom:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px;">
+                        <div>
+                            <div class="text-xs font-bold">${_escHtmlAis(b.agent_name || b.agent_id || '')}</div>
+                            <div class="text-xs text-secondary" style="margin-top:2px;">${_escHtmlAis(b.agent_team || '')}${b.agent_owner_type ? ' · ' + b.agent_owner_type : ''}</div>
+                        </div>
+                        <div style="display:flex; gap:4px; align-items:center;">
+                            <span class="font-mono" style="font-size:10px; color:var(--text-secondary);">v${_escHtmlAis(b.version_semver || b.version_id || '?')}</span>
+                            ${pinnedBadge}
+                            <button class="btn btn-sm btn-secondary"
+                                    data-action="delete-binding"
+                                    data-system-id="${_escHtmlAis(systemId)}"
+                                    data-binding-id="${_escHtmlAis(b.id || b.binding_id || '')}"
+                                    style="padding:1px 6px; font-size:10px;">Unbind</button>
+                        </div>
+                    </div>
+                    ${upgBanner}
+                </div>`;
+            }).join('');
+
+            const agentOptions = allAgents.map(a =>
+                `<option value="${_escHtmlAis(a.id || '')}">${_escHtmlAis(a.name || a.id || '')} (${_escHtmlAis(a.team || '')})</option>`
+            ).join('');
+
+            slot.innerHTML = `
+                <div class="drawer-section-title">Bound Agents (${bindings.length})</div>
+                ${bindings.length === 0 ? '<div class="text-xs text-tertiary" style="margin-bottom:8px;">No agents bound to this system.</div>' : bindingCards}
+                <div style="margin-top:8px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--bg-deep);">
+                    <div class="text-xs font-bold" style="margin-bottom:6px;">Add Agent Binding</div>
+                    <select id="bindAgentPicker" style="background:var(--bg-deep); border:1px solid var(--border); color:var(--text); padding:5px 8px; border-radius:4px; font-size:11px; width:100%; margin-bottom:6px;">
+                        <option value="">Select agent…</option>
+                        ${agentOptions}
+                    </select>
+                    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:11px; color:var(--text-secondary); display:flex; align-items:center; gap:4px;">
+                            <input type="checkbox" id="bindPinnedCheck"> Pin to current version
+                        </label>
+                    </div>
+                    <div id="bindError" class="text-xs" style="color:#fca5a5; display:none; margin-bottom:4px;"></div>
+                    <button class="btn btn-sm btn-primary"
+                            data-action="add-binding"
+                            data-system-id="${_escHtmlAis(systemId)}">Bind Agent</button>
+                </div>`;
+
+            // Wire delegated actions
+            slot.addEventListener('click', _handleBoundAgentAction);
+        }
+
+        async function _handleBoundAgentAction(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-action');
+            const systemId = btn.getAttribute('data-system-id');
+            const bindingId = btn.getAttribute('data-binding-id');
+
+            if (action === 'accept-upgrade') {
+                btn.disabled = true;
+                try {
+                    const r = await fetch(`/api/systems/${encodeURIComponent(systemId)}/bindings/${encodeURIComponent(bindingId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ accept_upgrade: true }),
+                    });
+                    if (r.ok) await toggleBoundAgents(); // reload
+                } catch (e) { btn.disabled = false; }
+            }
+
+            if (action === 'pin-binding') {
+                btn.disabled = true;
+                try {
+                    const r = await fetch(`/api/systems/${encodeURIComponent(systemId)}/bindings/${encodeURIComponent(bindingId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ pinned: true }),
+                    });
+                    if (r.ok) await toggleBoundAgents();
+                } catch (e) { btn.disabled = false; }
+            }
+
+            if (action === 'delete-binding') {
+                if (!confirm('Unbind this agent from the system?')) return;
+                btn.disabled = true;
+                try {
+                    await fetch(`/api/systems/${encodeURIComponent(systemId)}/bindings/${encodeURIComponent(bindingId)}`, {
+                        method: 'DELETE',
+                        credentials: 'same-origin',
+                    });
+                    await toggleBoundAgents();
+                } catch (e) { btn.disabled = false; }
+            }
+
+            if (action === 'add-binding') {
+                const agentId = (document.getElementById('bindAgentPicker').value || '').trim();
+                const pinned = document.getElementById('bindPinnedCheck').checked;
+                const errEl = document.getElementById('bindError');
+                errEl.style.display = 'none';
+                if (!agentId) { errEl.textContent = 'Select an agent.'; errEl.style.display = ''; return; }
+                btn.disabled = true;
+                try {
+                    const r = await fetch(`/api/systems/${encodeURIComponent(systemId)}/bindings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ agent_id: agentId, pinned }),
+                    });
+                    if (r.ok) {
+                        await toggleBoundAgents();
+                    } else {
+                        const j = await r.json();
+                        errEl.textContent = (j.detail && (j.detail.error || JSON.stringify(j.detail))) || JSON.stringify(j);
+                        errEl.style.display = '';
+                        btn.disabled = false;
+                    }
+                } catch (e) {
+                    errEl.textContent = e.message;
+                    errEl.style.display = '';
+                    btn.disabled = false;
+                }
+            }
         }
 
         ['searchInput', 'riskFilter', 'decisionFilter', 'statusFilter'].forEach(id => {

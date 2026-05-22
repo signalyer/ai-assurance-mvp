@@ -628,10 +628,127 @@ __all__ = [
     "EvalType", "EvalStatus", "ToolSource", "EvidenceType", "RuntimeEventType",
     "PolicyStatus", "ApprovalDecision", "ApproverRole", "WaiverStatus",
     "RuntimeEventSource",
+    # Agent enums
+    "AgentOwnerType", "AgentStatus",
     # Sub-models
     "FrameworkMapping", "RAGSource", "AgentTool", "Applicability",
     # Entities
     "AISystem", "Framework", "Control", "Assessment", "EvalResult",
     "Finding", "ReleaseGate", "Evidence", "RemediationItem", "RuntimeEvent",
     "Policy", "Approval", "ExceptionWaiver",
+    # Agent entities
+    "Agent", "AgentVersion", "AgentBinding", "AgentSubscriber",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Agent registry enums
+# ---------------------------------------------------------------------------
+
+import re as _re  # noqa: E402 — placed after __all__ to keep enum section clean
+
+
+class AgentOwnerType(str, Enum):
+    """Whether an agent belongs to a single team or is org-wide reusable."""
+    CUSTOM = "CUSTOM"      # Team-owned, not subscribable by other teams
+    REUSABLE = "REUSABLE"  # Org-wide, subscribable by any system
+
+
+class AgentStatus(str, Enum):
+    """Lifecycle status of an agent version."""
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    DEPRECATED = "DEPRECATED"
+
+
+# ---------------------------------------------------------------------------
+# Agent registry entities
+# ---------------------------------------------------------------------------
+
+_SEMVER_PATTERN = _re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+    r"(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
+)
+
+
+class Agent(BaseModel):
+    """An AI agent that can be registered in the platform library.
+
+    team-owned (CUSTOM) agents belong to one team; REUSABLE agents are
+    subscribable org-wide.  latest_version_id is updated atomically on publish.
+    """
+    model_config = ConfigDict(use_enum_values=False)
+
+    id: str = Field(..., description="Stable slug e.g. 'ai-agent-pay-fraud'")
+    name: str
+    description: str
+    team: str = Field(..., description="e.g. 'payments', 'cx', 'risk', 'platform'")
+    owner_type: AgentOwnerType
+    latest_version_id: Optional[str] = None
+    inherent_risk: RiskLevel
+    framework_refs: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentVersion(BaseModel):
+    """An immutable snapshot of an agent at a specific semver.
+
+    Once status=PUBLISHED the version is frozen; config changes require a new
+    version.  The semver field is validated against the full semver 2.0.0 regex.
+    """
+    model_config = ConfigDict(use_enum_values=False)
+
+    id: str = Field(..., description="Stable id e.g. 'ai-agent-ver-{uuid}'")
+    agent_id: str
+    semver: str = Field(..., description="Semver 2.0.0 string e.g. '1.0.0', '2.3.4-rc.1'")
+    changelog: str
+    status: AgentStatus = AgentStatus.DRAFT
+    config: dict = Field(default_factory=dict, description="Prompt, tools, model settings")
+    published_at: Optional[datetime] = None
+    published_by: Optional[str] = None
+
+    from pydantic import field_validator  # noqa: PLC0415
+
+    @field_validator("semver")
+    @classmethod
+    def _validate_semver(cls, v: str) -> str:
+        """Enforce semver 2.0.0 format; reject 'v' prefix and partial forms."""
+        if not _SEMVER_PATTERN.match(v):
+            raise ValueError(
+                f"'{v}' is not a valid semver 2.0.0 string. "
+                "Expected format: MAJOR.MINOR.PATCH[-pre][+build] e.g. '1.0.0', '2.3.4-rc.1'."
+            )
+        return v
+
+
+class AgentBinding(BaseModel):
+    """Links an agent version to an AI system at a specific semver.
+
+    pinned=True means the binding will NOT auto-accept future publishes.
+    upgrade_available_version_id is set when a new version is published and
+    the binding is not pinned; cleared once accept_upgrade is called.
+    """
+    model_config = ConfigDict(use_enum_values=False)
+
+    id: str = Field(..., description="Stable id e.g. 'ai-bind-{uuid}'")
+    agent_id: str
+    system_id: str
+    version_id: str = Field(..., description="FK to AgentVersion.id (currently pinned)")
+    pinned: bool = False
+    upgrade_available_version_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentSubscriber(BaseModel):
+    """Tracks which AI systems subscribe to upgrade notifications for a REUSABLE agent."""
+    model_config = ConfigDict(use_enum_values=False)
+
+    id: str
+    agent_id: str
+    system_id: str = Field(..., description="The subscribing system")
+    subscribed_at: datetime
+    last_notified_version_id: Optional[str] = None

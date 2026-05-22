@@ -223,3 +223,56 @@ Why: Matrix coverage % is computed live — partial mappings produce misleading 
      ref (e.g., Art.10 for EU AI Act data governance), not placeholder.
 Constrains: any new control added to CONTROLS must include framework_mappings for all 8 user-facing
      frameworks at definition time. Acceptance test #11 enforces this (asserts zero gaps).
+
+## 2026-05-21 — Agent storage: Postgres-primary with JSONL audit trail (Session 07)
+Decision: Agents, agent_versions, agent_bindings, agent_subscribers live in Postgres as primary
+         store. data/events.jsonl receives append-only audit events for every agent mutation.
+Alternatives: pure JSONL-primary (consistent with T2 episodic) · Redis cache · DB-only no audit
+Why: Agent CRUD has rich queryable surface (filter by team, owner_type, list versions ordered by
+     semver). Postgres schema enforcement (UNIQUE, FK, CHECK) prevents bad state. JSONL audit
+     trail preserves the SSOT-replay property for governance: every AGENT_PUBLISHED,
+     AGENT_BINDING_CREATED, AGENT_BINDING_UPGRADED, AGENT_BINDING_REMOVED captured immutably.
+Constrains: all agent SQL parameterised via SQLAlchemy `text()` + named bind params. Audit event
+     writes are best-effort outside the DB transaction; logged on failure. Session 08+ may move
+     the audit write inside the transaction for completeness.
+
+## 2026-05-21 — Database-tracked agent versions (separate agent_versions table)
+Decision: AgentVersion is a separate Postgres entity with its own id (UUID), FK to Agent.id, and
+         a regex-validated semver string. AgentBinding stores `version_id` FK (not a semver string).
+Alternatives: semver in YAML manifests (per-agent dir) · hash-based immutable versions
+Why: FK ensures referential integrity (a binding cannot point to a non-existent version). Semver
+     validated by Pydantic field_validator at model construction AND by API PublishVersionRequest
+     at the request boundary (two layers). UNIQUE(agent_id, semver) at the DB level catches semver
+     collision in concurrent publishes.
+Constrains: bindings always reference version_id (UUID), never semver. Semver is display-only.
+     Version pin/unpin lives on the binding row (`pinned BOOLEAN`).
+
+## 2026-05-21 — Postgres LISTEN/NOTIFY for publish notifications (Session 07)
+Decision: Agent publish triggers `pg_notify('agent_update_{agent_id}', version_id)` inside the
+         publish transaction. SSE endpoint `/api/agents/{agent_id}/listen` opens a dedicated psycopg2
+         connection per client, calls `LISTEN agent_update_{agent_id}` (channel name passed through
+         `psycopg2.extensions.quote_ident` to defend against identifier injection), and yields SSE
+         events with 25s keepalive.
+Alternatives: client polling every 10s · WebSocket fan-out from in-process pubsub · external broker
+         (Redis pub/sub, Service Bus)
+Why: LISTEN/NOTIFY is real-time (<100ms), distributed across Postgres replicas, requires no new
+     infrastructure. Single SSE endpoint serves all subscribers. 30s SLA easily met. quote_ident
+     makes the LISTEN identifier-safe even if upstream regex sanitisation is ever bypassed.
+Constrains: each SSE client consumes one Postgres connection — production deployment must enforce
+     per-IP rate limiting and/or global SSE connection caps (flagged as security debt for Day 10).
+     Channel name regex `[a-zA-Z0-9_\-]{1,128}` validated at route entry.
+
+## 2026-05-21 — No migration of legacy ai-sys-001; 6 NEW seeded systems
+Decision: Existing `ai-sys-001` stays as legacy (no agent bindings). 6 new test systems
+         (sys-payments-001, sys-cx-001, sys-risk-001, sys-platform-001, sys-finserv-001,
+         sys-internal-001) are seeded via `domain/seed_systems.py`, each bound to 1-3 agents
+         from the 6-agent seed catalog.
+Alternatives: automatic migration on first migrate.py run · one-time manual migration script
+Why: Clean cutover; no risk of corrupting existing demo data; demo scenarios script can target
+     specific systems by ID. Legacy ai-sys-001 continues to demonstrate the "no bindings" path
+     in `assemble_context` and `framework_matrix` (backward-compat tests).
+Constrains: `framework_matrix(["ai-sys-001"])` must continue to work without bindings.
+     `assemble_context` returns plain string (not dict) when no bindings are present. Seeded
+     agents use `framework_refs: list[str]` format `"FRAMEWORK:CLAUSE"` (e.g., `"NIST_AI_RMF:GOVERN-1.1"`).
+     `framework_coverage._agent_framework_coverage` supports both `list[str]` and `list[dict]`
+     ref formats for forward-compatibility.
