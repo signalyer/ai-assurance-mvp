@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Event Projection — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        .lag-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1rem 1.25rem;
+            display: flex; align-items: center; gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .lag-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--pass); flex-shrink: 0;
+        }
+        .lag-dot.warn { background: var(--medium); }
+        .lag-dot.crit { background: var(--critical); }
+        .lag-label { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600; }
+        .lag-value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+
+        .view-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .view-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 0.875rem 1rem; cursor: pointer;
+        }
+        .view-card:hover { border-color: var(--accent); }
+        .view-card.active { border-color: var(--accent); background: var(--accent-bg); }
+        .view-name { font-weight: 600; font-size: 13px; color: var(--text-primary); }
+        .view-count { font-size: 24px; font-weight: 700; margin-top: 4px; }
+        .view-count.loading { color: var(--text-secondary); font-size: 14px; }
+
+        .rows-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .rows-table th { background: var(--bg-elevated); padding: 0.4rem 0.6rem; text-align: left;
+                         font-size: 10px; text-transform: uppercase; color: var(--text-secondary);
+                         font-weight: 600; border-bottom: 1px solid var(--border); }
+        .rows-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border);
+                         word-break: break-word; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .pager { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
+        .pager button { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
+                        padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .pager button:disabled { opacity: 0.4; cursor: default; }
+        .pager .page-info { font-size: 12px; color: var(--text-secondary); }
+
+        .replay-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+        .replay-bar button { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent);
+                             padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .replay-bar button:hover { opacity: 0.85; }
+        .replay-bar .status-msg { font-size: 12px; color: var(--text-secondary); }
+        .replay-bar .status-msg.ok { color: var(--pass); }
+        .replay-bar .status-msg.err { color: var(--critical); }
+
+        .section-title { font-size: 11px; text-transform: uppercase; color: var(--text-secondary);
+                         font-weight: 600; margin-bottom: 0.5rem; letter-spacing: 0.06em; }
+    </style>
+</head>
+<body>
+<div id="app-shell"></div>
+<script src="/static/shared.js"></script>
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let _currentView = "ai_systems";
+let _page = 1;
+const PAGE_SIZE = 50;
+let _totalRows = 0;
+
+const VIEWS = ["ai_systems", "eval_runs", "findings", "release_decisions", "policy_evaluations"];
+const VIEW_COUNTS = {};
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function escHtml(s) {
+    if (s === null || s === undefined) return "";
+    return String(s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
+function renderShell() {
+    document.getElementById("app-shell").innerHTML = `
+        <div class="page-header">
+            <h1 class="page-title">Event Projection</h1>
+            <p class="page-subtitle">Read-side Postgres replica of data/events.jsonl</p>
+        </div>
+
+        <div id="lag-area"></div>
+
+        <div class="replay-bar">
+            <button id="btn-replay" onclick="doReplay()">Replay from Start</button>
+            <span id="replay-status" class="status-msg"></span>
+        </div>
+
+        <p class="section-title">Materialized Views</p>
+        <div class="view-grid" id="view-grid"></div>
+
+        <div id="rows-area"></div>
+    `;
+    renderViewCards();
+}
+
+function renderLag(status) {
+    const lag = status.lag_events || 0;
+    const cls = lag === 0 ? "" : lag < 10 ? "warn" : "crit";
+    document.getElementById("lag-area").innerHTML = `
+        <div class="lag-card">
+            <div class="lag-dot ${escHtml(cls)}"></div>
+            <div>
+                <div class="lag-label">Projection Lag</div>
+                <div class="lag-value">${escHtml(lag)} event${lag !== 1 ? "s" : ""} behind</div>
+            </div>
+            <div style="margin-left:2rem;">
+                <div class="lag-label">Tailer Checkpoint</div>
+                <div class="lag-value" style="font-size:12px;">${escHtml(status.last_event_id || "none")}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderViewCards() {
+    const grid = document.getElementById("view-grid");
+    grid.innerHTML = VIEWS.map(v => `
+        <div class="view-card${v === _currentView ? " active" : ""}"
+             onclick="selectView('${escHtml(v)}')">
+            <div class="view-name">${escHtml(v.replace(/_/g, " "))}</div>
+            <div class="view-count${VIEW_COUNTS[v] === undefined ? " loading" : ""}" id="vc-${escHtml(v)}">
+                ${VIEW_COUNTS[v] !== undefined ? escHtml(VIEW_COUNTS[v]) : "..."}
+            </div>
+        </div>
+    `).join("");
+}
+
+function renderRows(data) {
+    const area = document.getElementById("rows-area");
+    if (!data || !data.rows || data.rows.length === 0) {
+        area.innerHTML = `<p class="section-title">No rows in ${escHtml(_currentView)}</p>`;
+        return;
+    }
+    _totalRows = data.total;
+    const cols = Object.keys(data.rows[0]);
+    const thead = `<tr>${cols.map(c => `<th>${escHtml(c)}</th>`).join("")}</tr>`;
+    const tbody = data.rows.map(row =>
+        `<tr>${cols.map(c => `<td title="${escHtml(String(row[c] ?? ""))}">${escHtml(String(row[c] ?? ""))}</td>`).join("")}</tr>`
+    ).join("");
+
+    const totalPages = Math.ceil(data.total / PAGE_SIZE) || 1;
+    area.innerHTML = `
+        <p class="section-title">${escHtml(_currentView)} — ${escHtml(data.total)} rows</p>
+        <div style="overflow-x:auto;">
+            <table class="rows-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+        </div>
+        <div class="pager">
+            <button onclick="changePage(-1)" ${_page <= 1 ? "disabled" : ""}>Previous</button>
+            <span class="page-info">Page ${escHtml(_page)} of ${escHtml(totalPages)}</span>
+            <button onclick="changePage(1)" ${_page >= totalPages ? "disabled" : ""}>Next</button>
+        </div>
+    `;
+}
+
+// ---------------------------------------------------------------------------
+// Data fetchers
+// ---------------------------------------------------------------------------
+async function fetchStatus() {
+    try {
+        const res = await fetch("/api/projection/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        renderLag(data);
+    } catch (e) {
+        // silently ignore — lag will not update
+    }
+}
+
+async function fetchViewCount(view) {
+    try {
+        const res = await fetch(`/api/projection/views/${encodeURIComponent(view)}?page=1&page_size=1`);
+        if (!res.ok) return;
+        const data = await res.json();
+        VIEW_COUNTS[view] = data.total;
+        const el = document.getElementById("vc-" + view);
+        if (el) {
+            el.textContent = data.total;
+            el.classList.remove("loading");
+        }
+    } catch (e) {
+        VIEW_COUNTS[view] = "?";
+    }
+}
+
+async function fetchRows() {
+    const offset = (_page - 1) * PAGE_SIZE;
+    try {
+        const res = await fetch(
+            `/api/projection/views/${encodeURIComponent(_currentView)}?page=${_page}&page_size=${PAGE_SIZE}`
+        );
+        if (!res.ok) {
+            document.getElementById("rows-area").innerHTML =
+                `<p style="color:var(--critical)">Error loading ${escHtml(_currentView)}</p>`;
+            return;
+        }
+        const data = await res.json();
+        renderRows(data);
+    } catch (e) {
+        document.getElementById("rows-area").innerHTML =
+            `<p style="color:var(--critical)">Network error</p>`;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+function selectView(view) {
+    _currentView = view;
+    _page = 1;
+    renderViewCards();
+    fetchRows();
+}
+
+function changePage(delta) {
+    const totalPages = Math.ceil(_totalRows / PAGE_SIZE) || 1;
+    _page = Math.max(1, Math.min(totalPages, _page + delta));
+    fetchRows();
+}
+
+async function doReplay() {
+    const confirmed = confirm(
+        "This will replay ALL events from the start into Postgres.\n" +
+        "Existing rows will be upserted (idempotent). Continue?"
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById("btn-replay");
+    const msg = document.getElementById("replay-status");
+    btn.disabled = true;
+    msg.textContent = "Replaying…";
+    msg.className = "status-msg";
+
+    try {
+        const res = await fetch("/api/projection/replay", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ from_event_id: null }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            msg.textContent = "Error: " + (err.detail || res.statusText);
+            msg.className = "status-msg err";
+            return;
+        }
+        const data = await res.json();
+        msg.textContent = `Replayed ${data.events_processed} events`;
+        msg.className = "status-msg ok";
+        // Refresh counts and rows
+        VIEWS.forEach(fetchViewCount);
+        fetchRows();
+        fetchStatus();
+    } catch (e) {
+        msg.textContent = "Network error";
+        msg.className = "status-msg err";
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+async function init() {
+    renderShell();
+    await fetchStatus();
+    VIEWS.forEach(fetchViewCount);
+    await fetchRows();
+
+    // Auto-refresh every 15s
+    setInterval(() => {
+        fetchStatus();
+        VIEWS.forEach(fetchViewCount);
+    }, 15000);
+}
+
+init();
+</script>
+</body>
+</html>

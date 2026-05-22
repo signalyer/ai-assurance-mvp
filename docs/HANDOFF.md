@@ -1,13 +1,13 @@
 # Resume — AI Assurance Platform
 
-**Last session ended:** 2026-05-21 (Day 8 of 12 — Sessions 01-08 complete · 8 commits ahead of origin after this commit lands)
-**Repo state:** ready to commit · `main` (next commit = Session 08)
+**Last session ended:** 2026-05-22 (Day 9 of 12 — Sessions 01-09 complete · 9 commits ahead of origin after this commit lands)
+**Repo state:** ready to commit · `main` (next commit = Session 09)
 **GitHub:** https://github.com/signalyer/ai-assurance-mvp (private)
 
 ---
 
 ## Where I am
-Day 8 of the 12-day production sprint complete:
+Day 9 of the 12-day production sprint complete:
 - 01a/01b: Scrubber + Fernet vault + `@scrub_pii` ✓
 - 02: Policy engine + OPA + `@policy_gate` ✓
 - 03: Guardrails (injection + topic + safety) + `@guardrails` ✓
@@ -15,19 +15,24 @@ Day 8 of the 12-day production sprint complete:
 - 05: Provider abstraction (5 Protocols + BaseSettings + 7 backends) ✓
 - 06: Framework Coverage Matrix (6 systems × 8 frameworks) + YAML catalogs + 3 PDF Packs ✓
 - 07: Multi-Agent + Agent Library (6 seeded agents, 6 new test systems, Postgres pubsub) ✓
-- 08: **Right-to-Forget cascade + Tamper-Evident Audit log** (vault/T2/T3/Langfuse purge with genuine erasure via file compaction; SHA-256 hash chain over events.jsonl with rolling-window verify) ✓
+- 08: Right-to-Forget cascade + Tamper-Evident Audit log ✓
+- 09: **CLI (`sl`) + Python SDK (`signallayer`) + Postgres event projection (hybrid schema + LISTEN/NOTIFY via read-side tailer)** ✓
 
 Decorator chain (unchanged): `@policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response`
-Tests: 99 total — 82 Session 01-07 regression + 17 new Session 08 (8 audit_chain + 6 right_to_forget + 3 integration). All pass.
+Tests: 179 total — 170 prior regression + 9 new Session 09 integration. All pass.
 
 ## Decisions locked (DECISIONS.md — don't re-litigate)
-Sessions 01-07 decisions unchanged. New Session 08 decisions:
-- **Cascade orchestration:** Sync inline (saga reconsidered + dropped; revisit Day 10 if load tests demand)
-- **Hash chain algorithm:** SHA-256 plain over `prev_hash ‖ canonical_json(event)` — no secret required to verify; genesis = `"GENESIS"`
-- **Verification scope:** Rolling window + checkpoint (default window=1000, checkpoints every 500 events to `data/audit_checkpoints.jsonl`, full=True supported)
-- **Cascade idempotency:** cascade_id reverse lookup; re-submission returns `ALREADY_COMPLETED`
-- **Langfuse delete:** flag-gated behind `LANGFUSE_DELETE_ENABLED` env var (default false); real API path wired but not reached without flag
-- **PII erasure model:** File compaction (atomic rewrite), not append-only tombstones — required for genuine GDPR erasure of Fernet-encrypted ciphertext
+Sessions 01-08 decisions unchanged. New Session 09 decisions:
+- **SDK distribution:** Internal Azure Artifacts feed; `publish.ps1` builds wheel but publish step gated off (DRY RUN) until Day 10 provisions feed + PAT
+- **CLI auth model:** HMAC-SHA-256 only (no Entra). Canonical signing input: `f"{unix_ts}\n{METHOD}\n{path}\n{sha256_hex(body)}"`. Byte-identical across SDK / CLI / middleware — any change requires updating all three.
+- **Postgres projection strategy:** LISTEN/NOTIFY via read-side tailer (NOT inline NOTIFY in `_append_jsonl`). Preserves Session 08 invariant that JSONL append is PG-free.
+- **Materialized view schema:** Hybrid — typed hot columns + JSONB rest + GIN index per JSONB. Locked hot-column list in DECISIONS.md.
+
+## Critical findings FIXED in Session 09 (post-review)
+- ✅ SDK ↔ middleware signing scheme mismatch (CRITICAL) — SDK client was using colon-delimited + ISO-8601; aligned to newline-delimited + Unix integer (matches CLI + middleware)
+- ✅ `domain/projection_worker.py` NOTIFY used f-string SQL with manual quote-escaping → migrated to parameterized `SELECT pg_notify(%s, %s)`
+- ✅ Nonce cache unbounded — added `NONCE_CACHE_MAX=50_000` hard-cap clear on overflow
+- ✅ `/api/projection/replay` and `/api/projection/views/{view}` leaked exception messages → switched to generic `"internal_error"` detail (exc still logged with `exc_info=True`)
 
 ## Working rules in effect (memory)
 - `feedback_subagents_context_default.md` — 3+ file sessions default to parallel sub-agents in single Agent-block message + parallel code-reviewer/security-reviewer after, TaskCreate tracking
@@ -36,53 +41,58 @@ Sessions 01-07 decisions unchanged. New Session 08 decisions:
 
 ## Key files to load for next session
 1. `CLAUDE.md` — auto-loaded
-2. `ARCHITECTURE.md` — current Built state through Session 08
-3. `DECISIONS.md` — all locked decisions including 6 new Session 08 entries
-4. `docs/plans/12-DAY-PRODUCTION-SPRINT.md` — Day 9 spec (CLI + SDK + Postgres event projection)
-5. `docs/plans/SESSION-08-right-to-forget.md` — completed Session 08 plan (reference)
-6. `domain/right_to_forget.py`, `domain/audit_chain.py` — RTF cascade + hash chain (extend pattern for Day 9 projection worker)
+2. `ARCHITECTURE.md` — current Built state through Session 09
+3. `DECISIONS.md` — all locked decisions including 4 new Session 09 entries
+4. `docs/plans/12-DAY-PRODUCTION-SPRINT.md` — Day 10 spec (production hardening + load tests + deploy)
+5. `docs/plans/SESSION-09-cli-sdk-projection.md` — completed Session 09 plan (reference)
+6. `middleware/hmac_auth.py`, `sdk/signallayer/client.py`, `cli/sl/auth.py` — three files that MUST stay byte-identical on the signing canonical string
 
-## Outstanding questions for next session (Day 9)
-1. **SDK distribution:** pip from PyPI vs internal index vs `pip install -e ./sdk` only?
-2. **CLI auth model:** HMAC-SHA-256 (per Section 2.7 of sprint plan) vs Entra ID device-code vs both with toggle?
-3. **Postgres projection:** trigger-based (LISTEN/NOTIFY → worker) vs polling worker (cron-style) vs change-data-capture?
-4. **Materialized view schema:** column-per-event-type vs JSON column + GIN index?
+## Outstanding questions for next session (Day 10)
+1. **Multi-worker production deploy strategy:** single uvicorn worker (preserves in-memory nonce cache replay protection) vs gunicorn multi-worker + Redis-backed nonce cache?
+2. **SDK publish feed:** provision Azure Artifacts feed now, or defer to a public PyPI release post-demo?
+3. **Load test target service:** App Service B1 (current) or scale to S1 for the 100 req/s × 10 min run?
+4. **App Insights workspace:** new workspace vs reuse `log-aigovern-dev`?
 
 ## Next concrete action
-Read `CLAUDE.md`, `ARCHITECTURE.md`, `DECISIONS.md`, then `docs/plans/12-DAY-PRODUCTION-SPRINT.md` Day 9 section. Draft `docs/plans/SESSION-09-cli-sdk-projection.md` with the 6-item pre-execution review. Ask the 4 locked-decision questions above. Wait for explicit "Y" / "go" / "approved" before spawning agents.
+Read `CLAUDE.md`, `ARCHITECTURE.md`, `DECISIONS.md`, then `docs/plans/12-DAY-PRODUCTION-SPRINT.md` Day 10 section. Draft `docs/plans/SESSION-10-hardening-deploy.md` with the 6-item pre-execution review. Ask the 4 locked-decision questions above. Wait for explicit "Y" / "go" / "approved" before spawning agents.
 
-## Open items deferred from Session 08 (NEW debt)
-- **SECURITY DEBT (HIGH — Day 9/10):** `api/audit_verify.py` GET /api/audit/events returns full event payloads (including `subject_id`, `reason`, scrubbed-prompt fragments) with no authentication. Add auth middleware + a public-mode projection that strips PII-bearing fields. Privileged role required for full payload.
-- **SECURITY DEBT (HIGH — Day 10):** `domain/agent_memory.py` Postgres `purge_episodes` still uses `metadata::text LIKE '%<subject_id>%'` substring match — false-positive purge risk if subject_ids are short. Migrate `subject_id` to indexed column or JSONB extraction operator (`metadata->>'subject_id' = :subject_id`). JSONL fallback path was fixed (compaction), Postgres path was not.
-- **SECURITY DEBT (HIGH — Day 10):** `domain/rag_engine.py` `purge_chunks` caps at Azure Search 1000-doc top-limit per call. Subjects with >1000 chunks are silently under-purged. Add `$skip` pagination loop.
-- **CODE DEBT (HIGH — Day 10):** `domain/audit_chain.py` `append_chained_event` re-reads the entire events.jsonl on every write to seed prev_hash. O(n) per write under the global lock. Cache prev_hash + chained_count in module-level state, update atomically inside the lock.
-- **CODE DEBT (MEDIUM — Day 10):** `domain/right_to_forget.py` `_find_completed_cascade` only scans last 5000 events; older completed cascades are missed → silent double-purge. Index completed cascades in sidecar file during cascade emission.
-- **CODE DEBT (MEDIUM — Day 10):** `api/audit_verify.py` pagination semantics are tail-relative — older events unreachable beyond `limit+offset` window. Switch to absolute `from_index` or full-file read.
-- **CODE DEBT (MEDIUM — Day 10):** `domain/audit_chain.py` documents single-process safety only. Multi-instance App Service would corrupt the chain. Add advisory file lock or queue writes to a single writer.
-- **CODE DEBT (LOW — Day 10):** `domain/right_to_forget.py` `_store_funcs` callable check is dead code (always true); remove and type-annotate as `list[tuple[str, Callable[[str], dict]]]`.
-- **CODE DEBT (LOW — Day 10):** `_completed_cache` in `right_to_forget.py` is unbounded — move to persistent store when saga lands.
-- **TEST DEBT (LOW — Day 10):** `tests/test_audit_chain.py` checkpoint-every-500 test deferred with TODO. Promote to a real test (writing 500 events is sub-second).
-- (carried from Session 07) SSE pool exhaustion · ai-systems.html legacy XSS · RBAC on mutating endpoints · 3 SQLAlchemy engines consolidation — all Day 10 hardening.
-- (carried from Session 07) ISO 42001 / SR 11-7 / FFIEC PDF Packs — endpoints return 501; deferred to Session 11.
+## Open items (debt) — Day 10 priorities
 
-## Critical findings FIXED in Session 08 (post-review)
-- ✅ Vault `purge_subject_tokens` now compacts file atomically (drops ciphertext lines, not tombstones-only) — genuine GDPR erasure
-- ✅ Episodes JSONL fallback purge now compacts atomically
-- ✅ `cascade_id` API path parameters are UUID-validated (FastAPI Pydantic UUID type → 422 on invalid)
-- ✅ `subject_id` body field has max_length=256 + charset allowlist `[A-Za-z0-9._@-]+`
-- ✅ Langfuse `httpx.Client` delete loop moved inside `with` block (was use-after-close)
-- ✅ `cascade()` no longer mutates `os.environ["LANGFUSE_DELETE_ENABLED"]` (race-safe local flag)
-- ✅ Vault `sha256_digest_after` computed over sorted purged vault_id list + ts (not always sha256(""))
+### NEW from Session 09
+- **SECURITY DEBT (HIGH — Day 10):** Multi-worker deploys require shared nonce cache (Redis). Current per-process `dict` loses replay protection across workers. Single-worker uvicorn is safe for v1 demo; production must migrate before scale-out.
+- **SECURITY DEBT (MEDIUM — Day 10):** `cli/sl/config.py` `save_credentials` has TOCTOU: file written before chmod 0600. Fix: open with `os.open(O_CREAT|O_WRONLY|O_TRUNC, mode=0o600)`.
+- **SECURITY DEBT (MEDIUM — Day 10):** `dashboard.py` `/api/health` discloses configured-API-key flags (`{"api_keys": {...true/false}}`) to unauthenticated callers. Strip to `{"status": "ready"|"incomplete"}` only.
+- **CODE DEBT (MEDIUM — Day 10):** `domain/projection.py` has dead `_DISPATCH` dict alongside the actual if/elif dispatcher in `_dispatch()`. Either remove or replace with lookup; the divergence is a maintenance trap.
+- **CODE DEBT (MEDIUM — Day 10):** `domain/projection.py:330` bare `except Exception` swallows secondary rollback failure. Wrap rollback in its own try/except so original exception is preserved.
+- **CODE DEBT (LOW — Day 10):** `middleware/hmac_auth.py` `_get_secret()` reads `os.environ` per-request; should be read once at module load per CLAUDE.md.
+- **CODE DEBT (LOW — Day 10):** `cli/sl/main.py` uses `Optional[bool]` with `# noqa: UP007`; switch to `bool | None` (Python 3.12+).
+- **CODE DEBT (LOW — Day 10):** `dashboard.py` lines 13-23 hand-roll an `.env` parser before `load_dotenv(override=True)`; the hand-roll is dead code.
+
+### Carried from Session 08
+- **SECURITY DEBT (HIGH — Day 10):** `api/audit_verify.py` GET /api/audit/events returns full event payloads with no authentication. Add auth + public-mode projection that strips PII-bearing fields.
+- **SECURITY DEBT (HIGH — Day 10):** `domain/agent_memory.py` Postgres `purge_episodes` uses `metadata::text LIKE '%<subject_id>%'` — false-positive purge risk if subject_ids are short. Migrate to indexed column or JSONB extraction operator.
+- **SECURITY DEBT (HIGH — Day 10):** `domain/rag_engine.py` `purge_chunks` caps at Azure Search 1000-doc top-limit. Add `$skip` pagination loop.
+- **CODE DEBT (HIGH — Day 10):** `domain/audit_chain.py` `append_chained_event` re-reads entire events.jsonl on every write (O(n) per write under global lock). Cache prev_hash + chained_count in module-level state.
+- **CODE DEBT (MEDIUM — Day 10):** `domain/right_to_forget.py` `_find_completed_cascade` only scans last 5000 events — older cascades missed. Sidecar index file needed.
+- **CODE DEBT (MEDIUM — Day 10):** `api/audit_verify.py` pagination tail-relative; switch to absolute `from_index`.
+- **CODE DEBT (MEDIUM — Day 10):** `domain/audit_chain.py` documents single-process safety only. Multi-instance App Service would corrupt the chain. Advisory file lock or single-writer queue.
+- **CODE DEBT (LOW — Day 10):** `domain/right_to_forget.py` `_store_funcs` callable check is dead code.
+- **CODE DEBT (LOW — Day 10):** `_completed_cache` in right_to_forget.py unbounded.
+- **TEST DEBT (LOW — Day 10):** `tests/test_audit_chain.py` checkpoint-every-500 test deferred with TODO.
+
+### Carried from Session 07
+- SSE pool exhaustion · ai-systems.html legacy XSS · RBAC on mutating endpoints · 3 SQLAlchemy engines consolidation — all Day 10 hardening.
+- ISO 42001 / SR 11-7 / FFIEC PDF Packs — endpoints return 501; deferred to Session 11.
 
 ## Recent commits (last 5)
 ```
+c025324 Feat: Session 08 — Right-to-Forget cascade + Tamper-Evident Audit (Day 8)
 77d6d9e Feat: Session 07 — Multi-Agent + Agent Library (Day 7)
 5ee9e3a Docs: Session 06 completion — ARCHITECTURE, DECISIONS, HANDOFF updated
 6b77497 Feat: Session 06 — Framework Coverage Matrix (Day 6)
 48b77c8 Feat: Session 05 — Provider abstraction + legacy guardrails delete
-14afa3c Feat: Session 04 — Memory (Postgres TTL) + RAG (Azure AI Search hybrid)
 ```
-(Next commit = Session 08 work)
+(Next commit = Session 09 work)
 
 ---
 
@@ -90,15 +100,14 @@ Read `CLAUDE.md`, `ARCHITECTURE.md`, `DECISIONS.md`, then `docs/plans/12-DAY-PRO
 
 ```
 Read docs/HANDOFF.md first, then docs/plans/12-DAY-PRODUCTION-SPRINT.md
-Day 9 section.
+Day 10 section.
 
-Status: Sessions 01-08 complete · 99 acceptance/regression tests pass ·
-8 commits ahead of origin/main · ready for Day 9 (CLI + SDK + Postgres
-event projection).
+Status: Sessions 01-09 complete · 179 tests pass · 9 commits ahead of
+origin/main · ready for Day 10 (production hardening + load tests + deploy).
 
 Do NOT spawn agents or write code yet. Do this first:
 
-1. Draft docs/plans/SESSION-09-cli-sdk-projection.md with the 6-item
+1. Draft docs/plans/SESSION-10-hardening-deploy.md with the 6-item
    pre-execution review:
    - Decorator chain order (unchanged)
    - Every CREATE file with one-line purpose
@@ -108,15 +117,15 @@ Do NOT spawn agents or write code yet. Do this first:
    - Acceptance criteria with runnable assertions
 
 2. Surface 4 decisions via AskUserQuestion:
-   - SDK distribution: pip from PyPI vs internal index vs editable-only
-   - CLI auth: HMAC-SHA-256 vs Entra device-code vs both
-   - Postgres projection: LISTEN/NOTIFY worker vs polling vs CDC
-   - Materialized view schema: column-per-event-type vs JSON+GIN
+   - Multi-worker deploy: single uvicorn vs gunicorn + Redis nonce cache
+   - SDK feed: provision Azure Artifacts now vs defer to public PyPI
+   - Load test target: B1 vs scale to S1
+   - App Insights workspace: new vs reuse log-aigovern-dev
 
 3. Wait for explicit "Y" / "go" / "approved" before executing.
 
 On approval: spawn 3 sub-agents in ONE message (TaskCreate up front).
-Then run all new + 99 regression tests. Spawn code-reviewer + security-
+Then run all new + 179 regression tests. Spawn code-reviewer + security-
 reviewer in parallel. Update docs trio. Commit.
 
 The parallel-agent + TaskCreate workflow is the default per

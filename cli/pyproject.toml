@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signallayer-cli"
+version = "0.1.0"
+description = "SignalLayer AI Assurance CLI"
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.12",
+    "httpx>=0.27",
+    "cryptography>=41.0.0",
+]
+
+[project.scripts]
+sl = "sl.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sl*"]

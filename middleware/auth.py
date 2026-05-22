@@ -34,6 +34,7 @@ PUBLIC_PREFIXES = (
     "/api/health",
     "/static/",
     "/favicon.ico",
+    "/api/sdk/",  # SDK paths are authenticated by HMACAuthMiddleware, not session cookies
 )
 
 ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV")

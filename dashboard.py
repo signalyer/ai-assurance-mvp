@@ -57,7 +57,9 @@ from api.agent_bindings import router as agent_bindings_router
 from api.agent_notifications import router as agent_notifications_router
 from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
+from api.projection import router as projection_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
+from middleware.hmac_auth import HMACAuthMiddleware
 
 load_dotenv()
 
@@ -129,8 +131,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Session-cookie auth gate (no-op unless AUTH_ENABLED=true)
+# Middleware execution order (Starlette: last add_middleware = outermost = first to execute).
+# SessionAuth added first (innermost), HMAC added last (outermost).
+# Request flow: HMACAuthMiddleware -> SessionAuthMiddleware -> routes.
+# /api/sdk/ is in SessionAuth PUBLIC_PREFIXES so it passes through after HMAC verifies it.
+
+# Session-cookie auth gate (no-op unless AUTH_ENABLED=true) — innermost
 app.add_middleware(SessionAuthMiddleware)
+
+# HMAC auth for /api/sdk/* — outermost, executes first on every request
+app.add_middleware(HMACAuthMiddleware)
 app.include_router(auth_router)
 
 # Include API routers
@@ -166,6 +176,7 @@ app.include_router(agent_bindings_router)
 app.include_router(agent_notifications_router)
 app.include_router(rtf_router)
 app.include_router(audit_verify_router)
+app.include_router(projection_router)
 
 
 @app.get("/api/health")

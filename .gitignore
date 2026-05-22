@@ -65,3 +65,10 @@ local.settings.json
 # Runtime data (generated, not committed)
 data/
 .pytest_tmp/
+
+# SignalLayer credentials (never commit)
+.signallayer/
+
+# CLI + SDK build artifacts
+cli/dist/
+sdk/dist/

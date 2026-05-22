@@ -341,3 +341,76 @@ Constrains: `framework_matrix(["ai-sys-001"])` must continue to work without bin
      agents use `framework_refs: list[str]` format `"FRAMEWORK:CLAUSE"` (e.g., `"NIST_AI_RMF:GOVERN-1.1"`).
      `framework_coverage._agent_framework_coverage` supports both `list[str]` and `list[dict]`
      ref formats for forward-compatibility.
+
+## 2026-05-22 — SDK distribution: internal Azure Artifacts feed (publish gated off in v1)
+Decision: SDK builds to a wheel via `hatchling`. Distribution target is an internal
+         Azure Artifacts feed. CI publish workflow is wired but gated off (`if: false`)
+         until the feed + PAT are provisioned on Day 10. Acceptance test uses
+         `pip install -e ./sdk` (editable) which is unchanged.
+Alternatives: editable-only forever · public PyPI from day one
+Why: PyPI is premature for a v1 demo; editable-only blocks any real distribution story.
+     Internal feed matches the eventual prod posture without paying the cost of PAT/feed
+     provisioning during the 12-day sprint. `publish.ps1` exits with a DRY-RUN banner.
+Constrains: `sdk/pyproject.toml` must build a valid wheel via `python -m build`. The publish
+     script must NOT actually upload until Day 10 hardening lands the feed + secret.
+
+## 2026-05-22 — CLI auth: HMAC-SHA-256 only (no Entra in v1)
+Decision: The `sl` CLI and the `signallayer` SDK both sign every request to `/api/sdk/*`
+         with HMAC-SHA-256. Canonical signing input is newline-delimited:
+         `f"{unix_ts}\n{METHOD}\n{path}\n{sha256_hex(body)}"`. Headers: `X-SL-Key-Id`,
+         `X-SL-Timestamp` (Unix integer seconds, str), `X-SL-Nonce`, `X-SL-Signature`.
+         Drift tolerance 300s. Nonce TTL 600s with hard cap 50,000 entries.
+         `middleware/hmac_auth.py` is mounted OUTERMOST (before SessionAuthMiddleware).
+         `/api/sdk/` is added to `SessionAuthMiddleware.PUBLIC_PREFIXES` so it is not
+         double-processed.
+Alternatives: Entra ID device-code · both with toggle
+Why: HMAC is the simplest robust signer for service-to-service + CLI traffic on a 12-day
+     sprint. Entra adds MSAL + app registration + token refresh — 4h of overhead for no
+     demo-visible value. A toggle doubles the security review surface.
+Constrains: The canonical signing string above is load-bearing; SDK, CLI, and middleware
+     MUST stay byte-identical. Any change requires updating all three files in the same
+     commit. `hmac.compare_digest` for verification — never `==`. Multi-worker deploys
+     MUST migrate the nonce cache to Redis before going to production (per-process cache
+     loses replay protection across workers).
+
+## 2026-05-22 — Postgres projection: LISTEN/NOTIFY via read-side tailer (not inline NOTIFY)
+Decision: Postgres materialized views are populated by a two-process pipeline:
+         (1) `run_tailer()` reads `data/events.jsonl` (the source of truth), issues
+         `SELECT pg_notify('projection_events', <json>)` (PARAMETERIZED, not f-string SQL),
+         and checkpoints to `data/projection_tailer_checkpoint.json`.
+         (2) `run_projection_worker()` `LISTEN`s on `projection_events` and calls
+         `project_event(event, conn)` to upsert into typed tables. Both processes are
+         started independently via `python -m domain.projection_worker {tailer|worker}`.
+         Replay path bypasses NOTIFY: `replay(from_event_id)` reads JSONL directly and
+         applies projections in-process.
+Alternatives: inline NOTIFY in `repository._append_jsonl` · polling worker · CDC (Debezium)
+Why: Inline NOTIFY would couple the audit-chain write path to Postgres availability,
+     violating the Session 08 invariant that JSONL append is PG-free. Read-side tailer
+     preserves that invariant: if Postgres is down, the tailer queues and retries; the
+     audit log keeps working. Polling alone wastes ~1 RTT/sec; LISTEN gives sub-100ms
+     projection latency. CDC (Debezium) is operational overkill for a single-source JSONL.
+Constrains: `domain/projection.py` and `domain/projection_worker.py` MUST NOT write to
+     `events.jsonl` or `vault.jsonl`. MUST NOT include `raw_prompt` in any materialized
+     view. Idempotency keyed on `(event_id)` in `projection_state` inside the same
+     transaction as the upsert. Tested by `tests/test_session09_integration.py`.
+
+## 2026-05-22 — Materialized view schema: hybrid (typed hot columns + JSONB rest)
+Decision: Each of the 5 view tables has typed columns for the hot fields (queried in
+         demos / auditor evidence packs / joins) plus one JSONB column for the rest of
+         the payload, with a GIN index on the JSONB column.
+         Hot columns (LOCKED):
+         - ai_systems: system_id PK, name, owner, risk_tier, created_at, metadata JSONB
+         - eval_runs: run_id PK, system_id, status, pass_rate, started_at, finished_at, metrics JSONB
+         - findings: finding_id PK, system_id, severity, status, created_at, payload JSONB
+         - release_decisions: decision_id PK, system_id, decision, decided_at, gate_results JSONB
+         - policy_evaluations: eval_id PK, system_id, category, decision, evaluated_at, inputs JSONB
+         Plus `projection_state(event_id PK)` for idempotency.
+Alternatives: column-per-event-type (fully typed) · JSONB-only (one table)
+Why: Fully typed locks the schema for every event-type evolution → migration churn every
+     session. JSONB-only obscures the schema for the auditor demo (scenario 6) where
+     `SELECT system_id, severity, count(*) FROM findings ...` is clearer than
+     `... WHERE payload->>'severity' = 'HIGH'`. Hybrid gives clean SQL for the demo path
+     AND flexibility for fields we haven't promoted yet.
+Constrains: New hot columns are migration-gated (no schema-on-write). All non-hot fields
+     stay in the JSONB column. Whitelist of view names in `/api/projection/views/{view}`
+     enforced via `PROJECTION_VIEWS` frozenset before any SQL interpolation.
