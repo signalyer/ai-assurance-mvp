@@ -851,6 +851,229 @@ def memory_stats() -> dict:
         return empty
 
 
+def purge_episodes(
+    subject_id: str,
+    workload_id: str | None = None,
+) -> dict:
+    """Tombstone episodic memory rows belonging to *subject_id*.
+
+    Scans the ``episodes`` Postgres table (or all ``data/episodes_*.jsonl``
+    files when Postgres is unavailable) for rows whose ``metadata`` JSON
+    contains ``subject_id`` equal to *subject_id*.
+
+    When *workload_id* is provided, only episodes for that workload are
+    considered; otherwise all workloads are searched.
+
+    Tombstoning is implemented via an UPDATE that sets
+    ``compressed_summary = 'PURGED'`` and clears ``prompt`` / ``response``
+    columns so the row is no longer queryable through normal read paths.
+    A ``T2_EPISODE_PURGED`` audit event is emitted via ``append_agent_event``
+    for every purged episode (which flows through the hash chain).
+
+    When the Postgres engine is unavailable (dev/test), the function falls back
+    to scanning ``data/episodes_*.jsonl`` and appending tombstone records.
+
+    Args:
+        subject_id:  Identifier of the data subject to purge.
+        workload_id: Optional workload scope.  None = purge across all workloads.
+
+    Returns:
+        Dict with keys:
+
+        * ``episodes_removed`` — number of episodes tombstoned.
+        * ``sha256_digest_after`` — SHA-256 of ``"purged:<subject_id>:<count>"``.
+    """
+    import hashlib
+    import json as _json
+    from pathlib import Path as _Path
+
+    logger.info(
+        "purge_episodes: entry subject_id=%s workload_id=%s",
+        subject_id, workload_id,
+    )
+
+    from domain.repository import append_agent_event  # late import — avoids circular
+
+    purged_count = 0
+
+    # ------------------------------------------------------------------
+    # Postgres path
+    # ------------------------------------------------------------------
+    if _engine is not None:
+        try:
+            from sqlalchemy import text
+
+            # Build filter clause — parameterized, never f-string SQL
+            if workload_id:
+                select_sql = text(
+                    """
+                    SELECT episode_id, workload_id
+                    FROM episodes
+                    WHERE workload_id = :workload_id
+                      AND metadata::text LIKE :subject_pattern
+                    """
+                )
+                rows = []
+                with _engine.connect() as conn:
+                    rows = conn.execute(
+                        select_sql,
+                        {
+                            "workload_id": workload_id,
+                            "subject_pattern": f"%{subject_id}%",
+                        },
+                    ).fetchall()
+            else:
+                select_sql = text(
+                    """
+                    SELECT episode_id, workload_id
+                    FROM episodes
+                    WHERE metadata::text LIKE :subject_pattern
+                    """
+                )
+                with _engine.connect() as conn:
+                    rows = conn.execute(
+                        select_sql,
+                        {"subject_pattern": f"%{subject_id}%"},
+                    ).fetchall()
+
+            purge_sql = text(
+                """
+                UPDATE episodes
+                SET prompt = 'PURGED',
+                    response = 'PURGED',
+                    compressed_summary = 'PURGED',
+                    metadata = NULL
+                WHERE episode_id = :episode_id
+                """
+            )
+
+            for row in rows:
+                episode_id_val = str(row[0])
+                wid = str(row[1])
+                with _engine.begin() as conn:
+                    conn.execute(purge_sql, {"episode_id": episode_id_val})
+
+                append_agent_event("T2_EPISODE_PURGED", {
+                    "subject_id": subject_id,
+                    "episode_id": episode_id_val,
+                    "workload_id": wid,
+                })
+                purged_count += 1
+
+            logger.info(
+                "purge_episodes: Postgres path complete subject_id=%s purged=%d",
+                subject_id, purged_count,
+            )
+
+        except Exception as exc:
+            logger.error(
+                "purge_episodes: Postgres purge failed subject_id=%s: %s",
+                subject_id, exc, exc_info=True,
+            )
+            raise
+
+    else:
+        # ------------------------------------------------------------------
+        # JSONL fallback path (dev / no Postgres)
+        # ------------------------------------------------------------------
+        data_dir = _Path(__file__).resolve().parents[1] / "data"
+        pattern = "episodes_*.jsonl"
+        if workload_id:
+            pattern = f"episodes_{workload_id}.jsonl"
+
+        import json as _json2
+
+        for ep_file in sorted(data_dir.glob(pattern)):
+            if not ep_file.exists():
+                continue
+
+            try:
+                with ep_file.open("r", encoding="utf-8") as fh:
+                    lines = fh.readlines()
+
+                kept_lines: list[str] = []
+                file_purged = 0
+                for line in lines:
+                    raw = line.strip()
+                    if not raw:
+                        continue
+                    try:
+                        record = _json2.loads(raw)
+                    except _json2.JSONDecodeError:
+                        kept_lines.append(raw)
+                        continue
+
+                    meta = record.get("metadata") or {}
+                    if isinstance(meta, str):
+                        try:
+                            meta = _json2.loads(meta)
+                        except Exception:  # noqa: BLE001
+                            meta = {}
+
+                    is_match = (
+                        meta.get("subject_id") == subject_id
+                        or record.get("subject_id") == subject_id
+                    )
+                    is_prior_tombstone = (
+                        record.get("op") == "PURGE"
+                        and record.get("subject_id") == subject_id
+                    )
+
+                    if is_match or is_prior_tombstone:
+                        # Genuine erasure: drop the record from the compacted file.
+                        if is_match and record.get("op") != "PURGE":
+                            file_purged += 1
+                            append_agent_event("T2_EPISODE_PURGED", {
+                                "subject_id": subject_id,
+                                "episode_id": record.get("episode_id", ""),
+                                "workload_id": record.get("workload_id", ep_file.stem),
+                                "source": "jsonl_fallback",
+                            })
+                        continue
+
+                    kept_lines.append(raw)
+
+                if file_purged > 0:
+                    # Append a non-PII tombstone marker for the audit trail
+                    kept_lines.append(_json2.dumps({
+                        "op": "PURGE",
+                        "subject_id": subject_id,
+                        "episodes_purged_count": file_purged,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }))
+                    tmp = ep_file.with_suffix(ep_file.suffix + ".tmp")
+                    with tmp.open("w", encoding="utf-8") as fout:
+                        for ln in kept_lines:
+                            fout.write(ln + "\n")
+                    tmp.replace(ep_file)
+
+                purged_count += file_purged
+
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "purge_episodes: JSONL fallback failed for file=%s: %s",
+                    ep_file.name, exc,
+                )
+
+        logger.info(
+            "purge_episodes: JSONL fallback complete subject_id=%s purged=%d",
+            subject_id, purged_count,
+        )
+
+    digest = hashlib.sha256(
+        f"purged:{subject_id}:{purged_count}".encode("utf-8")
+    ).hexdigest()
+
+    logger.info(
+        "purge_episodes: exit subject_id=%s episodes_removed=%d digest=%s…",
+        subject_id, purged_count, digest[:12],
+    )
+    return {
+        "episodes_removed": purged_count,
+        "sha256_digest_after": digest,
+    }
+
+
 def purge_expired() -> int:
     """Delete all episodes where expires_at < NOW(). Returns count purged.
 

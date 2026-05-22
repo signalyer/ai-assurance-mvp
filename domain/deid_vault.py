@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+_write_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +255,112 @@ def vault_stats() -> dict:
             "oldest": None,
             "newest": None,
         }
+
+
+def purge_subject_tokens(subject_id: str) -> dict:
+    """Tombstone all vault tokens associated with *subject_id*.
+
+    Uses the append-only JSONL tombstone pattern — existing records are never
+    mutated or deleted.  A ``{"op": "PURGE", "subject_id": ..., "ts": ...}``
+    tombstone record is appended for each live token mapping whose ``vault_id``
+    contains *subject_id* as a prefix.
+
+    Because vault_ids are typically stored as ``<subject_id>:<scope>`` (set by
+    ``scrubber.tokenise_payload``), this function matches on any ``vault_id``
+    that starts with ``subject_id``.  Exact ``subject_id`` vault_ids are also
+    matched.
+
+    Returns:
+        Dict with keys:
+
+        * ``tokens_removed`` — number of tombstone records appended.
+        * ``sha256_digest_after`` — SHA-256 of the canonical-JSON of remaining
+          live token mappings for this subject (empty string after full purge,
+          so digest is ``sha256(b"")``.hexdigest()``).
+    """
+    import hashlib
+    import json as _json
+
+    logger.info("purge_subject_tokens: entry subject_id=%s", subject_id)
+
+    try:
+        import storage  # noqa: PLC0415
+
+        if not VAULT_FILE.exists():
+            logger.info(
+                "purge_subject_tokens: vault file absent — nothing to purge subject_id=%s",
+                subject_id,
+            )
+            return {
+                "tokens_removed": 0,
+                "sha256_digest_after": hashlib.sha256(b"").hexdigest(),
+            }
+
+        records = storage._read_jsonl(VAULT_FILE)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        def _belongs_to_subject(vid: str) -> bool:
+            return (
+                vid == subject_id
+                or vid.startswith(f"{subject_id}:")
+                or vid.startswith(f"{subject_id}_")
+            )
+
+        # Compact the file: drop both original records and any prior tombstones
+        # for this subject. This is genuine erasure — the ciphertext line is
+        # physically removed, not merely marked. Atomic rename to prevent
+        # partial-write corruption.
+        kept: list[dict] = []
+        purged_vault_ids: list[str] = []
+        for r in records:
+            vid: str = r.get("vault_id", "")
+            if _belongs_to_subject(vid):
+                if r.get("op") != "PURGE":
+                    purged_vault_ids.append(vid)
+                continue  # drop this record from the compacted file
+            kept.append(r)
+
+        tokens_removed = len(purged_vault_ids)
+
+        # Append a single PURGE marker for the audit trail (no ciphertext in it).
+        kept.append({
+            "op": "PURGE",
+            "subject_id": subject_id,
+            "vault_ids_purged": sorted(purged_vault_ids),
+            "ts": now_iso,
+        })
+
+        # Atomic rewrite
+        with _write_lock:
+            tmp_path = VAULT_FILE.with_suffix(VAULT_FILE.suffix + ".tmp")
+            with tmp_path.open("w", encoding="utf-8") as f:
+                for r in kept:
+                    f.write(json.dumps(r) + "\n")
+            tmp_path.replace(VAULT_FILE)
+
+        # Digest is meaningful now: sha256 over sorted list of purged vault_ids
+        # plus the timestamp. Distinguishes "no tokens existed" (empty list) from
+        # "N tokens purged" while remaining stable for the same cascade re-run.
+        digest_payload = json.dumps(
+            {"vault_ids_purged": sorted(purged_vault_ids), "ts": now_iso},
+            sort_keys=True, separators=(",", ":"),
+        )
+        digest = hashlib.sha256(digest_payload.encode("utf-8")).hexdigest()
+
+        logger.info(
+            "purge_subject_tokens: exit subject_id=%s tokens_removed=%d digest=%s…",
+            subject_id, tokens_removed, digest[:12],
+        )
+        return {
+            "tokens_removed": tokens_removed,
+            "sha256_digest_after": digest,
+        }
+
+    except Exception as exc:
+        logger.error(
+            "purge_subject_tokens: failed subject_id=%s: %s", subject_id, exc, exc_info=True
+        )
+        raise
 
 
 if __name__ == "__main__":

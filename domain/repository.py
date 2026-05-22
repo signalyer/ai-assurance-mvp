@@ -192,24 +192,39 @@ def _append_jsonl(path: Path, record: dict) -> None:
 
 
 def append_agent_event(event_type: str, payload: dict) -> None:
-    """Append an agent lifecycle event to data/events.jsonl.
+    """Append an agent lifecycle event to data/events.jsonl via the hash chain.
 
-    Every event receives an ISO timestamp at write time.  This JSONL file is
-    the immutable audit trail for the agent registry — Postgres is the live
-    query store; this file is the append-only record for compliance purposes.
+    Delegates to :func:`domain.audit_chain.append_chained_event` so that every
+    event written through this helper is part of the tamper-evident SHA-256
+    chain.  The ``event_id``, ``prev_hash``, and ``hash`` fields are added
+    automatically by the chain writer.
 
     Args:
         event_type: e.g. 'AGENT_CREATED', 'AGENT_PUBLISHED', 'AGENT_BINDING_CREATED'
         payload:    Arbitrary dict of context fields (agent_id, version_id, etc.)
     """
-    from datetime import datetime, timezone
+    # Late import breaks the potential circular import:
+    # repository -> audit_chain -> repository (audit_chain calls _append_jsonl directly)
+    from domain import audit_chain as _ac  # noqa: PLC0415
 
-    record = {
-        "event_type": event_type,
-        "ts": datetime.now(timezone.utc).isoformat(),
-        **payload,
-    }
-    _append_jsonl(EVENTS_FILE, record)
+    _ac.append_chained_event(event_type, payload)
+
+
+def read_chain_tail(n: int) -> list[dict]:
+    """Return the last *n* events from data/events.jsonl (oldest-first order).
+
+    Thin wrapper around :func:`domain.audit_chain.read_chain_tail` exposed on
+    this module for callers that already import from ``domain.repository``.
+
+    Args:
+        n: Number of tail events to return.
+
+    Returns:
+        List of event dicts; at most *n* entries.
+    """
+    from domain import audit_chain as _ac  # noqa: PLC0415
+
+    return _ac.read_chain_tail(n)
 
 
 def read_agent_events(event_type: str | None = None) -> list[dict]:
@@ -233,5 +248,5 @@ __all__ = [
     "findings_for", "evidence_for", "eval_results_for",
     "runtime_events_for", "release_gates_for", "assessments_for",
     "DEMO_OVERLAY_FILE", "FINDINGS_EVENTS_FILE",
-    "append_agent_event", "read_agent_events", "EVENTS_FILE",
+    "append_agent_event", "read_agent_events", "read_chain_tail", "EVENTS_FILE",
 ]

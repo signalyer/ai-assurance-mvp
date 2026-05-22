@@ -64,3 +64,4 @@ local.settings.json
 
 # Runtime data (generated, not committed)
 data/
+.pytest_tmp/

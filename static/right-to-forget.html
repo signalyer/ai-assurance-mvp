@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Right to Forget — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* RTF-specific layout */
+        .rtf-form-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            max-width: 560px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 0.85rem;
+        }
+        .form-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .form-input, .form-textarea {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .form-textarea { min-height: 64px; resize: vertical; }
+
+        /* Cascade table */
+        .cascade-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .cascade-table th {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .cascade-table td {
+            padding: 0.45rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .cascade-table tr:last-child td { border-bottom: none; }
+        .cascade-table tr:hover td { background: var(--bg-elevated); cursor: pointer; }
+
+        /* Status badges */
+        .badge-completed {
+            background: var(--pass-bg);
+            border: 1px solid var(--pass-border);
+            color: var(--pass);
+            font-size: 10px; font-weight: 700;
+            padding: 1px 6px; border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .badge-partial {
+            background: var(--medium-bg);
+            border: 1px solid var(--medium-border);
+            color: var(--medium);
+            font-size: 10px; font-weight: 700;
+            padding: 1px 6px; border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .badge-already {
+            background: var(--info-bg);
+            border: 1px solid rgba(99,102,241,0.35);
+            color: #a5b4fc;
+            font-size: 10px; font-weight: 700;
+            padding: 1px 6px; border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .badge-pending {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 10px; font-weight: 700;
+            padding: 1px 6px; border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        /* Drawer overlay */
+        .drawer-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1000;
+            justify-content: flex-end;
+        }
+        .drawer-overlay.open { display: flex; }
+
+        .drawer {
+            background: var(--bg-card);
+            border-left: 1px solid var(--border);
+            width: min(540px, 96vw);
+            max-height: 100vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer-header {
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .drawer-title { font-weight: 700; font-size: 14px; }
+        .drawer-close {
+            background: none; border: none;
+            color: var(--text-secondary);
+            font-size: 20px; cursor: pointer;
+            padding: 0 4px; line-height: 1;
+        }
+        .drawer-close:hover { color: var(--text-primary); }
+        .drawer-body { padding: 1.25rem; flex: 1; }
+
+        /* Per-store cards */
+        .store-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .store-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        .store-name {
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .store-digest {
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            word-break: break-all;
+            margin-top: 0.35rem;
+        }
+        .store-error {
+            color: var(--critical);
+            font-size: 11px;
+            margin-top: 0.35rem;
+        }
+
+        /* Flash banner */
+        .flash-banner {
+            padding: 0.6rem 1rem;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .flash-banner.success {
+            background: var(--pass-bg);
+            border: 1px solid var(--pass-border);
+            color: var(--pass);
+        }
+        .flash-banner.error {
+            background: var(--critical-bg);
+            border: 1px solid var(--critical-border);
+            color: var(--critical);
+        }
+        .flash-banner.partial {
+            background: var(--medium-bg);
+            border: 1px solid var(--medium-border);
+            color: var(--medium);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: 12px;
+            padding: 2rem;
+        }
+
+        .def-list { display: grid; grid-template-columns: 140px 1fr; gap: 0.3rem 0.75rem; font-size: 11px; margin-bottom: 1rem; }
+        .def-list dt { color: var(--text-secondary); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; padding-top: 1px; }
+        .def-list dd { color: var(--text-primary); }
+        .font-mono { font-family: "SF Mono", "Fira Code", monospace; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Right to Forget</div>
+                <div class="page-subtitle">GDPR Art. 17 cascade — purge subject data across all stores</div>
+            </div>
+        </div>
+
+        <!-- Flash banner -->
+        <div class="flash-banner" id="flashBanner"></div>
+
+        <!-- Request form -->
+        <div class="rtf-form-card">
+            <div style="font-size:12px; font-weight:700; margin-bottom:0.85rem;">
+                New Erasure Request
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="subjectIdInput">Subject ID</label>
+                <input class="form-input" id="subjectIdInput"
+                    placeholder="e.g. customer-12345 or user@example.com"
+                    autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="reasonInput">Reason</label>
+                <textarea class="form-textarea" id="reasonInput"
+                    placeholder="e.g. GDPR Art. 17 erasure request received via DPO email"></textarea>
+            </div>
+            <button class="btn btn-primary btn-sm" id="submitBtn"
+                style="margin-top:0.25rem;">
+                Submit Erasure Request
+            </button>
+        </div>
+
+        <!-- Cascades list -->
+        <div class="section-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+            <div style="font-size:13px; font-weight:700;">Erasure Cascade Log</div>
+            <button class="btn btn-sm btn-secondary" id="refreshBtn">Refresh</button>
+        </div>
+
+        <div id="cascadeTableWrap">
+            <div class="empty-state">Loading cascades…</div>
+        </div>
+    </div>
+
+    <!-- Cascade detail drawer -->
+    <div class="drawer-overlay" id="drawerOverlay">
+        <div class="drawer">
+            <div class="drawer-header">
+                <div>
+                    <div class="drawer-title" id="drawerTitle">Cascade Details</div>
+                    <div id="drawerSubtitle" style="font-size:11px; color:var(--text-tertiary); margin-top:2px;"></div>
+                </div>
+                <button class="drawer-close" id="drawerCloseBtn">×</button>
+            </div>
+            <div class="drawer-body" id="drawerBody">
+                <div class="empty-state">Loading…</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    'use strict';
+
+    // -------------------------------------------------------------------------
+    // HTML escape — MUST be used on every interpolated user value (XSS rule)
+    // -------------------------------------------------------------------------
+    function _escHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Init
+    // -------------------------------------------------------------------------
+    document.getElementById('topbar').innerHTML = renderTopbar();
+    document.getElementById('topbar').insertAdjacentHTML(
+        'beforebegin', renderSidebar('/right-to-forget')
+    );
+    wireTopbarIdentity();
+
+    // -------------------------------------------------------------------------
+    // Flash banner
+    // -------------------------------------------------------------------------
+    function showFlash(msg, type) {
+        const el = document.getElementById('flashBanner');
+        el.textContent = msg;
+        el.className = 'flash-banner ' + type;
+        el.style.display = 'block';
+        setTimeout(() => { el.style.display = 'none'; }, 6000);
+    }
+
+    // -------------------------------------------------------------------------
+    // Status badge HTML
+    // -------------------------------------------------------------------------
+    function statusBadge(status) {
+        if (!status) return '';
+        const map = {
+            'COMPLETED':        ['badge-completed', 'COMPLETED'],
+            'PARTIAL_FAILURE':  ['badge-partial',   'PARTIAL FAILURE'],
+            'ALREADY_COMPLETED':['badge-already',   'ALREADY DONE'],
+        };
+        const [cls, label] = map[status] || ['badge-pending', _escHtml(status)];
+        return `<span class="${_escHtml(cls)}">${_escHtml(label)}</span>`;
+    }
+
+    // -------------------------------------------------------------------------
+    // Render cascades table
+    // -------------------------------------------------------------------------
+    function renderTable(cascades) {
+        const wrap = document.getElementById('cascadeTableWrap');
+        if (!cascades.length) {
+            wrap.innerHTML = '<div class="empty-state">No erasure cascades yet.</div>';
+            return;
+        }
+        const rows = cascades.map(c => {
+            const startedAt = c.started_at
+                ? new Date(c.started_at).toLocaleString()
+                : '—';
+            return `<tr data-cascade-id="${_escHtml(c.cascade_id)}" style="cursor:pointer;">
+                <td class="font-mono" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                    title="${_escHtml(c.subject_id)}">${_escHtml(c.subject_id)}</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${_escHtml(startedAt)}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary view-btn"
+                        data-cascade-id="${_escHtml(c.cascade_id)}">View</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        wrap.innerHTML = `
+            <table class="cascade-table">
+                <thead>
+                    <tr>
+                        <th>Subject ID</th>
+                        <th>Status</th>
+                        <th>Started At</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+
+        wrap.querySelectorAll('tr[data-cascade-id]').forEach(tr => {
+            tr.addEventListener('click', (e) => {
+                const id = tr.getAttribute('data-cascade-id');
+                openDrawer(id);
+            });
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Load cascades list
+    // -------------------------------------------------------------------------
+    async function loadCascades() {
+        try {
+            const r = await fetch('/api/right-to-forget', { credentials: 'same-origin' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const data = await r.json();
+            renderTable(Array.isArray(data) ? data : []);
+        } catch (e) {
+            document.getElementById('cascadeTableWrap').innerHTML =
+                '<div class="empty-state">Failed to load cascades: ' + _escHtml(e.message) + '</div>';
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Drawer — cascade detail
+    // -------------------------------------------------------------------------
+    function openDrawer(cascadeId) {
+        const overlay = document.getElementById('drawerOverlay');
+        overlay.classList.add('open');
+        document.getElementById('drawerTitle').textContent = 'Cascade Details';
+        document.getElementById('drawerSubtitle').textContent = cascadeId;
+        document.getElementById('drawerBody').innerHTML =
+            '<div class="empty-state">Loading…</div>';
+        fetchAndRenderDrawer(cascadeId);
+    }
+
+    function closeDrawer() {
+        document.getElementById('drawerOverlay').classList.remove('open');
+    }
+
+    async function fetchAndRenderDrawer(cascadeId) {
+        try {
+            const r = await fetch(
+                '/api/right-to-forget/' + encodeURIComponent(cascadeId),
+                { credentials: 'same-origin' }
+            );
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const c = await r.json();
+            renderDrawerBody(c);
+        } catch (e) {
+            document.getElementById('drawerBody').innerHTML =
+                '<div class="empty-state">Failed to load: ' + _escHtml(e.message) + '</div>';
+        }
+    }
+
+    function renderDrawerBody(c) {
+        const startedAt = c.started_at ? new Date(c.started_at).toLocaleString() : '—';
+        const completedAt = c.completed_at ? new Date(c.completed_at).toLocaleString() : '—';
+
+        document.getElementById('drawerTitle').textContent =
+            'Subject: ' + (c.subject_id || '');
+        document.getElementById('drawerSubtitle').textContent =
+            'Cascade ID: ' + (c.cascade_id || '');
+
+        const storeOrder = ['vault', 'tier2', 'tier3', 'langfuse'];
+        const steps = c.steps || {};
+
+        const storeCards = storeOrder.map(store => {
+            const step = steps[store];
+            if (!step) {
+                return `<div class="store-card">
+                    <div class="store-card-header">
+                        <span class="store-name">${_escHtml(store)}</span>
+                        <span class="badge-pending">NOT RUN</span>
+                    </div>
+                </div>`;
+            }
+            const removed = step.items_removed != null ? step.items_removed : '—';
+            const digest = step.sha256_digest_after || '';
+            const err = step.error || '';
+            const badgeHtml = err
+                ? `<span class="badge-partial">ERROR</span>`
+                : `<span class="badge-completed">OK</span>`;
+
+            return `<div class="store-card">
+                <div class="store-card-header">
+                    <span class="store-name">${_escHtml(store)}</span>
+                    ${badgeHtml}
+                </div>
+                <div style="font-size:11px; color:var(--text-secondary);">
+                    Items removed: <strong>${_escHtml(String(removed))}</strong>
+                </div>
+                ${digest ? `<div class="store-digest">SHA-256: ${_escHtml(digest)}</div>` : ''}
+                ${err ? `<div class="store-error">Error: ${_escHtml(err)}</div>` : ''}
+            </div>`;
+        }).join('');
+
+        document.getElementById('drawerBody').innerHTML = `
+            <dl class="def-list">
+                <dt>Status</dt>
+                <dd>${statusBadge(c.status)}</dd>
+                <dt>Started</dt>
+                <dd>${_escHtml(startedAt)}</dd>
+                <dt>Completed</dt>
+                <dd>${_escHtml(completedAt)}</dd>
+                <dt>Cascade ID</dt>
+                <dd class="font-mono">${_escHtml(c.cascade_id || '')}</dd>
+            </dl>
+            <div style="font-size:12px; font-weight:700; margin:1rem 0 0.6rem;">
+                Per-Store Results
+            </div>
+            ${storeCards}
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // Submit form
+    // -------------------------------------------------------------------------
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+        const subjectId = document.getElementById('subjectIdInput').value.trim();
+        const reason = document.getElementById('reasonInput').value.trim();
+        if (!subjectId) { showFlash('Subject ID is required.', 'error'); return; }
+        if (!reason)    { showFlash('Reason is required.', 'error'); return; }
+
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+
+        try {
+            const r = await fetch('/api/right-to-forget', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subject_id: subjectId, reason: reason }),
+            });
+            const data = await r.json();
+
+            if (r.status === 201) {
+                showFlash('Cascade completed successfully.', 'success');
+            } else if (r.status === 207) {
+                showFlash('Cascade completed with partial failures — check the log below.', 'partial');
+            } else if (r.status === 200) {
+                showFlash('This subject was already purged (idempotent result).', 'success');
+            } else {
+                showFlash('Unexpected response: HTTP ' + r.status, 'error');
+            }
+
+            document.getElementById('subjectIdInput').value = '';
+            document.getElementById('reasonInput').value = '';
+            await loadCascades();
+
+            if (data.cascade_id) openDrawer(data.cascade_id);
+
+        } catch (e) {
+            showFlash('Request failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Submit Erasure Request';
+        }
+    });
+
+    // -------------------------------------------------------------------------
+    // Drawer close
+    // -------------------------------------------------------------------------
+    document.getElementById('drawerCloseBtn').addEventListener('click', closeDrawer);
+    document.getElementById('drawerOverlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('drawerOverlay')) closeDrawer();
+    });
+
+    // -------------------------------------------------------------------------
+    // Refresh button
+    // -------------------------------------------------------------------------
+    document.getElementById('refreshBtn').addEventListener('click', loadCascades);
+
+    // -------------------------------------------------------------------------
+    // Initial load
+    // -------------------------------------------------------------------------
+    loadCascades();
+    </script>
+</body>
+</html>

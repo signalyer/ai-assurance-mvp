@@ -55,6 +55,8 @@ from api.frameworks import router as frameworks_router
 from api.agents import router as agents_router
 from api.agent_bindings import router as agent_bindings_router
 from api.agent_notifications import router as agent_notifications_router
+from api.right_to_forget import router as rtf_router
+from api.audit_verify import router as audit_verify_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 
 load_dotenv()
@@ -162,6 +164,8 @@ app.include_router(frameworks_router)
 app.include_router(agents_router)
 app.include_router(agent_bindings_router)
 app.include_router(agent_notifications_router)
+app.include_router(rtf_router)
+app.include_router(audit_verify_router)
 
 
 @app.get("/api/health")
@@ -333,6 +337,18 @@ async def page_frameworks():
 async def page_agent_library():
     """Serve the Agent Library publish/subscribe UI."""
     return _page("agent-library.html")
+
+
+@app.get("/right-to-forget")
+async def page_right_to_forget():
+    """Serve the Right-to-Forget erasure request console UI."""
+    return _page("right-to-forget.html")
+
+
+@app.get("/audit-events")
+async def page_audit_events():
+    """Serve the tamper-evident audit events viewer."""
+    return _page("audit-events.html")
 
 
 if __name__ == "__main__":

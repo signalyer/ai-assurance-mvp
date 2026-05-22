@@ -824,6 +824,146 @@ def delete_document(doc_id: str) -> bool:
         return False
 
 
+def purge_chunks(subject_id: str) -> dict:
+    """Delete all Azure AI Search chunks where ``source_id == subject_id``.
+
+    When ``AZURE_SEARCH_ENDPOINT`` is not configured (dev mode), returns a
+    simulated digest with ``chunks_removed=0`` rather than raising.
+
+    Steps:
+
+    1. Query the index for documents whose ``metadata`` JSON contains
+       ``source_id == subject_id`` (filter on the metadata field text).
+    2. Issue delete-by-id actions for every matched document ID.
+    3. Emit a ``T3_CHUNK_PURGED`` audit event via ``append_agent_event``.
+    4. Return ``chunks_removed`` and ``sha256_digest_after``.
+
+    Args:
+        subject_id: The source_id / data subject identifier to purge.
+
+    Returns:
+        Dict with keys:
+
+        * ``chunks_removed`` — number of index documents deleted.
+        * ``sha256_digest_after`` — SHA-256 of
+          ``"t3_purged:<subject_id>:<count>"``.
+    """
+    import hashlib
+
+    logger.info(
+        "purge_chunks: entry subject_id=%s rag_enabled=%s", subject_id, _RAG_ENABLED
+    )
+
+    from domain.repository import append_agent_event  # late import
+
+    if not _RAG_ENABLED:
+        # Dev mode — simulated digest, no Azure calls
+        digest = hashlib.sha256(
+            f"t3_purged:{subject_id}:0".encode("utf-8")
+        ).hexdigest()
+        logger.info(
+            "purge_chunks: RAG_ENABLED=false — simulated return subject_id=%s",
+            subject_id,
+        )
+        append_agent_event("T3_CHUNK_PURGED", {
+            "subject_id": subject_id,
+            "chunks_removed": 0,
+            "mode": "dev_simulated",
+            "sha256_digest_after": digest,
+        })
+        return {"chunks_removed": 0, "sha256_digest_after": digest}
+
+    try:
+        # Step 1 — search for docs belonging to subject_id
+        # The metadata field is stored as a JSON string; we filter by substring.
+        search_payload: dict[str, Any] = {
+            "search": "*",
+            "top": 1000,
+            "select": "id,metadata",
+        }
+
+        matched_ids: list[str] = []
+
+        with httpx.Client(timeout=30.0) as client:
+            search_url = _index_url("/docs/search")
+            resp = client.post(
+                search_url, headers=_search_headers(), json=search_payload
+            )
+            resp.raise_for_status()
+
+        raw_docs: list[dict[str, Any]] = resp.json().get("value", [])
+
+        for doc in raw_docs:
+            raw_meta = doc.get("metadata", "{}")
+            try:
+                meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+            except json.JSONDecodeError:
+                meta = {}
+            if meta.get("source_id") == subject_id:
+                matched_ids.append(doc["id"])
+
+        if not matched_ids:
+            digest = hashlib.sha256(
+                f"t3_purged:{subject_id}:0".encode("utf-8")
+            ).hexdigest()
+            logger.info(
+                "purge_chunks: no matching chunks subject_id=%s", subject_id
+            )
+            append_agent_event("T3_CHUNK_PURGED", {
+                "subject_id": subject_id,
+                "chunks_removed": 0,
+                "sha256_digest_after": digest,
+            })
+            return {"chunks_removed": 0, "sha256_digest_after": digest}
+
+        # Step 2 — delete matched documents
+        delete_actions = [
+            {"@search.action": "delete", "id": doc_id}
+            for doc_id in matched_ids
+        ]
+
+        deleted = 0
+        # Azure Search batch limit is 1000 docs per request
+        batch_size = 1000
+        for i in range(0, len(delete_actions), batch_size):
+            batch = delete_actions[i : i + batch_size]
+            delete_url = _index_url("/docs/index")
+            with httpx.Client(timeout=30.0) as client:
+                del_resp = client.post(
+                    delete_url,
+                    headers=_search_headers(),
+                    json={"value": batch},
+                )
+                del_resp.raise_for_status()
+            deleted += len(batch)
+            logger.info(
+                "purge_chunks: deleted batch i=%d size=%d subject_id=%s",
+                i, len(batch), subject_id,
+            )
+
+        digest = hashlib.sha256(
+            f"t3_purged:{subject_id}:{deleted}".encode("utf-8")
+        ).hexdigest()
+
+        append_agent_event("T3_CHUNK_PURGED", {
+            "subject_id": subject_id,
+            "chunks_removed": deleted,
+            "sha256_digest_after": digest,
+        })
+
+        logger.info(
+            "purge_chunks: exit subject_id=%s chunks_removed=%d digest=%s…",
+            subject_id, deleted, digest[:12],
+        )
+        return {"chunks_removed": deleted, "sha256_digest_after": digest}
+
+    except Exception as exc:
+        logger.error(
+            "purge_chunks: failed subject_id=%s: %s", subject_id, exc, exc_info=True
+        )
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

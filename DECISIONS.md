@@ -262,6 +262,71 @@ Constrains: each SSE client consumes one Postgres connection — production depl
      per-IP rate limiting and/or global SSE connection caps (flagged as security debt for Day 10).
      Channel name regex `[a-zA-Z0-9_\-]{1,128}` validated at route entry.
 
+## 2026-05-21 — Session 08 locked decisions
+
+### Cascade orchestration — sync inline
+Decision: Right-to-forget cascade runs synchronously inside `POST /api/right-to-forget`.
+         Endpoint returns 201 on COMPLETED / 207 on PARTIAL_FAILURE.
+         Saga / async background job deferred to Day 10 if load tests demand it.
+Alternatives: async background job with status polling · distributed saga (compensating transactions)
+Why: Single-tenant MVP; cascade completes in < 60s with ≤100 tokens/episodes/chunks per store
+     (verified by acceptance H). Sync keeps the code simple and the audit trail contiguous.
+     Background job adds a job-store, a polling endpoint, and a scheduler — unnecessary at MVP scale.
+Constrains: Cascade orchestrator in domain/right_to_forget.py is a synchronous function.
+     API endpoint may be made async with asyncio.to_thread wrapping the sync domain call
+     (consistent with Session 04 pattern for Postgres-backed domain functions).
+
+### Hash chain algorithm — SHA-256 plain
+Decision: hash = SHA-256(prev_hash ‖ canonical_json(event_without_hash_field)).
+         No HMAC secret required. genesis prev_hash = "GENESIS".
+         Canonical JSON = json.dumps(event, sort_keys=True, ensure_ascii=True, separators=(',',':')).
+Alternatives: HMAC-SHA-256 with Key Vault secret · SHA-3 · Merkle tree
+Why: Plain SHA-256 is publicly verifiable without a secret — auditors can replay the chain with
+     only the JSONL file and the algorithm spec. HMAC adds a Key Vault dependency for a property
+     (tamper detection) that doesn't require secrecy. The audit trail is already access-controlled;
+     secrecy of the chain key adds no meaningful defence against the threat model (insider deletion).
+Constrains: hash field excluded from hash computation (prevents chicken-and-egg). Verifier must
+     apply the same exclusion. Pre-Session-08 events (no hash field) are treated as pre-genesis
+     and skipped without error.
+
+### Verification scope — rolling window with checkpoint
+Decision: verify_chain(window=N) checks the last N chained events. verify_chain(full=True) checks
+         all chained events from genesis. Checkpoints written every 500 events to
+         data/audit_checkpoints.jsonl (stores last known-good hash + event_id at that position).
+         Default window = 1000.
+Alternatives: full replay on every call (O(N) — prohibitive at scale) · no checkpointing
+Why: At 1000 events/day, full replay would grow to 365k events/year. Rolling window keeps
+     verify_chain < 2s (acceptance H). Checkpoints allow verification to start from a trusted
+     anchor rather than genesis, making eventual full verification tractable.
+Constrains: Checkpoint file is append-only JSONL (same as events.jsonl). Tamper to checkpoint
+     file itself is detectable: checkpoint hash must match hash at that position in events.jsonl.
+
+### Cascade idempotency — cascade_id with reverse lookup
+Decision: cascade_id (UUID) generated at request time, persisted as field on all RTF_* events.
+         Re-submission with same cascade_id returns prior result with status="ALREADY_COMPLETED".
+         Reverse lookup built lazily from event scan on first use, cached in-memory per process.
+Alternatives: treat each store delete as idempotent on (subject_id, store_name) · separate
+         cascade_state table in Postgres
+Why: (subject_id, store_name) idempotency is weaker — it cannot distinguish a second request
+     from the same cascade vs a second legitimate cascade for the same subject. cascade_id provides
+     unambiguous re-submission detection. Lazy event scan avoids a new DB table for MVP.
+     In-memory cache is acceptable for single-process App Service deployment.
+Constrains: cascade_id must be supplied by the caller on re-submission; if omitted a new UUID
+     is generated and the cascade runs fresh (new request for the same subject).
+
+### Langfuse delete — feature flag gated
+Decision: Langfuse trace delete is gated behind LANGFUSE_DELETE_ENABLED env var (default: not set = disabled).
+         When disabled: Langfuse step logs intent, emits RTF_STEP_COMPLETED with items_removed=0
+         and a deterministic sha256_digest_after (hash of "langfuse:no-op:{subject_id}").
+         When enabled: real Langfuse API delete called; response count captured.
+Alternatives: always delete · always skip · separate approval step for Langfuse
+Why: Langfuse is a SaaS system; real deletes require production credentials and carry risk of
+     accidental bulk delete in dev/test. Feature flag is the standard safety gate.
+     Dev/test environments never need LANGFUSE_DELETE_ENABLED=true.
+     The no-op path still produces a valid 64-char digest so acceptance E passes unconditionally.
+Constrains: LANGFUSE_DELETE_ENABLED must be set to exactly "true" to enable. Any other value
+     (including "false", "1", unset) results in the no-op path.
+
 ## 2026-05-21 — No migration of legacy ai-sys-001; 6 NEW seeded systems
 Decision: Existing `ai-sys-001` stays as legacy (no agent bindings). 6 new test systems
          (sys-payments-001, sys-cx-001, sys-risk-001, sys-platform-001, sys-finserv-001,

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audit Events — AssureAI</title>
+    <link rel="stylesheet" href="/static/shared.css">
+    <style>
+        /* Verify chain banner */
+        .chain-banner {
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .chain-banner.clean {
+            background: var(--pass-bg);
+            border: 1px solid var(--pass-border);
+            color: var(--pass);
+            display: flex;
+        }
+        .chain-banner.broken {
+            background: var(--critical-bg);
+            border: 1px solid var(--critical-border);
+            color: var(--critical);
+            display: flex;
+        }
+
+        /* Events table */
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .events-table th {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            white-space: nowrap;
+        }
+        .events-table td {
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        .events-table tr:last-child td { border-bottom: none; }
+        .events-table tr:hover td {
+            background: var(--bg-elevated);
+            cursor: pointer;
+        }
+        .events-table tr.expanded td {
+            background: var(--bg-elevated);
+        }
+
+        /* Expanded JSON row */
+        .json-expand-row { display: none; }
+        .json-expand-row.open { display: table-row; }
+        .json-expand-row td {
+            background: var(--bg-elevated) !important;
+            border-bottom: 2px solid var(--border-strong) !important;
+            padding: 0.5rem 1rem;
+        }
+        .json-block {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.5rem 0.75rem;
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 10px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Hash truncated monospace */
+        .hash-cell {
+            font-family: "SF Mono", "Fira Code", monospace;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            white-space: nowrap;
+        }
+        .hash-null {
+            color: var(--text-disabled);
+            font-style: italic;
+        }
+
+        /* Pagination */
+        .pagination-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-tertiary);
+            font-size: 12px;
+            padding: 2rem;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .toolbar-right {
+            margin-left: auto;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Spinner inline */
+        .spinner-inline {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="topbar"></div>
+
+    <div class="page">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Audit Events</div>
+                <div class="page-subtitle">Tamper-evident hash chain — every event signed against its predecessor</div>
+            </div>
+        </div>
+
+        <!-- Toolbar: verify button + status -->
+        <div class="toolbar">
+            <button class="btn btn-primary btn-sm" id="verifyBtn">
+                Verify Chain (last 1000)
+            </button>
+            <button class="btn btn-sm btn-secondary" id="verifyFullBtn">
+                Verify Full Log
+            </button>
+            <div class="toolbar-right">
+                <button class="btn btn-sm btn-secondary" id="refreshBtn">Refresh</button>
+            </div>
+        </div>
+
+        <!-- Chain verify result banner -->
+        <div class="chain-banner" id="chainBanner"></div>
+
+        <!-- Events table -->
+        <div id="eventsWrap">
+            <div class="empty-state">Loading events…</div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-row" id="paginationRow" style="display:none;">
+            <button class="btn btn-sm btn-secondary" id="prevBtn" disabled>Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button class="btn btn-sm btn-secondary" id="nextBtn">Next</button>
+            <span id="totalInfo" style="margin-left:auto;"></span>
+        </div>
+    </div>
+
+    <script src="/static/shared.js"></script>
+    <script>
+    'use strict';
+
+    // -------------------------------------------------------------------------
+    // HTML escape — MUST be used on every interpolated user value (XSS rule)
+    // -------------------------------------------------------------------------
+    function _escHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Init
+    // -------------------------------------------------------------------------
+    document.getElementById('topbar').innerHTML = renderTopbar();
+    document.getElementById('topbar').insertAdjacentHTML(
+        'beforebegin', renderSidebar('/audit-events')
+    );
+    wireTopbarIdentity();
+
+    // -------------------------------------------------------------------------
+    // Pagination state
+    // -------------------------------------------------------------------------
+    const PAGE_SIZE = 100;
+    let currentOffset = 0;
+    let lastTotal = 0;
+
+    // -------------------------------------------------------------------------
+    // Load events
+    // -------------------------------------------------------------------------
+    async function loadEvents(offset) {
+        const wrap = document.getElementById('eventsWrap');
+        wrap.innerHTML = '<div class="empty-state"><span class="spinner-inline"></span> Loading…</div>';
+
+        try {
+            const url = `/api/audit/events?limit=${PAGE_SIZE}&offset=${encodeURIComponent(offset)}`;
+            const r = await fetch(url, { credentials: 'same-origin' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const data = await r.json();
+            lastTotal = data.total || 0;
+            renderTable(data.events || []);
+            updatePagination(offset, data.total || 0);
+        } catch (e) {
+            wrap.innerHTML =
+                '<div class="empty-state">Failed to load events: ' + _escHtml(e.message) + '</div>';
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Render table
+    // -------------------------------------------------------------------------
+    function truncate(s, n) {
+        if (!s) return '';
+        const str = String(s);
+        return str.length > n ? str.slice(0, n) + '…' : str;
+    }
+
+    function hashCell(h) {
+        if (!h) return '<span class="hash-null hash-cell">—</span>';
+        return `<span class="hash-cell" title="${_escHtml(h)}">${_escHtml(h.slice(0, 8))}</span>`;
+    }
+
+    function renderTable(events) {
+        const wrap = document.getElementById('eventsWrap');
+        if (!events.length) {
+            wrap.innerHTML = '<div class="empty-state">No audit events found.</div>';
+            return;
+        }
+
+        const rows = events.map((ev, idx) => {
+            const rowId = 'row-' + idx;
+            const expandId = 'expand-' + idx;
+            const ts = ev.ts
+                ? new Date(ev.ts).toLocaleString()
+                : _escHtml(String(ev.ts || '—'));
+            const eventId = truncate(ev.event_id || '', 16);
+            const eventType = ev.event_type || '—';
+
+            // Safely serialise the event for the expanded view (no user interpolation)
+            const jsonStr = JSON.stringify(ev, null, 2);
+
+            return `<tr id="${_escHtml(rowId)}" data-expand-id="${_escHtml(expandId)}" class="event-row">
+                <td class="hash-cell" title="${_escHtml(ev.event_id || '')}">${_escHtml(eventId)}</td>
+                <td>${_escHtml(ts)}</td>
+                <td>${_escHtml(eventType)}</td>
+                <td>${hashCell(ev.hash)}</td>
+                <td>${hashCell(ev.prev_hash)}</td>
+            </tr>
+            <tr class="json-expand-row" id="${_escHtml(expandId)}">
+                <td colspan="5">
+                    <pre class="json-block">${_escHtml(jsonStr)}</pre>
+                </td>
+            </tr>`;
+        }).join('');
+
+        wrap.innerHTML = `
+            <table class="events-table" id="eventsTable">
+                <thead>
+                    <tr>
+                        <th>Event ID</th>
+                        <th>Timestamp</th>
+                        <th>Event Type</th>
+                        <th>Hash (8)</th>
+                        <th>Prev Hash (8)</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+
+        // Wire row click to expand/collapse JSON
+        wrap.querySelectorAll('.event-row').forEach(tr => {
+            tr.addEventListener('click', () => {
+                const expandId = tr.getAttribute('data-expand-id');
+                const expandRow = document.getElementById(expandId);
+                if (!expandRow) return;
+                const isOpen = expandRow.classList.contains('open');
+                // Collapse all
+                wrap.querySelectorAll('.json-expand-row').forEach(r => r.classList.remove('open'));
+                wrap.querySelectorAll('.event-row').forEach(r => r.classList.remove('expanded'));
+                // Toggle clicked
+                if (!isOpen) {
+                    expandRow.classList.add('open');
+                    tr.classList.add('expanded');
+                }
+            });
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Pagination controls
+    // -------------------------------------------------------------------------
+    function updatePagination(offset, total) {
+        const row = document.getElementById('paginationRow');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        const totalInfo = document.getElementById('totalInfo');
+
+        const page = Math.floor(offset / PAGE_SIZE) + 1;
+        const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        pageInfo.textContent = `Page ${page} of ${maxPage}`;
+        totalInfo.textContent = `${total} events total`;
+        prevBtn.disabled = offset <= 0;
+        nextBtn.disabled = offset + PAGE_SIZE >= total;
+        row.style.display = 'flex';
+    }
+
+    document.getElementById('prevBtn').addEventListener('click', () => {
+        currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
+        loadEvents(currentOffset);
+    });
+    document.getElementById('nextBtn').addEventListener('click', () => {
+        currentOffset += PAGE_SIZE;
+        loadEvents(currentOffset);
+    });
+
+    // -------------------------------------------------------------------------
+    // Verify chain
+    // -------------------------------------------------------------------------
+    async function verifyChain(full) {
+        const banner = document.getElementById('chainBanner');
+        banner.className = 'chain-banner';
+        banner.style.display = 'flex';
+        banner.innerHTML = '<span class="spinner-inline"></span> Verifying chain…';
+
+        const url = full
+            ? '/api/audit/verify?full=true'
+            : '/api/audit/verify?window=1000';
+
+        try {
+            const r = await fetch(url, { credentials: 'same-origin' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const data = await r.json();
+
+            if (data.status === 'CLEAN') {
+                banner.className = 'chain-banner clean';
+                banner.innerHTML =
+                    'CLEAN &#10003; &nbsp;(' +
+                    _escHtml(String(data.events_checked)) +
+                    ' events checked' +
+                    (full ? ', full log' : ', last 1000') +
+                    ')';
+            } else {
+                const brokenAt = data.broken_at || 'unknown';
+                banner.className = 'chain-banner broken';
+                banner.innerHTML =
+                    'BROKEN &#10007; &nbsp;First mismatch at event: ' +
+                    _escHtml(String(brokenAt)) +
+                    ' &nbsp;(' +
+                    _escHtml(String(data.events_checked)) +
+                    ' events checked)';
+            }
+        } catch (e) {
+            banner.className = 'chain-banner broken';
+            banner.innerHTML = 'Verification failed: ' + _escHtml(e.message);
+        }
+    }
+
+    document.getElementById('verifyBtn').addEventListener('click', () => verifyChain(false));
+    document.getElementById('verifyFullBtn').addEventListener('click', () => verifyChain(true));
+    document.getElementById('refreshBtn').addEventListener('click', () => loadEvents(currentOffset));
+
+    // -------------------------------------------------------------------------
+    // Initial load
+    // -------------------------------------------------------------------------
+    loadEvents(0);
+    </script>
+</body>
+</html>
