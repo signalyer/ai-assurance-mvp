@@ -21,7 +21,14 @@
       N — count of failing scenarios
 
 .EXAMPLE
-    $env:SMOKE_TARGET_URL = "https://aigovern.azurewebsites.net"
+    # Dev (no auth):
+    $env:SMOKE_TARGET_URL = "http://localhost:8000"
+    pwsh deploy/smoke_e2e.ps1
+
+    # Prod / hardened (AUTH_ENABLED=true):
+    $env:SMOKE_TARGET_URL = "https://aigovern.sandboxhub.co"
+    $env:SMOKE_USER       = "demo-aigov"
+    $env:SMOKE_PASSWORD   = "<shared demo password>"
     pwsh deploy/smoke_e2e.ps1
 #>
 
@@ -57,6 +64,36 @@ if (-not $hostAllowed -and $env:SMOKE_ALLOW_PROD -ne 'true') {
 Write-Host "=== AI Assurance E2E Smoke Test ===" -ForegroundColor Cyan
 Write-Host "Target: $BaseUrl"
 Write-Host ""
+
+# ---------------------------------------------------------------------------
+# Optional login — required when the target has AUTH_ENABLED=true.
+# Set $env:SMOKE_USER and $env:SMOKE_PASSWORD to authenticate before the
+# scenarios run. The session cookie is threaded through every Invoke-RestMethod
+# call via $AuthSplat. Credentials are NEVER printed to stdout.
+# ---------------------------------------------------------------------------
+$Session = $null
+$AuthSplat = @{}
+if ($env:SMOKE_USER -and $env:SMOKE_PASSWORD) {
+    Write-Host "Authenticating as '$env:SMOKE_USER'..." -NoNewline
+    try {
+        $loginBody = @{
+            username = $env:SMOKE_USER
+            password = $env:SMOKE_PASSWORD
+            next     = "/"
+        }
+        $null = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method POST `
+            -Body $loginBody `
+            -SessionVariable Session `
+            -ErrorAction Stop
+        $AuthSplat = @{ WebSession = $Session }
+        Write-Host " [OK]" -ForegroundColor Green
+    } catch {
+        Write-Host " [FAIL] $_" -ForegroundColor Red
+        Write-Host "Cannot run scenarios without auth on a hardened target. Exiting." -ForegroundColor Red
+        exit 98
+    }
+    Write-Host ""
+}
 
 $Failures = 0
 
@@ -107,6 +144,7 @@ Invoke-Scenario -Name "1. PII pipeline (POST /api/demo/run)" -ScriptBlock {
     $resp = Invoke-RestMethod -Uri $url -Method POST `
         -Body $body `
         -ContentType "application/json" `
+        @AuthSplat `
         -ErrorAction Stop
 
     if (-not $resp.vault_id) {
@@ -126,7 +164,7 @@ Invoke-Scenario -Name "2. Gate failure (GET /api/release-gates/sys-payments-001)
     $url  = "$BaseUrl/api/release-gates/sys-payments-001"
 
     try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET -ErrorAction Stop
+        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
     } catch [System.Net.WebException] {
         # 404 means system not seeded — skip gracefully rather than fail
         if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
@@ -148,7 +186,7 @@ Invoke-Scenario -Name "3. Agent governance (GET /api/agents)" -ScriptBlock {
     $url = "$BaseUrl/api/agents"
 
     try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET -ErrorAction Stop
+        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
     } catch [System.Net.WebException] {
         if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
             Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
@@ -180,6 +218,7 @@ Invoke-Scenario -Name "4. RTF cascade (POST /api/right-to-forget)" -ScriptBlock 
         $resp = Invoke-RestMethod -Uri $url -Method POST `
             -Body $body `
             -ContentType "application/json" `
+            @AuthSplat `
             -ErrorAction Stop
     } catch [System.Net.WebException] {
         if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -in @(404, 422)) {
@@ -202,7 +241,7 @@ Invoke-Scenario -Name "5. Eval trend (GET /api/evaluate/history)" -ScriptBlock {
 
     try {
         # We only assert HTTP 200; empty history is fine
-        $null = Invoke-RestMethod -Uri $url -Method GET -ErrorAction Stop
+        $null = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
     } catch [System.Net.WebException] {
         if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
             Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
@@ -219,7 +258,7 @@ Invoke-Scenario -Name "6. Framework coverage (GET /api/frameworks/matrix)" -Scri
     $url = "$BaseUrl/api/frameworks/matrix?systems=sys-payments-001"
 
     try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET -ErrorAction Stop
+        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
     } catch [System.Net.WebException] {
         if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
             Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
