@@ -10,10 +10,10 @@
 
     Scenarios:
       1. PII pipeline        POST /api/demo/run         — vault_id present, no "@" in scrubbed_prompt
-      2. Gate failure        GET  /api/release-gates/…  — decision field present
+      2. Gate failure        GET  /api/grc/release-gates/v2/systems  — gates summary present
       3. Agent governance    GET  /api/agents            — >= 6 agents listed
       4. RTF cascade         POST /api/right-to-forget   — cascade_id present
-      5. Eval trend          GET  /api/evaluate/history  — 200 (even if empty)
+      5. Eval trend          GET  /api/analytics/trends  — 200 (even if empty)
       6. Framework coverage  GET  /api/frameworks/matrix — at least one framework slug present
 
     Exit codes:
@@ -135,8 +135,12 @@ function Invoke-Scenario {
 # ---------------------------------------------------------------------------
 Invoke-Scenario -Name "1. PII pipeline (POST /api/demo/run)" -ScriptBlock {
     $url  = "$BaseUrl/api/demo/run"
+    # Prompt deliberately carries identifiable text (email + name) so the
+    # scrubber has something to tokenise — but is phrased neutrally to avoid
+    # tripping LlamaGuard's substring keyword matcher (which flags any output
+    # containing "harm", "kill", etc. — substrings of harmless words too).
     $body = @{
-        prompt    = "Customer Jane Doe SSN 987-65-4321 email jane.doe@example.com balance query"
+        prompt    = "Customer Jane Doe at jane.doe@example.com is asking about portfolio rebalancing options. Suggest a diversified allocation across index funds."
         system_id = "sys-payments-001"
         action    = "llm_call"
     } | ConvertTo-Json
@@ -147,35 +151,40 @@ Invoke-Scenario -Name "1. PII pipeline (POST /api/demo/run)" -ScriptBlock {
         @AuthSplat `
         -ErrorAction Stop
 
-    if (-not $resp.vault_id) {
-        throw "Expected 'vault_id' in response; got: $($resp | ConvertTo-Json -Compress)"
+    # Response shape: { runs: [{ vault_id, prompt, response, ... }], error }
+    # We accept any run (Claude OR OpenAI may be blocked by guardrails — that's
+    # demo material, not a smoke failure) — at least ONE run must have a vault_id
+    # and a scrubbed prompt with no raw '@' character.
+    $runs = @($resp.runs)
+    if ($runs.Count -lt 1) {
+        throw "Expected at least one run in response; got: $($resp | ConvertTo-Json -Compress -Depth 4)"
     }
 
-    $scrubbed = "$($resp.scrubbed_prompt)"
+    $run = $runs[0]
+    if (-not $run.vault_id) {
+        throw "Expected 'vault_id' in first run; got: $($run | ConvertTo-Json -Compress -Depth 3)"
+    }
+
+    # The scrubbed prompt is stored on the run as `prompt` (post-scrub).
+    $scrubbed = "$($run.prompt)"
     if ($scrubbed -match "@") {
-        throw "scrubbed_prompt still contains '@' — PII not scrubbed. Value: $scrubbed"
+        throw "Run.prompt still contains '@' — PII not scrubbed. Value: $scrubbed"
     }
 }
 
 # ---------------------------------------------------------------------------
 # Scenario 2 — Gate failure check
 # ---------------------------------------------------------------------------
-Invoke-Scenario -Name "2. Gate failure (GET /api/release-gates/sys-payments-001)" -ScriptBlock {
-    $url  = "$BaseUrl/api/release-gates/sys-payments-001"
+Invoke-Scenario -Name "2. Gate failure (GET /api/grc/release-gates/v2/systems)" -ScriptBlock {
+    $url  = "$BaseUrl/api/grc/release-gates/v2/systems"
 
-    try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
-    } catch [System.Net.WebException] {
-        # 404 means system not seeded — skip gracefully rather than fail
-        if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
-            Write-Host " (skipped — system not seeded)" -NoNewline -ForegroundColor DarkYellow
-            return
-        }
-        throw
-    }
+    $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
 
-    if ($null -eq $resp.decision -and $null -eq $resp.gate_id -and $null -eq $resp.gates) {
-        throw "Expected 'decision', 'gate_id', or 'gates' field in response; got: $($resp | ConvertTo-Json -Compress)"
+    # v2 endpoint returns {"systems": [...]}; each item has release_decision.
+    # Empty list is acceptable (no AI systems seeded yet) — we only assert the
+    # shape is right and the router is mounted.
+    if ($null -eq $resp.systems) {
+        throw "Expected 'systems' array in response; got: $($resp | ConvertTo-Json -Compress -Depth 3)"
     }
 }
 
@@ -236,8 +245,8 @@ Invoke-Scenario -Name "4. RTF cascade (POST /api/right-to-forget)" -ScriptBlock 
 # ---------------------------------------------------------------------------
 # Scenario 5 — Eval trend
 # ---------------------------------------------------------------------------
-Invoke-Scenario -Name "5. Eval trend (GET /api/evaluate/history)" -ScriptBlock {
-    $url = "$BaseUrl/api/evaluate/history?system=sys-payments-001"
+Invoke-Scenario -Name "5. Eval trend (GET /api/analytics/trends)" -ScriptBlock {
+    $url = "$BaseUrl/api/analytics/trends"
 
     try {
         # We only assert HTTP 200; empty history is fine

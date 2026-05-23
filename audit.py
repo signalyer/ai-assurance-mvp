@@ -7,17 +7,34 @@ from typing import Any, Optional, Dict
 from functools import wraps
 import hashlib
 
-# Configure logging with immutable, tamper-evident format
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(action)s | %(user_id)s | %(ip_address)s | %(resource)s | %(message)s',
-    handlers=[
-        logging.FileHandler('audit.log'),
-        logging.StreamHandler()
-    ]
+# Configure the audit logger ONLY — never call logging.basicConfig() here,
+# because basicConfig() mutates the ROOT logger, which means every other
+# module that calls logger.warning() without passing extra={"action": ...,
+# "user_id": ..., "ip_address": ..., "resource": ...} crashes with
+# KeyError: 'action'. That bug took down /api/demo/run end-to-end in prod
+# on 2026-05-23 (Day-12 recovery, layer 4) — fix is to attach the custom
+# format to a dedicated handler on the "audit" logger and set
+# propagate=False so the records never hit the root formatter.
+_AUDIT_FMT = (
+    '%(asctime)s | %(levelname)s | %(action)s | %(user_id)s | '
+    '%(ip_address)s | %(resource)s | %(message)s'
 )
+_audit_formatter = logging.Formatter(_AUDIT_FMT)
 
 audit_logger = logging.getLogger("audit")
+audit_logger.setLevel(logging.INFO)
+audit_logger.propagate = False  # critical: don't leak to root
+
+# Idempotent handler install — re-imports in tests won't duplicate.
+if not any(getattr(h, "_is_audit_handler", False) for h in audit_logger.handlers):
+    _file = logging.FileHandler('audit.log')
+    _file.setFormatter(_audit_formatter)
+    _file._is_audit_handler = True  # type: ignore[attr-defined]
+    _stream = logging.StreamHandler()
+    _stream.setFormatter(_audit_formatter)
+    _stream._is_audit_handler = True  # type: ignore[attr-defined]
+    audit_logger.addHandler(_file)
+    audit_logger.addHandler(_stream)
 
 
 class AuditLog:

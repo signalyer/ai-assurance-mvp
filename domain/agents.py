@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 _DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
 _engine = None  # type: ignore[assignment]
 
+# In-memory fallback when Postgres is not configured (App Service B1 demo).
+# Day-12 fix: create_agent already returned an Agent object without persisting
+# (line 236), but list_agents returned [] because it only queries the DB. This
+# dict bridges the two so seed_agents() at startup is actually visible to the
+# /api/agents endpoint. Lives for the lifetime of the worker process.
+_inmem_agents: dict[str, Agent] = {}
+
 if _DATABASE_URL:
     try:
         from sqlalchemy import create_engine as _create_engine
@@ -233,7 +240,8 @@ def create_agent(
             logger.error(f"create_agent: DB insert failed: {exc}", exc_info=True)
             raise
     else:
-        logger.warning("create_agent: engine unavailable — returning in-memory only")
+        logger.warning("create_agent: engine unavailable — storing in _inmem_agents")
+        _inmem_agents[agent.id] = agent
 
     from domain.repository import append_agent_event
 
@@ -310,8 +318,15 @@ def list_agents(
     )
 
     if _engine is None:
-        logger.warning("list_agents: engine unavailable — returning empty list")
-        return []
+        # Serve from in-memory fallback populated by create_agent (Day-12).
+        items = list(_inmem_agents.values())
+        if team is not None:
+            items = [a for a in items if a.team == team]
+        if owner_type is not None:
+            items = [a for a in items if a.owner_type == owner_type]
+        items.sort(key=lambda a: a.name)
+        logger.info("list_agents: in-memory fallback — count=%d", len(items))
+        return items
 
     try:
         from sqlalchemy import text

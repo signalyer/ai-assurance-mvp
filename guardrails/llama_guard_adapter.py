@@ -1,9 +1,28 @@
 """Llama Guard 3 content safety evaluator for unsafe content detection."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from typing import Optional
+
+
+@lru_cache(maxsize=512)
+def _compiled_keyword(kw: str) -> re.Pattern[str]:
+    r"""Compile a keyword to a word-boundary regex.
+
+    Day-12 finding: previously this module used `kw in text_lower` substring
+    matching, which caused massive false positives — "cut" matched
+    "calculate", "execute", "discuss"; "harm" matched "harmless",
+    "pharmaceutical"; "kill" matched "skill", "skillfully". Any LLM response
+    about portfolio rebalancing got flagged as VIOLENCE+SELF_HARM, which
+    crashed the demo end-to-end on 2026-05-23.
+
+    Multi-word keywords (e.g. "kill myself") are matched literally with
+    word boundaries on each end. Single-word keywords use \b\bword\b\b.
+    """
+    return re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
 
 
 class UnsafeCategory(str, Enum):
@@ -101,8 +120,10 @@ class LlamaGuardEvaluator:
             keywords = pattern_info["keywords"]
             severity = pattern_info["severity"]
 
-            # Count keyword matches
-            matches = sum(1 for kw in keywords if kw in text_lower)
+            # Count keyword matches with word boundaries to avoid substring
+            # false positives (e.g. "cut" matching "calculate"). See
+            # _compiled_keyword() docstring for the bug this prevents.
+            matches = sum(1 for kw in keywords if _compiled_keyword(kw).search(text_lower))
             if matches > 0:
                 # Score: (matches / total_keywords) * severity
                 score = min((matches / len(keywords)) * severity, 1.0)

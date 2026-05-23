@@ -14,6 +14,31 @@ from guardrails.llama_guard_adapter import evaluate_content, LlamaGuardResult
 from storage import _append_jsonl
 
 
+_TEXT_FIELDS = ("response_text", "actual_output", "text", "response", "output", "content")
+
+
+def _extract_text(value: Any) -> str:
+    """Coerce a wrapped-function return value to text for safety scanning.
+
+    Guardrails decorators wrap handlers that may return either a raw string
+    or a structured run dict (e.g. _build_run() output in api/demo_run.py).
+    LlamaGuard's pattern matcher requires a string — passing a dict raises
+    AttributeError on .lower(). This helper centralises the coercion so the
+    decorator contract stays loose without losing safety coverage.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in _TEXT_FIELDS:
+            v = value.get(key)
+            if isinstance(v, str) and v:
+                return v
+        return ""
+    return str(value)
+
+
 class GuardrailViolationError(Exception):
     """Raised when guardrail enforcement fails."""
     def __init__(self, message: str, violation_type: str, details: dict):
@@ -117,24 +142,29 @@ class GuardrailsMiddleware:
 
     async def check_output(
         self,
-        response: str,
+        response: Any,
         context: Optional[dict] = None,
     ) -> GuardrailResult:
         """Check output (response) for unsafe content.
 
         Args:
-            response: The LLM response
+            response: The LLM response. May be a str, or a dict produced by
+                _build_run() containing a text field. Non-string inputs are
+                coerced via _extract_text() so the decorator stays compatible
+                with handlers that return structured run records.
             context: Optional context dict
 
         Returns:
             GuardrailResult with pass/fail status and details
         """
+        text = _extract_text(response)
+
         violations = []
         safety_result = None
 
         # Llama Guard 3 content safety check
-        if self.enable_llama_guard and response:
-            safety_result = evaluate_content(response)
+        if self.enable_llama_guard and text:
+            safety_result = evaluate_content(text)
             if not safety_result.safe:
                 violations.append(f"Unsafe content: {', '.join(safety_result.violations)}")
 
@@ -146,11 +176,11 @@ class GuardrailsMiddleware:
             safety_result=safety_result,
             metadata={
                 "check_type": "output",
-                "response_length": len(response) if response else 0,
+                "response_length": len(text) if text else 0,
             }
         )
 
-        await self._log_guardrail_check(result, response[:200] if response else "")
+        await self._log_guardrail_check(result, text[:200] if text else "")
 
         return result
 

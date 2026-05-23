@@ -204,6 +204,28 @@ if _HAS_METRICS and _metrics_router is not None:
     app.include_router(_metrics_router)
 
 
+@app.on_event("startup")
+async def _seed_agents_on_startup() -> None:
+    """Seed 6 demo agents at startup (in-memory or Postgres, idempotent).
+
+    Day-12 finding: smoke-test scenario #3 expects >= 6 agents but prod's
+    agent table is empty (Postgres isn't configured on App Service, so
+    domain.agents.create_agent() falls back to in-memory only — which
+    means agents disappear on every container restart). Wiring seed_agents
+    here matches that lifecycle: every cold start re-seeds the demo data.
+
+    Idempotent: seed_agents uses ON CONFLICT DO NOTHING when Postgres is
+    available; safe to call repeatedly. Failure is swallowed (we never
+    want startup to die over demo data).
+    """
+    try:
+        from domain.agents import seed_agents
+        seeded = seed_agents()
+        print(f"[startup] seed_agents: {len(seeded)} agents available")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] seed_agents failed (non-fatal): {exc}")
+
+
 @app.get("/api/health")
 async def health_check() -> dict:
     """Return API health status.

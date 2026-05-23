@@ -33,7 +33,7 @@ from storage import save_run
 from audit import log_evaluation
 from api.security import apply_guardrails, filter_output
 from scrubber import tokenise_payload
-from middleware.guardrails import guardrails
+from middleware.guardrails import guardrails, GuardrailViolationError
 from domain.agent_memory import write_episode
 
 # Load env vars from project root .env file at module load — never inside request handlers.
@@ -258,12 +258,22 @@ async def run_live_demo(domain: str = Query(None)):
             return {"error": f"Claude: {str(e)[:200]}"}
 
     async def _run_claude_wrapper():
-        """Wrapper to pass guardrails parameters."""
-        return await _run_claude(
-            prompt_text=prompt,
-            model_name="claude-sonnet-4-6",
-            workload_id="financial_advisor",
-        )
+        """Wrapper to pass guardrails parameters.
+
+        A `GuardrailViolationError` here is *expected demo material* — the
+        guardrail did its job and blocked unsafe content. Surface it as a
+        structured error in the run record, NOT a 500. Without this catch,
+        strict=True guardrails would propagate out of asyncio.gather and
+        crash the endpoint.
+        """
+        try:
+            return await _run_claude(
+                prompt_text=prompt,
+                model_name="claude-sonnet-4-6",
+                workload_id="financial_advisor",
+            )
+        except GuardrailViolationError as gve:
+            return {"error": f"Claude blocked by guardrail: {gve}"}
 
     @guardrails(
         enable_injection=True,
@@ -294,12 +304,16 @@ async def run_live_demo(domain: str = Query(None)):
             return {"error": f"OpenAI: {str(e)[:200]}"}
 
     async def _run_openai_wrapper():
-        """Wrapper to pass guardrails parameters."""
-        return await _run_openai(
-            prompt_text=prompt,
-            model_name="gpt-4o-mini",
-            workload_id="financial_advisor",
-        )
+        """Wrapper to pass guardrails parameters. See _run_claude_wrapper for
+        rationale on catching GuardrailViolationError here."""
+        try:
+            return await _run_openai(
+                prompt_text=prompt,
+                model_name="gpt-4o-mini",
+                workload_id="financial_advisor",
+            )
+        except GuardrailViolationError as gve:
+            return {"error": f"OpenAI blocked by guardrail: {gve}"}
 
     # Both API calls fire simultaneously
     claude_result, openai_result = await asyncio.gather(_run_claude_wrapper(), _run_openai_wrapper())

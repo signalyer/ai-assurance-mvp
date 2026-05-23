@@ -57,6 +57,7 @@ logs/
 # Build artifacts
 deploy/app.zip
 deploy/*.zip
+deploy/applogs*/
 deploy/jar.txt
 
 # Azure Functions
