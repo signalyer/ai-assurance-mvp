@@ -35,7 +35,7 @@ resource alertPiiLeak 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview
     criteria: {
       allOf: [
         {
-          query: 'customMetrics | where name == "pii_leak_attempt_total" | summarize TotalAttempts = sum(value) by bin(timestamp, 5m) | where TotalAttempts > 0'
+          query: 'AppMetrics | where Name == "pii_leak_attempt_total" | summarize TotalAttempts = sum(Sum) by bin(TimeGenerated, 5m) | where TotalAttempts > 0'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -69,7 +69,7 @@ resource alertOpaUnreachable 'Microsoft.Insights/scheduledQueryRules@2023-03-15-
     criteria: {
       allOf: [
         {
-          query: 'customMetrics | where name == "opa_unreachable_total" | summarize TotalUnreachable = sum(value) by bin(timestamp, 5m) | where TotalUnreachable > 0'
+          query: 'AppMetrics | where Name == "opa_unreachable_total" | summarize TotalUnreachable = sum(Sum) by bin(TimeGenerated, 5m) | where TotalUnreachable > 0'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -103,7 +103,7 @@ resource alertVaultError 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
     criteria: {
       allOf: [
         {
-          query: 'customMetrics | where name == "vault_error_total" | summarize TotalErrors = sum(value) by bin(timestamp, 15m) | where TotalErrors > 5'
+          query: 'AppMetrics | where Name == "vault_error_total" | summarize TotalErrors = sum(Sum) by bin(TimeGenerated, 15m) | where TotalErrors > 5'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -137,7 +137,7 @@ resource alertAuditChainBroken 'Microsoft.Insights/scheduledQueryRules@2023-03-1
     criteria: {
       allOf: [
         {
-          query: 'customMetrics | where name == "audit_chain_break_total" | summarize BreakCount = sum(value) by bin(timestamp, 5m) | where BreakCount > 0'
+          query: 'AppMetrics | where Name == "audit_chain_break_total" | summarize BreakCount = sum(Sum) by bin(TimeGenerated, 5m) | where BreakCount > 0'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -171,7 +171,7 @@ resource alertHttp5xxRate 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pre
     criteria: {
       allOf: [
         {
-          query: 'requests | summarize TotalRequests = count(), ErrorRequests = countif(resultCode >= "500" and resultCode < "600") by bin(timestamp, 5m) | where TotalRequests > 0 | extend ErrorRate = todouble(ErrorRequests) / todouble(TotalRequests) | where ErrorRate > 0.01'
+          query: 'AppRequests | extend ResultCodeInt = toint(ResultCode) | summarize TotalRequests = count(), ErrorRequests = countif(ResultCodeInt >= 500 and ResultCodeInt < 600) by bin(TimeGenerated, 5m) | where TotalRequests > 0 | extend ErrorRate = todouble(ErrorRequests) / todouble(TotalRequests) | where ErrorRate > 0.01'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -205,7 +205,7 @@ resource alertP95Latency 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
     criteria: {
       allOf: [
         {
-          query: 'requests | summarize P95Duration = percentile(duration, 95) by bin(timestamp, 5m) | where P95Duration > 2000'
+          query: 'AppRequests | summarize P95Duration = percentile(DurationMs, 95) by bin(TimeGenerated, 5m) | where P95Duration > 2000'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -239,7 +239,7 @@ resource alertRtfPartialFailure 'Microsoft.Insights/scheduledQueryRules@2023-03-
     criteria: {
       allOf: [
         {
-          query: 'customMetrics | where name == "rtf_cascade_total" | where tostring(customDimensions["status"]) == "PARTIAL_FAILURE" | summarize PartialFailures = sum(value) by bin(timestamp, 5m) | where PartialFailures > 0'
+          query: 'AppMetrics | where Name == "rtf_cascade_total" | where tostring(Properties.status) == "PARTIAL_FAILURE" | summarize PartialFailures = sum(Sum) by bin(TimeGenerated, 5m) | where PartialFailures > 0'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -273,7 +273,7 @@ resource alertScrubRateRegression 'Microsoft.Insights/scheduledQueryRules@2023-0
     criteria: {
       allOf: [
         {
-          query: 'let ScrubEvents = customMetrics | where name == "scrub_pii_detected_total" | summarize TotalScrubs = sum(value) by bin(timestamp, 30m); let RequestEvents = requests | summarize TotalRequests = count() by bin(timestamp, 30m); ScrubEvents | join kind=leftouter RequestEvents on timestamp | where TotalRequests > 10 | extend ScrubRate = todouble(TotalScrubs) / todouble(TotalRequests) | where ScrubRate < 0.5'
+          query: 'let ScrubEvents = AppMetrics | where Name == "scrub_pii_detected_total" | summarize TotalScrubs = sum(Sum) by bin(TimeGenerated, 30m); let RequestEvents = AppRequests | summarize TotalRequests = count() by bin(TimeGenerated, 30m); ScrubEvents | join kind=leftouter RequestEvents on TimeGenerated | where TotalRequests > 10 | extend ScrubRate = todouble(TotalScrubs) / todouble(TotalRequests) | where ScrubRate < 0.5'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

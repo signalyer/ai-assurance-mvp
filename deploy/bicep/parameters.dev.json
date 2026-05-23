@@ -9,13 +9,13 @@
       "value": "app-aigovern-dev"
     },
     "workspaceName": {
-      "value": "log-aigovern-prod"
+      "value": "log-aigovern-dev"
     },
     "appInsightsName": {
-      "value": "appi-aigovern-prod"
+      "value": "appi-aigovern-dev"
     },
     "actionGroupId": {
-      "value": ""
+      "value": "/subscriptions/06E4C6FA-8B0F-4E4A-B993-E0FD21EB22A3/resourceGroups/rg-aigovern-dev/providers/microsoft.insights/actionGroups/ag-aigovern-dev"
     }
   }
 }
