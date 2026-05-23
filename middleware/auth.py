@@ -37,7 +37,9 @@ PUBLIC_PREFIXES = (
     "/api/sdk/",  # SDK paths are authenticated by HMACAuthMiddleware, not session cookies
 )
 
-ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV")
+ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR")
+# OPERATOR added in Session 11 for the Demo Control panel. Provision
+# DEMO_USER_OPERATOR_HASH to permit `demo-operator` logins in prod.
 
 
 def _is_enabled() -> bool:

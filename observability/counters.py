@@ -102,6 +102,11 @@ _rtf_cascade = _make_counter(
     ["status"],
 )
 
+_rtf_sidecar_unsigned = _make_counter(
+    "rtf_sidecar_unsigned_total",
+    "Number of RTF sidecar entries that were unsigned or had an invalid HMAC signature.",
+)
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -166,6 +171,14 @@ def record_audit_chain_break() -> None:
         _audit_chain_break.inc()
     except Exception as exc:
         _log.debug("record_audit_chain_break_noop error=%s", exc)
+
+
+def record_rtf_sidecar_unsigned() -> None:
+    """Increment the counter for RTF sidecar entries with absent or invalid HMAC signatures."""
+    try:
+        _rtf_sidecar_unsigned.inc()
+    except Exception as exc:
+        _log.debug("record_rtf_sidecar_unsigned_noop error=%s", exc)
 
 
 def record_rtf_cascade(status: str) -> None:

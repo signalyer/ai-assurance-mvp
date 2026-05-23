@@ -45,6 +45,7 @@ Environment variables
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -56,6 +57,73 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Sidecar HMAC integrity (Session 11 HIGH-security fix)
+# ---------------------------------------------------------------------------
+# Each sidecar entry is signed with HMAC-SHA256 over the canonical-JSON
+# serialisation of the entry minus the ``_sig`` field, keyed by
+# ``SL_HMAC_SECRET`` (the same secret used by ``middleware/hmac_auth.py``).
+#
+# Migration mode (Session 11): unsigned or invalid entries emit a
+# ``logger.warning`` + increment ``rtf_sidecar_unsigned_total``, and the
+# reader falls back to the ``events.jsonl`` tail scan. Strict-reject mode
+# (refuse the cascade entirely on bad sig) ships in Session 12 once all
+# pre-existing sidecar entries have been re-signed.
+# ---------------------------------------------------------------------------
+
+try:
+    from observability.counters import record_rtf_sidecar_unsigned as _sidecar_unsigned_counter  # noqa: E501
+except ImportError:  # pragma: no cover -- counters optional in dev
+    def _sidecar_unsigned_counter() -> None:  # type: ignore[misc]
+        """No-op fallback when observability.counters is unavailable."""
+        return None
+
+
+def _sidecar_secret() -> str | None:
+    """Return ``SL_HMAC_SECRET`` from env, or ``None`` if unset.
+
+    Read per-call (not cached) so test fixtures and runtime rotation work.
+    """
+    raw = os.environ.get("SL_HMAC_SECRET", "").strip()
+    return raw or None
+
+
+def _compute_sidecar_sig(entry: dict, secret: str) -> str:
+    """Return hex HMAC-SHA256 over canonical-JSON of *entry* minus ``_sig``.
+
+    Args:
+        entry:  Sidecar entry dict (with or without an existing ``_sig``).
+        secret: HMAC key (typically ``SL_HMAC_SECRET``).
+
+    Returns:
+        Hex digest string.
+    """
+    without_sig = {k: v for k, v in entry.items() if k != "_sig"}
+    canonical = json.dumps(
+        without_sig, sort_keys=True, separators=(",", ":"), default=str
+    )
+    return hmac.new(
+        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+
+def _verify_sidecar_entry(entry: dict) -> bool:
+    """Return True iff *entry* carries a valid HMAC-SHA256 signature.
+
+    Returns False on: missing ``_sig`` field · missing ``SL_HMAC_SECRET`` ·
+    signature mismatch. Caller is responsible for logging + counter on False.
+
+    Constant-time comparison via :func:`hmac.compare_digest`.
+    """
+    sig = entry.get("_sig")
+    if not sig or not isinstance(sig, str):
+        return False
+    secret = _sidecar_secret()
+    if not secret:
+        return False
+    expected = _compute_sidecar_sig(entry, secret)
+    return hmac.compare_digest(sig, expected)
 
 # ---------------------------------------------------------------------------
 # Sidecar index file for completed cascade IDs
@@ -176,13 +244,25 @@ def _write_to_index(cascade_id: str, result: CascadeResult) -> None:
     """
     try:
         _RTF_INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
-        entry = {
+        entry: dict = {
             "cascade_id": cascade_id,
             "subject_id": result.subject_id,
             "completed_at": result.completed_at,
             "steps": {k: v.model_dump() for k, v in result.steps.items()},
             "started_at": result.started_at,
         }
+        # Sign with HMAC-SHA256 if SL_HMAC_SECRET is configured. Missing secret
+        # is logged once and the entry is written unsigned (legacy behaviour) so
+        # dev/test environments without the secret remain functional.
+        secret = _sidecar_secret()
+        if secret:
+            entry["_sig"] = _compute_sidecar_sig(entry, secret)
+        else:
+            logger.warning(
+                "_write_to_index: SL_HMAC_SECRET unset; writing unsigned "
+                "sidecar entry cascade_id=%s. Set the secret in production.",
+                cascade_id,
+            )
         with _RTF_INDEX_FILE.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, default=str) + "\n")
     except Exception as exc:  # noqa: BLE001
@@ -422,7 +502,10 @@ def _find_completed_cascade(cascade_id: str) -> CascadeResult | None:
     if cascade_id in _completed_cache:
         return _completed_cache[cascade_id]  # type: ignore[return-value]
 
-    # Consult sidecar index first (O(n_completed) scan but file is small)
+    # Consult sidecar index first (O(n_completed) scan but file is small).
+    # Each entry's HMAC sig is verified; unsigned/invalid entries are skipped
+    # with a warning + counter increment, and we fall through to the
+    # events.jsonl tail scan (migration-friendly mode — Session 11).
     if _RTF_INDEX_FILE.exists():
         try:
             with _RTF_INDEX_FILE.open("r", encoding="utf-8") as fh:
@@ -435,6 +518,30 @@ def _find_completed_cascade(cascade_id: str) -> CascadeResult | None:
                     except json.JSONDecodeError:
                         continue
                     if entry.get("cascade_id") != cascade_id:
+                        continue
+                    # HMAC integrity check
+                    if not _verify_sidecar_entry(entry):
+                        reason = (
+                            "unsigned (legacy entry)"
+                            if "_sig" not in entry
+                            else "invalid signature"
+                        )
+                        logger.warning(
+                            "_find_completed_cascade: sidecar entry "
+                            "cascade_id=%s rejected (%s); falling back to "
+                            "events.jsonl scan.",
+                            cascade_id, reason,
+                        )
+                        try:
+                            _sidecar_unsigned_counter()
+                        except Exception:  # noqa: BLE001
+                            pass
+                        # Skip this entry; do NOT trust it. `continue` (not
+                        # `break`) so a later well-signed entry for the same
+                        # cascade_id could still be honoured if duplicates
+                        # ever appear in the sidecar. If nothing further
+                        # matches, the loop falls through to the events.jsonl
+                        # tail scan below.
                         continue
                     steps_raw: dict = entry.get("steps", {})
                     steps: dict[str, PurgeResult] = {

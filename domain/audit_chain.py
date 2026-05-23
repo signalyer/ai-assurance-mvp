@@ -224,13 +224,13 @@ def _acquire_writer_lock(path: Path):
 
     lock_path = Path(str(path) + ".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        return _portalocker.Lock(str(lock_path), timeout=_LOCK_TIMEOUT_S)
-    except _portalocker.LockException as exc:
-        raise RuntimeError(
-            f"audit_chain: could not acquire writer lock on {lock_path} "
-            f"within {_LOCK_TIMEOUT_S}s (fail-closed): {exc}"
-        ) from exc
+    # portalocker.Lock.__init__ does NOT acquire the lock; it only prepares it.
+    # The lock is actually acquired on __enter__.  LockException (timeout) is
+    # therefore raised during the ``with`` statement at the call site, not here.
+    # We return the Lock object unconditionally; fail-closed behaviour is
+    # enforced by the ``with`` block in append_chained_event catching
+    # LockException and re-raising as RuntimeError.
+    return _portalocker.Lock(str(lock_path), timeout=_LOCK_TIMEOUT_S)
 
 
 def _seed_cache_from_file() -> tuple[str, int]:
@@ -323,55 +323,71 @@ def append_chained_event(event_type: str, payload: dict) -> dict:
 
     with _write_lock:
         # Acquire cross-process advisory lock (fail-closed on timeout).
-        with _acquire_writer_lock(EVENTS_FILE):
-            # Seed cache from file on first call, after a crash reset, or when
-            # EVENTS_FILE has been changed (e.g. test monkeypatching tmp_path).
-            if (
-                _prev_hash_cache is None
-                or _chained_count_cache is None
-                or _cache_seeded_from != EVENTS_FILE
-            ):
-                _prev_hash_cache, _chained_count_cache = _seed_cache_from_file()
-                _cache_seeded_from = EVENTS_FILE
+        # portalocker.Lock.__init__ does not acquire the lock; the lock is
+        # acquired on __enter__.  LockException (timeout) is therefore raised
+        # during ``with _acquire_writer_lock(...):`` below, not at construction
+        # time.  We wrap the with-block in try/except to convert LockException
+        # to RuntimeError for a consistent caller interface.
+        try:
+            with _acquire_writer_lock(EVENTS_FILE):
+                # Seed cache from file on first call, after a crash reset, or when
+                # EVENTS_FILE has been changed (e.g. test monkeypatching tmp_path).
+                if (
+                    _prev_hash_cache is None
+                    or _chained_count_cache is None
+                    or _cache_seeded_from != EVENTS_FILE
+                ):
+                    _prev_hash_cache, _chained_count_cache = _seed_cache_from_file()
+                    _cache_seeded_from = EVENTS_FILE
 
-            prev_hash: str = _prev_hash_cache
+                prev_hash: str = _prev_hash_cache
 
-            # Build record (without hash field yet)
-            now = datetime.now(timezone.utc).isoformat()
-            record: dict = {
-                "event_id": str(uuid.uuid4()),
-                "ts": now,
-                "event_type": event_type,
-                "prev_hash": prev_hash,
-                **payload,
-            }
+                # Build record (without hash field yet)
+                now = datetime.now(timezone.utc).isoformat()
+                record: dict = {
+                    "event_id": str(uuid.uuid4()),
+                    "ts": now,
+                    "event_type": event_type,
+                    "prev_hash": prev_hash,
+                    **payload,
+                }
 
-            # Compute hash over canonical form
-            record["hash"] = compute_event_hash(prev_hash, record)
+                # Compute hash over canonical form
+                record["hash"] = compute_event_hash(prev_hash, record)
 
-            # Append to events file
-            _append_jsonl(EVENTS_FILE, record)
+                # Append to events file
+                _append_jsonl(EVENTS_FILE, record)
 
-            # Update cache atomically (still under both locks)
-            _chained_count_cache += 1
-            _prev_hash_cache = record["hash"]
-            new_count = _chained_count_cache
+                # Update cache atomically (still under both locks)
+                _chained_count_cache += 1
+                _prev_hash_cache = record["hash"]
+                new_count = _chained_count_cache
 
-        # File lock released here; in-process lock still held for checkpoint
+                # Checkpoint every N chained events — written INSIDE the advisory
+                # lock so the checkpoint is durable before the lock is released.
+                # This prevents a race where another process reads a checkpoint
+                # that references an event not yet flushed.
+                if new_count % _CHECKPOINT_INTERVAL == 0:
+                    checkpoint = {
+                        "checkpoint_index": new_count,
+                        "event_id": record["event_id"],
+                        "hash": record["hash"],
+                        "ts": now,
+                    }
+                    _append_jsonl(CHECKPOINTS_FILE, checkpoint)
+                    logger.info(
+                        "audit_chain: checkpoint written at index=%d event_id=%s",
+                        new_count, record["event_id"],
+                    )
 
-        # Checkpoint every N chained events
-        if new_count % _CHECKPOINT_INTERVAL == 0:
-            checkpoint = {
-                "checkpoint_index": new_count,
-                "event_id": record["event_id"],
-                "hash": record["hash"],
-                "ts": now,
-            }
-            _append_jsonl(CHECKPOINTS_FILE, checkpoint)
-            logger.info(
-                "audit_chain: checkpoint written at index=%d event_id=%s",
-                new_count, record["event_id"],
-            )
+        except Exception as _exc:
+            if _HAS_PORTALOCKER and isinstance(_exc, _portalocker.LockException):
+                raise RuntimeError(
+                    f"audit_chain: could not acquire writer lock on "
+                    f"{EVENTS_FILE}.lock within {_LOCK_TIMEOUT_S}s "
+                    f"(fail-closed): {_exc}"
+                ) from _exc
+            raise
 
     logger.debug(
         "append_chained_event: exit event_id=%s event_type=%s hash=%s...",

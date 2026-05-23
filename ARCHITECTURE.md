@@ -5,6 +5,8 @@
 > For the holistic six-layer model and competitive positioning, see `docs/target-architecture.md`.
 > For the WHY behind decisions, see `DECISIONS.md`.
 
+> **Visual map (built state):** [`docs/architecture/BUILT-STATE.html`](docs/architecture/BUILT-STATE.html) · [`docs/architecture/BUILT-STATE.svg`](docs/architecture/BUILT-STATE.svg) — 7 diagrams + file matrix + Phase-2 legend (Sessions 01-11).
+
 ## Stack
 Backend: FastAPI (`dashboard.py` entry point)
 Frontend: vanilla HTML + `static/shared.js` + `static/shared.css` (no framework, no build)

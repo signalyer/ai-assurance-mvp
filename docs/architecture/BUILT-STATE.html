@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI Assurance Platform — Built-State Architecture (Sessions 01-11)</title>
+<style>
+  :root {
+    --bg:#0b0f17; --bg-card:#131a26; --bg-elev:#1a2333; --bg-deep:#06090f;
+    --fg:#e4e8ef; --fg-mut:#97a3b6; --fg-dim:#6b7689;
+    --accent:#60a5fa; --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+    --border:#2a3447;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;line-height:1.55}
+  header{padding:28px 40px 20px;border-bottom:1px solid var(--border)}
+  header h1{margin:0;font-size:22px;letter-spacing:.3px}
+  header .sub{color:var(--fg-mut);font-size:13px;margin-top:6px;font-family:var(--mono)}
+  main{max-width:1280px;margin:0 auto;padding:28px 40px 64px}
+  section{margin-bottom:48px}
+  h2{font-size:16px;color:var(--accent);letter-spacing:2px;margin:0 0 8px;font-weight:600}
+  h2 .num{color:var(--fg-mut);margin-right:10px}
+  h3{font-size:14px;margin:18px 0 6px;color:var(--fg)}
+  p{color:var(--fg-mut);font-size:13.5px;margin:0 0 12px}
+  p strong{color:var(--fg)}
+  code{font-family:var(--mono);font-size:12.5px;color:#bcd1f5;background:var(--bg-elev);padding:1px 6px;border-radius:3px}
+  .diagram{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin:10px 0 18px}
+  .diagram svg{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-size:12.5px;color:var(--fg-mut)}
+  .legend .item{display:flex;align-items:center;gap:8px}
+  .legend .swatch{display:inline-block;width:22px;height:14px;border-radius:3px}
+  .swatch.built{background:var(--bg-card);border:1px solid var(--accent)}
+  .swatch.p2{background:repeating-linear-gradient(45deg,var(--bg-elev) 0 4px,#0e1420 4px 8px);border:1px dashed var(--fg-mut)}
+  .swatch.data{background:var(--accent);height:3px;border-radius:0;margin-top:6px}
+  .swatch.ev{background:var(--ok);height:3px;border-radius:0;margin-top:6px}
+  .swatch.fc{background:var(--err);height:3px;border-radius:0;margin-top:6px;background-image:repeating-linear-gradient(90deg,var(--err) 0 4px,transparent 4px 7px)}
+  table.matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  table.matrix th,table.matrix td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+  table.matrix th{background:var(--bg-elev);font-weight:600;color:var(--fg);font-size:12px;letter-spacing:.5px}
+  table.matrix td{color:var(--fg-mut)}
+  table.matrix td code{background:transparent;padding:0;color:#bcd1f5}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-family:var(--mono);background:var(--bg-elev);color:var(--fg-mut)}
+  .pill.l1{color:#cbd5e1}.pill.l2{color:#a5b4fc}.pill.l3{color:#fda4af}.pill.l4{color:#86efac}.pill.l5{color:#fcd34d}.pill.l6{color:#c4b5fd}.pill.ix{color:#7dd3fc}.pill.ui{color:#f9a8d4}
+  .callouts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:980px){.callouts{grid-template-columns:1fr}}
+  .callout{background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--fg-mut)}
+  .callout b{color:var(--fg)}
+  .chain{font-family:var(--mono);font-size:12.5px;color:#bcd1f5;background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin:6px 0}
+  footer{padding:32px 40px;border-top:1px solid var(--border);color:var(--fg-dim);font-size:11.5px;font-family:var(--mono);text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Assurance Platform — Built-State Architecture</h1>
+  <div class="sub">Sessions 01-11 · Day 11 of the 12-day production sprint · aigovern.sandboxhub.co · 2026-05-22</div>
+</header>
+<main>
+
+<!-- ============================================================ -->
+<section id="overview">
+<h2><span class="num">§0</span>Overview &amp; reading guide</h2>
+<p>
+This document is the <strong>built-state</strong> companion to <code>docs/architecture/target-architecture.html</code>. The target doc describes
+what the platform <em>aspires to be</em>; this one describes what has actually shipped through Day 11 of the 12-day production sprint
+(Sessions 01a, 01b, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11). Phase-2 deferrals are explicitly marked — both visually (dashed stroke + hatch fill)
+and in the footer legend — so an auditor or new engineer can tell, without reading any prose, which boxes correspond to real code and which are roadmap.
+</p>
+<p>
+The most important runtime invariant is the <strong>decorator chain order</strong> — it appears on the second diagram, in declared order:
+</p>
+<div class="chain">@policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response</div>
+<p>
+The order is enforced at SDK <em>decoration</em> time (not call time) by <code>sdk/signallayer/order_guard.py</code>; a missing
+<code>@scrub_pii</code> raises <code>MissingScrubberError</code> before the function ever runs.
+</p>
+
+<h3>Legend</h3>
+<div class="legend">
+  <div class="item"><span class="swatch built"></span> Built · solid stroke, filled</div>
+  <div class="item"><span class="swatch p2"></span> Phase-2 · dashed stroke, hatched fill</div>
+  <div class="item"><span class="swatch data"></span> data / request flow</div>
+  <div class="item"><span class="swatch ev"></span> event write to <code>events.jsonl</code> (SSOT)</div>
+  <div class="item"><span class="swatch fc"></span> fail-closed exit</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d1">
+<h2><span class="num">§1</span>Six-Layer System Map</h2>
+<p>
+The platform is layered, not microserviced — a single FastAPI app on Azure App Service serves all six layers, with role-based views.
+The split keeps the <strong>v2 refactor cheap</strong> (Team Portal + Gov Console as separate clients) without paying a microservice tax in v1.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 540" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs>
+    <pattern id="h1" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#1a2333"/><line x1="0" y1="0" x2="0" y2="8" stroke="#2a3447" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect x="20" y="20" width="1060" height="58" rx="6" fill="#131a26" stroke="#2a3447"/>
+  <text x="36" y="42" fill="#cbd5e1" font-size="13" font-weight="700">L1 · Organisational</text>
+  <text x="36" y="62" fill="#97a3b6" font-size="11">risk_inventory · governance_body · raci · regulatory_posture · domains.py · controls/library/ (15 controls)</text>
+
+  <rect x="20" y="88" width="1060" height="92" rx="6" fill="#131a26" stroke="#2a3447"/>
+  <text x="36" y="110" fill="#a5b4fc" font-size="13" font-weight="700">L2 · Enterprise Control Plane</text>
+  <text x="36" y="128" fill="#97a3b6" font-size="11">policy_engine + OPA sidecar · policies/*.rego · release_gate_engine · framework_coverage (6 frameworks)</text>
+  <text x="36" y="144" fill="#97a3b6" font-size="11">agents.py + AgentBinding · @policy_gate · pdf_report.py + domain/pdf_pack_base.py (6 packs total — NIST/OWASP/EU/ISO/SR-11-7/FFIEC)</text>
+  <text x="36" y="160" fill="#97a3b6" font-size="11">audit_chain.py (portalocker · checkpoint-inside-lock · HMAC sidecar) · /api/audit/verify</text>
+
+  <rect x="20" y="190" width="1060" height="76" rx="6" fill="#131a26" stroke="#f87171" stroke-width="2"/>
+  <text x="36" y="212" fill="#f87171" font-size="13" font-weight="700">L3 · PII / IP / Secret Scrubbing Pipeline  (THE BOUNDARY)</text>
+  <text x="36" y="230" fill="#97a3b6" font-size="11">scrubber.py (Presidio + 12 regex) · domain/deid_vault.py (Fernet + Key Vault) · @scrub_pii · middleware/scrubber.py</text>
+  <text x="36" y="246" fill="#97a3b6" font-size="11">domain/right_to_forget.py — cascade across vault · T2 · T3 · Langfuse · HMAC-signed sidecar (Session 11)</text>
+
+  <rect x="20" y="276" width="1060" height="78" rx="6" fill="#131a26" stroke="#2a3447"/>
+  <text x="36" y="298" fill="#86efac" font-size="13" font-weight="700">L4 · Four-Tier Memory</text>
+  <text x="36" y="316" fill="#97a3b6" font-size="11">T1 in-context (token budget) · T2 episodic (Postgres + JSONL) · T3 RAG (Azure AI Search) · T4 procedural (domains.py)</text>
+  <text x="36" y="332" fill="#97a3b6" font-size="11">domain/agent_memory.py · domain/rag_engine.py · index-time scrubbing · Haiku compression</text>
+
+  <rect x="20" y="364" width="1060" height="92" rx="6" fill="#131a26" stroke="#2a3447"/>
+  <text x="36" y="386" fill="#fcd34d" font-size="13" font-weight="700">L5 · Runtime + Evaluation</text>
+  <text x="36" y="404" fill="#97a3b6" font-size="11">tracer.py (Langfuse · scrubbed only) · evaluator.py (DeepEval 6-metric) · @trace_llm_call · @evaluate_response</text>
+  <text x="36" y="420" fill="#97a3b6" font-size="11">NeMo Guardrails + Llama Guard 3 (@guardrails) · garak adversarial · observability/* (App Insights · 8 alerts · Prometheus)</text>
+  <text x="36" y="436" fill="#97a3b6" font-size="11">data/calibration/ (50 cases × 6 metrics) · trend computation from event log</text>
+
+  <rect x="20" y="466" width="1060" height="58" rx="6" fill="#131a26" stroke="#2a3447"/>
+  <text x="36" y="488" fill="#c4b5fd" font-size="13" font-weight="700">L6 · LLM Abstraction</text>
+  <text x="36" y="508" fill="#97a3b6" font-size="11">Anthropic (Sonnet 4.6 · Opus 4.7 · Haiku 4.5) · OpenAI (GPT-4o-mini judge) · <tspan fill="#fbbf24">Bedrock — Phase-2 stub</tspan></text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d2">
+<h2><span class="num">§2</span>Decorator Chain &amp; Fail-Closed Exits</h2>
+<p>
+Five decorators, one enforced order, four explicit fail-closed exits. The chain is the single thing every assurance-tagged code path
+shares — get the order wrong and the SDK refuses to load the module.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 280" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f87171"/></marker>
+  </defs>
+  <rect x="10" y="40" width="100" height="46" rx="6" fill="#1a2333" stroke="#2a3447"/>
+  <text x="60" y="68" text-anchor="middle" font-size="12" fill="#e4e8ef">request</text>
+
+  <rect x="130" y="40" width="160" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="210" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">@policy_gate</text>
+  <text x="210" y="76" text-anchor="middle" font-size="10" fill="#97a3b6">OPA · 5 categories</text>
+  <line x1="210" y1="86" x2="210" y2="140" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="218" y="125" font-size="10" fill="#f87171">DENY → 403</text>
+
+  <rect x="310" y="40" width="160" height="46" rx="6" fill="#131a26" stroke="#f87171"/>
+  <text x="390" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">@scrub_pii</text>
+  <text x="390" y="76" text-anchor="middle" font-size="10" fill="#97a3b6">scrubber + Fernet vault</text>
+  <line x1="390" y1="86" x2="390" y2="140" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="398" y="125" font-size="10" fill="#f87171">fail → drop trace</text>
+
+  <rect x="490" y="40" width="160" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="570" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">@guardrails</text>
+  <text x="570" y="76" text-anchor="middle" font-size="10" fill="#97a3b6">NeMo + Llama Guard 3</text>
+  <line x1="570" y1="86" x2="570" y2="140" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="578" y="125" font-size="10" fill="#f87171">block → reject</text>
+
+  <rect x="670" y="40" width="160" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="750" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">@trace_llm_call</text>
+  <text x="750" y="76" text-anchor="middle" font-size="10" fill="#97a3b6">tracer · Langfuse</text>
+
+  <rect x="850" y="40" width="170" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="935" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">@evaluate_response</text>
+  <text x="935" y="76" text-anchor="middle" font-size="10" fill="#97a3b6">DeepEval · release gate</text>
+  <line x1="935" y1="86" x2="935" y2="140" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  <text x="943" y="125" font-size="10" fill="#f87171">fail → gate close</text>
+
+  <!-- chain arrows -->
+  <line x1="110" y1="63" x2="130" y2="63" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="290" y1="63" x2="310" y2="63" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="470" y1="63" x2="490" y2="63" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="650" y1="63" x2="670" y2="63" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="830" y1="63" x2="850" y2="63" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab)"/>
+
+  <text x="10" y="180" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="12" fill="#97a3b6">
+    order: @policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response
+  </text>
+  <text x="10" y="200" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="11" fill="#6b7689">
+    enforced at SDK decoration time · sdk/signallayer/order_guard.py
+  </text>
+  <text x="10" y="218" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="11" fill="#6b7689">
+    every fail-closed exit emits a policy_evaluation event to events.jsonl
+  </text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d3">
+<h2><span class="num">§3</span>Data Plane — <code>events.jsonl</code> is the SSOT</h2>
+<p>
+Every state change writes to <code>events.jsonl</code> (append-only, SHA-256 chained). The Session-09 projection worker materialises
+Postgres views from that stream. UIs render the views. <strong>Postgres never writes back into <code>events.jsonl</code></strong> —
+that direction is a drawing error and a code-review fail. Replaying <code>events.jsonl</code> reconstructs every materialised view.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs>
+    <marker id="ab3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker>
+    <marker id="ag3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34d399"/></marker>
+    <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f87171"/></marker>
+  </defs>
+
+  <rect x="20" y="50" width="220" height="92" rx="8" fill="#06090f" stroke="#34d399" stroke-width="2"/>
+  <text x="130" y="78" text-anchor="middle" font-size="14" font-weight="700" fill="#34d399">events.jsonl</text>
+  <text x="130" y="98" text-anchor="middle" font-size="11" fill="#97a3b6">append-only · SHA-256 chain</text>
+  <text x="130" y="114" text-anchor="middle" font-size="11" fill="#97a3b6">portalocker writer</text>
+  <text x="130" y="130" text-anchor="middle" font-size="11" fill="#97a3b6">/api/audit/verify</text>
+
+  <rect x="300" y="50" width="220" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="410" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Projection worker</text>
+  <text x="410" y="92" text-anchor="middle" font-size="10" fill="#97a3b6">api/projection.py</text>
+
+  <rect x="300" y="120" width="220" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="410" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Postgres views</text>
+  <text x="410" y="160" text-anchor="middle" font-size="10" fill="#97a3b6">ai_systems · eval_runs · findings</text>
+
+  <rect x="580" y="50" width="180" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="670" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Vault (Fernet)</text>
+  <text x="670" y="92" text-anchor="middle" font-size="10" fill="#97a3b6">deid_vault.jsonl</text>
+
+  <rect x="780" y="50" width="180" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="870" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Tier-2 episodic</text>
+  <text x="870" y="92" text-anchor="middle" font-size="10" fill="#97a3b6">Postgres + JSONL</text>
+
+  <rect x="580" y="125" width="180" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="670" y="149" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Tier-3 RAG</text>
+  <text x="670" y="167" text-anchor="middle" font-size="10" fill="#97a3b6">Azure AI Search</text>
+
+  <rect x="780" y="125" width="180" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="870" y="149" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">Langfuse</text>
+  <text x="870" y="167" text-anchor="middle" font-size="10" fill="#97a3b6">scrubbed traces only</text>
+
+  <!-- arrows -->
+  <line x1="240" y1="76" x2="300" y2="76" stroke="#34d399" stroke-width="2" marker-end="url(#ag3)"/>
+  <line x1="410" y1="106" x2="410" y2="120" stroke="#34d399" stroke-width="2" marker-end="url(#ag3)"/>
+
+  <!-- stores → events -->
+  <line x1="580" y1="76" x2="240" y2="68" stroke="#34d399" stroke-width="1.5" marker-end="url(#ag3)"/>
+  <line x1="780" y1="76" x2="240" y2="74" stroke="#34d399" stroke-width="1.5" marker-end="url(#ag3)"/>
+  <line x1="580" y1="150" x2="240" y2="100" stroke="#34d399" stroke-width="1.5" marker-end="url(#ag3)"/>
+  <line x1="780" y1="150" x2="240" y2="106" stroke="#34d399" stroke-width="1.5" marker-end="url(#ag3)"/>
+
+  <!-- RTF cascade -->
+  <line x1="650" y1="200" x2="950" y2="200" stroke="#f87171" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ar3)"/>
+  <text x="650" y="195" font-size="11" font-weight="700" fill="#f87171">RTF cascade →</text>
+  <text x="670" y="220" font-size="10" fill="#97a3b6">vault</text>
+  <text x="870" y="220" font-size="10" fill="#97a3b6">→ tier2 → tier3 → langfuse</text>
+
+  <!-- footer about events.jsonl SSOT -->
+  <text x="20" y="270" font-size="11" fill="#97a3b6">events.jsonl is the single source of truth. Postgres views are derived. Replay from events.jsonl reconstructs every view.</text>
+  <text x="20" y="290" font-size="11" fill="#97a3b6">Session 11: data/rtf_completed_index.jsonl is HMAC-signed; unsigned entries fall back to events.jsonl tail scan.</text>
+  <text x="20" y="310" font-size="11" fill="#97a3b6">Replay verification gate: tests/test_projection_worker.py asserts Postgres views match events.jsonl on rebuild.</text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d4">
+<h2><span class="num">§4</span>Request Lifecycle Sequence</h2>
+<p>
+Two middlewares sit outside the decorator chain: <code>HMACAuthMiddleware</code> guards the SDK boundary (<code>/api/sdk/*</code>), and
+<code>SessionAuthMiddleware</code> guards browser sessions. A single <code>X-Request-Id</code> propagates from the edge through every hop;
+Session 11 added the regex validator (<code>^[A-Za-z0-9_-]{1,64}$</code>) to refuse malformed client-supplied IDs.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs><marker id="ab4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker></defs>
+  <!-- columns -->
+  <g font-size="11" fill="#97a3b6">
+    <text x="60" y="40">client / SDK</text>
+    <text x="220" y="40">HMACAuth</text>
+    <text x="360" y="40">SessionAuth</text>
+    <text x="500" y="40">RequestCtx mw</text>
+    <text x="650" y="40">router / handler</text>
+    <text x="820" y="40">decorator chain</text>
+    <text x="980" y="40">LLM (L6)</text>
+  </g>
+  <g stroke="#2a3447" stroke-dasharray="2 3">
+    <line x1="80" y1="50" x2="80" y2="330"/>
+    <line x1="240" y1="50" x2="240" y2="330"/>
+    <line x1="380" y1="50" x2="380" y2="330"/>
+    <line x1="540" y1="50" x2="540" y2="330"/>
+    <line x1="700" y1="50" x2="700" y2="330"/>
+    <line x1="870" y1="50" x2="870" y2="330"/>
+    <line x1="1010" y1="50" x2="1010" y2="330"/>
+  </g>
+  <!-- request flow lines -->
+  <line x1="80" y1="70" x2="240" y2="70" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="90" y="65" font-size="10" fill="#bcd1f5">POST + HMAC sig + ts + nonce</text>
+  <line x1="240" y1="100" x2="380" y2="100" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="250" y="95" font-size="10" fill="#bcd1f5">sig OK (constant-time)</text>
+  <line x1="380" y1="130" x2="540" y2="130" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="390" y="125" font-size="10" fill="#bcd1f5">cookie OR X-Role (dev)</text>
+  <line x1="540" y1="160" x2="700" y2="160" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="550" y="155" font-size="10" fill="#bcd1f5">X-Request-Id validated</text>
+  <line x1="700" y1="190" x2="870" y2="190" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="710" y="185" font-size="10" fill="#bcd1f5">enter chain</text>
+  <line x1="870" y1="220" x2="1010" y2="220" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="880" y="215" font-size="10" fill="#bcd1f5">scrubbed payload only</text>
+  <!-- response -->
+  <line x1="1010" y1="260" x2="80" y2="260" stroke="#34d399" stroke-width="2" marker-end="url(#ab4)"/>
+  <text x="500" y="255" font-size="10" fill="#bcd1f5">response + audit event written to events.jsonl</text>
+  <!-- counters -->
+  <text x="80" y="310" font-size="10" fill="#97a3b6">Prometheus: http_requests_total · http_request_duration_seconds · pii_scrub_failure_total · policy_denies_total · eval_failures_total</text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d5">
+<h2><span class="num">§5</span>Right-to-Forget Cascade Sequence</h2>
+<p>
+One <code>POST /api/right-to-forget</code> cascades across four stores in fail-closed order. Each step returns a <code>PurgeResult</code> with a
+SHA-256 digest of post-state, the whole cascade is captured as one tamper-evident event, and the new HMAC-signed sidecar at
+<code>data/rtf_completed_index.jsonl</code> closes the integrity gap surfaced in the Session-10 security review.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs><marker id="ab5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker>
+  <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f87171"/></marker></defs>
+
+  <rect x="20" y="30" width="160" height="50" rx="6" fill="#1a2333" stroke="#2a3447"/>
+  <text x="100" y="58" text-anchor="middle" font-size="12" fill="#e4e8ef">POST /api/right-to-forget</text>
+
+  <rect x="220" y="30" width="160" height="50" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="300" y="51" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">domain.right_to_forget</text>
+  <text x="300" y="68" text-anchor="middle" font-size="10" fill="#97a3b6">cascade(subject_id)</text>
+
+  <!-- 4 steps -->
+  <rect x="20" y="120" width="220" height="50" rx="6" fill="#131a26" stroke="#f87171"/>
+  <text x="130" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">1 · _purge_vault</text>
+  <text x="130" y="159" text-anchor="middle" font-size="10" fill="#97a3b6">Fernet tombstone · digest_after</text>
+
+  <rect x="270" y="120" width="220" height="50" rx="6" fill="#131a26" stroke="#f87171"/>
+  <text x="380" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">2 · _purge_tier2</text>
+  <text x="380" y="159" text-anchor="middle" font-size="10" fill="#97a3b6">Postgres JSONB-&gt;&gt; · indexed</text>
+
+  <rect x="520" y="120" width="220" height="50" rx="6" fill="#131a26" stroke="#f87171"/>
+  <text x="630" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">3 · _purge_tier3</text>
+  <text x="630" y="159" text-anchor="middle" font-size="10" fill="#97a3b6">Azure Search delete-by-source · paginated</text>
+
+  <rect x="770" y="120" width="220" height="50" rx="6" fill="#131a26" stroke="url(#ph)" stroke-dasharray="6 4"/>
+  <text x="880" y="142" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">4 · _purge_langfuse</text>
+  <text x="880" y="159" text-anchor="middle" font-size="10" fill="#97a3b6">flag-gated · LANGFUSE_DELETE_ENABLED</text>
+
+  <!-- arrows between steps -->
+  <line x1="240" y1="145" x2="270" y2="145" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab5)"/>
+  <line x1="490" y1="145" x2="520" y2="145" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab5)"/>
+  <line x1="740" y1="145" x2="770" y2="145" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab5)"/>
+
+  <!-- side outputs -->
+  <rect x="20" y="210" width="320" height="50" rx="6" fill="#06090f" stroke="#34d399"/>
+  <text x="180" y="232" text-anchor="middle" font-size="12" font-weight="700" fill="#34d399">audit_chain.append_chained_event</text>
+  <text x="180" y="248" text-anchor="middle" font-size="10" fill="#97a3b6">RTF_CASCADE_COMPLETED · SHA-256 chain</text>
+
+  <rect x="370" y="210" width="320" height="50" rx="6" fill="#06090f" stroke="#34d399"/>
+  <text x="530" y="232" text-anchor="middle" font-size="12" font-weight="700" fill="#34d399">rtf_completed_index.jsonl</text>
+  <text x="530" y="248" text-anchor="middle" font-size="10" fill="#97a3b6">HMAC-SHA256 sig per entry · Session 11</text>
+
+  <rect x="720" y="210" width="270" height="50" rx="6" fill="#06090f" stroke="#fbbf24"/>
+  <text x="855" y="232" text-anchor="middle" font-size="12" font-weight="700" fill="#fbbf24">Prometheus counter</text>
+  <text x="855" y="248" text-anchor="middle" font-size="10" fill="#97a3b6">rtf_sidecar_unsigned_total</text>
+
+  <text x="20" y="300" font-size="11" fill="#97a3b6">Idempotent: same cascade_id returns ALREADY_COMPLETED. Session 11: unsigned/invalid sidecar entries log + counter + fall back to events.jsonl tail scan.</text>
+  <text x="20" y="318" font-size="11" fill="#97a3b6">Step 4 ships as a Phase-2 stub by default — LANGFUSE_DELETE_ENABLED=false returns a simulated digest. Set true in production.</text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d6">
+<h2><span class="num">§6</span>Demo Control Surface (Session 11)</h2>
+<p>
+The Demo Control panel triggers six scenarios; each calls the <em>real</em> backend function, never a mock. Auth gates with
+<code>require_role("demo-operator", "ciso")</code>. Each run emits a <code>demo_scenario_run</code> event to <code>events.jsonl</code>.
+<code>_RUNS</code> is bounded at 200 entries (LRU eviction) so a long demo session can't leak memory.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs><marker id="ab6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker></defs>
+
+  <rect x="20" y="30" width="260" height="56" rx="8" fill="#131a26" stroke="#fbbf24"/>
+  <text x="150" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#fbbf24">/demo-control · static/demo-control.html</text>
+  <text x="150" y="72" text-anchor="middle" font-size="10" fill="#97a3b6">vanilla JS · role-gated UI · 6 cards</text>
+
+  <rect x="320" y="30" width="260" height="56" rx="8" fill="#131a26" stroke="#60a5fa"/>
+  <text x="450" y="54" text-anchor="middle" font-size="13" font-weight="700" fill="#e4e8ef">api/demo_control.py</text>
+  <text x="450" y="72" text-anchor="middle" font-size="10" fill="#97a3b6">scenarios registry + run/{id} · 202 + run_id</text>
+
+  <line x1="280" y1="58" x2="320" y2="58" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab6)"/>
+
+  <!-- 6 scenario cards -->
+  <g font-size="11" fill="#97a3b6">
+    <rect x="20" y="130" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="150" font-size="12" font-weight="700" fill="#e4e8ef">pii-pipeline-live</text>
+    <text x="36" y="168">→ scrubber.tokenise_payload + vault_stats + residual-PII tripwire</text>
+
+    <rect x="20" y="186" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="206" font-size="12" font-weight="700" fill="#e4e8ef">gate-failure-recovery</text>
+    <text x="36" y="224">→ domain.release_gate_engine.evaluate_release(system_id)</text>
+
+    <rect x="20" y="242" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="262" font-size="12" font-weight="700" fill="#e4e8ef">reusable-agent-upgrade</text>
+    <text x="36" y="280">→ domain.agents.publish_agent_version</text>
+
+    <rect x="380" y="130" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="396" y="150" font-size="12" font-weight="700" fill="#e4e8ef">rtf-cascade</text>
+    <text x="396" y="168">→ domain.right_to_forget.cascade(subject_id)</text>
+
+    <rect x="380" y="186" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="396" y="206" font-size="12" font-weight="700" fill="#e4e8ef">evals-degradation</text>
+    <text x="396" y="224">→ events.jsonl tail scan · 14-day trend aggregation</text>
+
+    <rect x="380" y="242" width="340" height="46" rx="6" fill="#131a26" stroke="#2a3447"/>
+    <text x="396" y="262" font-size="12" font-weight="700" fill="#e4e8ef">framework-coverage-export</text>
+    <text x="396" y="280">→ pdf_report.generate_nist_pack + SHA-256 footer</text>
+  </g>
+
+  <rect x="740" y="130" width="340" height="60" rx="8" fill="#06090f" stroke="#34d399"/>
+  <text x="910" y="156" text-anchor="middle" font-size="13" font-weight="700" fill="#34d399">events.jsonl</text>
+  <text x="910" y="174" text-anchor="middle" font-size="10" fill="#97a3b6">via storage._append_jsonl (canonical helper)</text>
+
+  <rect x="740" y="200" width="340" height="56" rx="8" fill="#131a26" stroke="#fbbf24"/>
+  <text x="910" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#fbbf24">Prometheus</text>
+  <text x="910" y="240" text-anchor="middle" font-size="10" fill="#97a3b6">demo_scenario_runs_total{scenario,outcome} · _duration_seconds</text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="d7">
+<h2><span class="num">§7</span>Frameworks Coverage Surface</h2>
+<p>
+Six frameworks ship in v1, each with a YAML catalog under <code>frameworks/</code>, a generator function in <code>pdf_report.py</code>, and a
+shared rendering base in <code>domain/pdf_pack_base.py</code> (extracted in Session 11). The coverage matrix is computed live by
+<code>domain/framework_coverage.py</code>; the matrix is the data, the PDFs are the deliverable.
+</p>
+<div class="diagram"><svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',sans-serif">
+  <defs><marker id="ab7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/></marker></defs>
+
+  <!-- YAML catalogs -->
+  <g font-size="11" fill="#97a3b6">
+    <text x="20" y="40" font-size="12" font-weight="700" fill="#e4e8ef">frameworks/*.yaml</text>
+    <rect x="20" y="50" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="69">nist-ai-rmf.yaml (20 subcats)</text>
+    <rect x="20" y="84" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="103">owasp-llm-top10.yaml (10)</text>
+    <rect x="20" y="118" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="137">eu-ai-act.yaml (Annex IV)</text>
+    <rect x="20" y="152" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="171">iso-42001.yaml (top 15)</text>
+    <rect x="20" y="186" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="205">sr-11-7.yaml (IV · V · VII)</text>
+    <rect x="20" y="220" width="240" height="28" rx="5" fill="#131a26" stroke="#2a3447"/>
+    <text x="36" y="239">ffiec.yaml (AI subset)</text>
+  </g>
+
+  <!-- base + generators -->
+  <rect x="320" y="50" width="280" height="76" rx="8" fill="#131a26" stroke="#60a5fa"/>
+  <text x="460" y="74" text-anchor="middle" font-size="13" font-weight="700" fill="#e4e8ef">domain/pdf_pack_base.py</text>
+  <text x="460" y="92" text-anchor="middle" font-size="10" fill="#97a3b6">_PdfWriter (stdlib · no reportlab)</text>
+  <text x="460" y="106" text-anchor="middle" font-size="10" fill="#97a3b6">_compute_evidence_hash · _render_*</text>
+  <text x="460" y="120" text-anchor="middle" font-size="10" fill="#97a3b6">extracted in Session 11</text>
+
+  <rect x="320" y="140" width="280" height="120" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="336" y="160" font-size="12" font-weight="700" fill="#e4e8ef">pdf_report.py — 6 generators</text>
+  <text x="336" y="178" font-size="10" fill="#97a3b6">generate_nist_pack</text>
+  <text x="336" y="194" font-size="10" fill="#97a3b6">generate_owasp_pack</text>
+  <text x="336" y="210" font-size="10" fill="#97a3b6">generate_eu_ai_act_pack</text>
+  <text x="468" y="178" font-size="10" fill="#fbbf24">generate_iso_42001_pack</text>
+  <text x="468" y="194" font-size="10" fill="#fbbf24">generate_sr_11_7_pack</text>
+  <text x="468" y="210" font-size="10" fill="#fbbf24">generate_ffiec_pack</text>
+  <text x="336" y="240" font-size="10" fill="#97a3b6">3 new packs added in Session 11 (yellow)</text>
+
+  <rect x="640" y="50" width="280" height="56" rx="8" fill="#131a26" stroke="#60a5fa"/>
+  <text x="780" y="74" text-anchor="middle" font-size="13" font-weight="700" fill="#e4e8ef">domain/framework_coverage.py</text>
+  <text x="780" y="92" text-anchor="middle" font-size="10" fill="#97a3b6">per-system × per-framework matrix · evidence pointers</text>
+
+  <rect x="640" y="120" width="280" height="56" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="780" y="144" text-anchor="middle" font-size="12" font-weight="700" fill="#e4e8ef">/frameworks page · evidence drill</text>
+  <text x="780" y="162" text-anchor="middle" font-size="10" fill="#97a3b6">click any cell → SHA-256 evidence row</text>
+
+  <rect x="640" y="190" width="280" height="56" rx="8" fill="#06090f" stroke="#34d399"/>
+  <text x="780" y="214" text-anchor="middle" font-size="12" font-weight="700" fill="#34d399">Evidence pack PDF</text>
+  <text x="780" y="232" text-anchor="middle" font-size="10" fill="#97a3b6">SHA-256 footer · committed to events.jsonl on export</text>
+
+  <line x1="260" y1="64" x2="320" y2="84" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab7)"/>
+  <line x1="600" y1="84" x2="640" y2="78" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab7)"/>
+  <line x1="600" y1="180" x2="640" y2="218" stroke="#60a5fa" stroke-width="2" marker-end="url(#ab7)"/>
+  <line x1="780" y1="246" x2="780" y2="270" stroke="#34d399" stroke-width="2"/>
+  <text x="20" y="310" font-size="11" fill="#97a3b6">US-FinServ overlay composes NIST + SR 11-7 + FFIEC + GLBA + NYDFS — declared in DECISIONS.md.</text>
+  <text x="20" y="328" font-size="11" fill="#97a3b6">Adding a 7th framework next quarter is one YAML + one generator function · ~100 LOC.</text>
+</svg></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="files">
+<h2><span class="num">§8</span>File × Session matrix</h2>
+<p>
+Every module that shipped, indexed by the session that created or last materially changed it. Use this when reading the codebase to know
+which session's commit/plan/decision to consult for context.
+</p>
+<table class="matrix">
+<thead><tr><th>Layer</th><th>Module / artifact</th><th>Origin</th></tr></thead>
+<tbody>
+<tr><td><span class="pill l3">L3</span></td><td><code>scrubber.py</code>, <code>tracer.py</code> (patched), <code>middleware/scrubber.py</code>, <code>domain/deid_vault.py</code>, <code>@scrub_pii</code></td><td>Session 01a + Session 01b · L3 PII pipeline + decorator wiring</td></tr>
+<tr><td><span class="pill l2">L2</span></td><td><code>domain/policy_engine.py</code>, <code>middleware/policy.py</code>, <code>policies/*.rego</code>, OPA sidecar, <code>@policy_gate</code></td><td>Session 02 · OPA policy engine + Rego policies</td></tr>
+<tr><td><span class="pill l5">L5</span></td><td>NeMo Guardrails + Llama Guard 3, <code>@guardrails</code> decorator</td><td>Session 03 · guardrails layer</td></tr>
+<tr><td><span class="pill l4">L4</span></td><td><code>domain/agent_memory.py</code> (T2 Postgres), <code>domain/rag_engine.py</code> (T3 Azure AI Search)</td><td>Session 04 · memory + RAG</td></tr>
+<tr><td><span class="pill l6">L6</span></td><td>provider abstraction (5 protocols), BaseSettings, 7 backends</td><td>Session 05 · provider abstraction + legacy cleanup</td></tr>
+<tr><td><span class="pill l2">L2</span></td><td><code>frameworks/*.yaml</code> (6 frameworks), <code>domain/framework_coverage.py</code>, <code>pdf_report.py</code> NIST/OWASP/EU packs</td><td>Session 06 · framework coverage matrix · 3 PDF packs</td></tr>
+<tr><td><span class="pill l2">L2</span></td><td><code>domain/agents.py</code>, <code>AgentBinding</code>, agent library, 6 seeded agents, Postgres pubsub</td><td>Session 07 · multi-agent + agent library</td></tr>
+<tr><td><span class="pill l3">L3</span></td><td><code>domain/right_to_forget.py</code>, <code>domain/audit_chain.py</code>, <code>/api/audit/verify</code></td><td>Session 08 · RTF cascade + tamper-evident audit log</td></tr>
+<tr><td><span class="pill ix">IX</span></td><td><code>sdk/signallayer/*</code>, <code>cli/sl/*</code>, <code>api/projection.py</code>, Postgres materialised views</td><td>Session 09 · CLI · Python SDK · projection worker</td></tr>
+<tr><td><span class="pill ix">IX</span></td><td><code>deploy/bicep/*</code>, <code>observability/*</code>, App Insights + 8 alerts, <code>loadtests/locustfile.py</code></td><td>Session 10 · production hardening · observability · IaC · load tests</td></tr>
+<tr><td><span class="pill l2">L2</span></td><td><code>domain/pdf_pack_base.py</code>, <code>generate_iso_42001_pack</code>, <code>generate_sr_11_7_pack</code>, <code>generate_ffiec_pack</code></td><td>Session 11 · pack base extraction + 3 new packs</td></tr>
+<tr><td><span class="pill ui">UI</span></td><td><code>api/demo_control.py</code>, <code>static/demo-control.html</code>, <code>docs/demo-scripts/</code>, <code>docs/DEMO-QA.md</code></td><td>Session 11 · Demo Control panel + 20-Q&amp;A + 6 narration scripts</td></tr>
+<tr><td><span class="pill l3">L3</span></td><td><code>domain/right_to_forget.py</code> HMAC sidecar (<code>_compute_sidecar_sig</code> / <code>_verify_sidecar_entry</code>)</td><td>Session 11 · RTF sidecar HMAC integrity</td></tr>
+<tr><td><span class="pill ix">IX</span></td><td><code>cli/sl/config.py</code> symlink defence, <code>X-Request-Id</code> regex, audit_chain checkpoint-inside-lock, <code>METRICS_TOKEN</code> cache, <code>ROLES += OPERATOR</code></td><td>Session 11 · Day-11 debt batch (5 carryover fixes)</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<section id="phase2">
+<h2><span class="num">§9</span>Phase-2 deferrals (called out so the demo stays honest)</h2>
+<div class="callouts">
+  <div class="callout"><b>Bedrock provider</b> — L6 stub. Anthropic + OpenAI ship in v1; Bedrock is a Phase-2 add.</div>
+  <div class="callout"><b>Multi-language SDKs</b> — Python only in v1. Node, Go, Java are roadmap.</div>
+  <div class="callout"><b>Team Portal / Gov Console split</b> — single FastAPI app with role-based views in v1; the v2 split is a refactor, not a rewrite.</div>
+  <div class="callout"><b>Real-time webhooks</b> — agent version updates use polling; webhook delivery is Phase-2.</div>
+  <div class="callout"><b>External blockchain anchor</b> for the audit chain — internal SHA-256 hash chain is sufficient for v1.</div>
+  <div class="callout"><b>Streaming evals</b> — batch eval only in v1. Eval-as-traffic-flows is Phase-2.</div>
+  <div class="callout"><b>Mobile / responsive console</b> — desktop-first. Mobile is Phase-2.</div>
+  <div class="callout"><b>Per-tenant Azure AI Search index</b> — single index for MVP; per-tenant is Phase-2.</div>
+  <div class="callout"><b>Langfuse delete in RTF cascade</b> — flag-gated stub (<code>LANGFUSE_DELETE_ENABLED=false</code> default). Set to true in production once the API integration is validated.</div>
+  <div class="callout"><b>RTF strict-reject mode</b> — Session 11 ships in migration mode (logs + falls back on unsigned sidecar entries). Session 12 flips to strict-reject after <code>rtf_sidecar_unsigned_total</code> stays at 0 for a week.</div>
+</div>
+</section>
+
+</main>
+<footer>
+  AI Assurance Platform · Built-State diagram · cross-referenced from ARCHITECTURE.md and docs/HANDOFF.md · Sessions 01-11
+</footer>
+</body>
+</html>

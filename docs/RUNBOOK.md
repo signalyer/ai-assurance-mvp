@@ -321,3 +321,47 @@ export STRICT_HMAC_BOOT=false
 
 **Rollback if strict boot is preventing startup:** Set `STRICT_HMAC_BOOT=false`
 and verify `HMAC_SECRET` is populated in app settings before re-enabling.
+
+
+---
+
+## Demo operations (Session 11)
+
+Live demo orchestration for the 6 scenarios in `12-DAY-PRODUCTION-SPRINT.md` §7.
+
+### Access
+
+- URL: `/demo-control` (served from `static/demo-control.html`)
+- API prefix: `/api/demo-control`
+- Required role: `demo-operator` or `ciso`. In dev mode (`AUTH_ENABLED=false`) set the `X-Role: demo-operator` header.
+
+### Pre-demo checklist (run T-60 minutes)
+
+1. Bicep deployment current: `az deployment group list -g rg-aigovern-dev --query "[?contains(name,'main')] | [0].properties.timestamp" -o tsv` shows a date within the last 24h.
+2. App Insights connection string is set on the app: `az functionapp config appsettings list -n app-aigovern-dev -g rg-aigovern-dev --query "[?name=='APPLICATIONINSIGHTS_CONNECTION_STRING'].value" -o tsv` returns a value.
+3. At least 8 alerts are present: `az monitor scheduled-query list -g rg-aigovern-dev --query "length(@)"` >= 8.
+4. Smoke pass within the last hour: `$env:SMOKE_TARGET_URL=...; pwsh deploy/smoke_e2e.ps1` exits 0.
+5. Load-test report is < 24h old (`reports/load_test_*.json` timestamp).
+6. OPA bundle is current: `curl -s https://aigovern.azurewebsites.net/api/policy/bundle/version` matches `policies/main/.version`.
+7. Langfuse healthy: `curl -s -o /dev/null -w "%{http_code}" https://cloud.langfuse.com/api/public/health` == 200.
+8. Vault TTL configured: `az functionapp config appsettings list ... --query "[?name=='VAULT_TTL_DAYS'].value"` returns a positive integer.
+9. RTF sidecar HMAC counter clean: query Prometheus `rtf_sidecar_unsigned_total` is 0 (no unsigned legacy entries remain).
+10. All 6 demo scenarios green within the last hour: trigger `POST /api/demo-control/run/{id}` for each, status terminates as `completed`.
+
+### Mid-demo failure recovery
+
+If a scenario fails live:
+
+1. `pii-pipeline-live` — say "the scrubber is the runtime tripwire; if it ever fails we drop the trace and alert. Watch the alert fire." Open App Insights and show `pii_scrub_failure_total > 0`.
+2. `gate-failure-recovery` — say "the gate just fail-closed, which is exactly what should happen. Let me show the OPA decision log." Click the audit-events page.
+3. `reusable-agent-upgrade` — say "the publish event is on the chain; the subscriber notification is polled. Let me show the event." Show `events.jsonl` tail.
+4. `rtf-cascade` — say "the cascade is idempotent; the partial-failure state is the safe state. Re-trigger and show recovery." Re-run the same `cascade_id`.
+5. `evals-degradation` — say "the trend uses the last full day; if the demo eval set is sparse the chart will be flat. The mechanism is real; data volume in the demo system is limited." Open the `/evals` dashboard.
+6. `framework-coverage-export` — say "the pack generator is deterministic; if it failed it's a missing dependency, not the framework logic. Let me show the YAML coverage source." Open `frameworks/nist-ai-rmf.yaml`.
+
+### Related docs
+
+- Q&A prep: [`docs/DEMO-QA.md`](DEMO-QA.md)
+- Scenario talk tracks: [`docs/demo-scripts/`](demo-scripts/)
+- Architecture: [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+- Locked decisions: [`DECISIONS.md`](../DECISIONS.md)

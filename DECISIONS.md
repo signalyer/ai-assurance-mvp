@@ -476,3 +476,56 @@ Constrains: `deploy/bicep/main.bicep` outputs `appInsightsConnectionString` as a
      `@secure()` output; post-deploy script injects it into App Service settings
      as `APPLICATIONINSIGHTS_CONNECTION_STRING`. All 8 alerts in
      `deploy/bicep/alerts.bicep` query this workspace via `scheduledQueryRules`.
+
+
+---
+
+## Session 11 — Demo orchestration + ISO/SR-11-7/FFIEC packs + Day-11 debt
+
+### D-11.1 — RTF sidecar HMAC integrity, migration-mode in v1
+Decision: HMAC-SHA256 sign every `data/rtf_completed_index.jsonl` entry with
+     `SL_HMAC_SECRET`. On read, unsigned / invalid entries are **logged-and-skipped**
+     (`rtf_sidecar_unsigned_total` counter); the reader falls back to the
+     `events.jsonl` tail scan. Strict-reject mode (refuse the cascade) ships in
+     Session 12 once all legacy entries are re-signed.
+Why: closes the integrity gap that let any data/ writer fake "already purged" to
+     suppress a real GDPR request, without breaking pre-existing deployments.
+Constrains: `domain/right_to_forget.py` `_compute_sidecar_sig`, `_verify_sidecar_entry`,
+     `_sidecar_secret`; counter in `observability/counters.py`.
+
+### D-11.2 — PDF pack base extracted to `domain/pdf_pack_base.py`
+Decision: move `_PdfWriter` + shared helpers (`_compute_evidence_hash`,
+     `_load_system_and_evidence`, `_render_evidence_appendix`,
+     `_render_item_section`) verbatim out of `pdf_report.py`. Six pack generators
+     (NIST + OWASP + EU AI Act + ISO 42001 + SR 11-7 + FFIEC) re-import from base.
+Why: adding three new frameworks made the duplication acute; future framework
+     adds are now ~100-LOC additions, not full copy-pastes.
+Constrains: byte-identity acceptance gate retired (was unstable across timestamps);
+     replaced with **call-stability within a minute** gate. PDFs are deterministic
+     at minute granularity; any sub-minute drift is a regression.
+
+### D-11.3 — Demo Control panel: synchronous execution, bounded in-memory runs
+Decision: `api/demo_control.py` executes scenarios synchronously (each <5s),
+     stores ≤200 runs in a `collections.OrderedDict` with LRU eviction, and writes
+     to `events.jsonl` via `storage._append_jsonl` (the canonical helper).
+Why: demo scale doesn't justify a background queue; events.jsonl is the SSOT for
+     anything older than the 200-run window. Synchronous is also easier to demo —
+     the response carries the terminal state.
+Constrains: Phase 2 moves to `BackgroundTasks` + a worker pool when load > 5 RPS or
+     scenarios exceed 5s.
+
+### D-11.4 — `demo-operator` role added to the role enum
+Decision: `OPERATOR` added to `middleware/auth.py::ROLES`. Demo Control panel and
+     downstream demo-scoped routes require `demo-operator` OR `ciso`.
+Why: keeps the demo-trigger surface gated even when the build is shipped to a prod
+     subscription — `ciso` is the catch-all override; `demo-operator` is the
+     least-privilege account that should be provisioned for sales/SE staff.
+Constrains: `DEMO_USER_OPERATOR_HASH` must be set in App Service settings when
+     `AUTH_ENABLED=true`.
+
+### D-11.5 — Windows pytest tmpdir worked around via `pytest.ini`
+Decision: `pytest.ini` pins `--basetemp=./_pytest_tmp` so the Python 3.14 +
+     Windows `%TEMP%` ACL quirk does not block test runs.
+Why: documented locally so future contributors don't hit the same wall. The
+     project tmp dir is gitignored.
+Constrains: Linux CI is unaffected.

@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1280" font-family="-apple-system, 'Segoe UI', system-ui, sans-serif">
+  <!--
+    AI Assurance Platform — Built State
+    Sessions 01-11 (Days 1-11 of the 12-day production sprint)
+    Generated 2026-05-22. Hand-authored vector — no toolchain dependency.
+
+    Legend rule:
+      Built   = solid stroke, filled card
+      Phase-2 = dashed stroke (6 4), diagonal-hatch fill
+      Fail-closed exits drawn in red
+      Data flow arrows in blue; event flow in green
+  -->
+  <defs>
+    <!-- diagonal hatch for Phase-2 components -->
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#1a2333"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#2a3447" stroke-width="2"/>
+    </pattern>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f87171"/>
+    </marker>
+    <marker id="arrowMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#97a3b6"/>
+    </marker>
+  </defs>
+
+  <!-- BACKGROUND -->
+  <rect width="1400" height="1280" fill="#0b0f17"/>
+
+  <!-- TITLE -->
+  <text x="40" y="40" fill="#e4e8ef" font-size="22" font-weight="700">AI Assurance Platform — Built State</text>
+  <text x="40" y="62" fill="#97a3b6" font-size="13">Sessions 01-11 · Day 11 of the 12-day production sprint · aigovern.sandboxhub.co</text>
+
+  <!-- ====================================================================== -->
+  <!-- SECTION A — 6-Layer System Map                                        -->
+  <!-- ====================================================================== -->
+  <text x="40" y="100" fill="#60a5fa" font-size="13" font-weight="600" letter-spacing="2">A · SIX-LAYER SYSTEM MAP</text>
+
+  <!-- L1 Organisational -->
+  <rect x="40" y="115" width="1320" height="62" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="56" y="138" fill="#e4e8ef" font-size="13" font-weight="600">L1 · Organisational</text>
+  <text x="56" y="158" fill="#97a3b6" font-size="11">risk_inventory · governance_body · raci · regulatory_posture · domains.py · controls/library/ (15 controls)</text>
+
+  <!-- L2 Control Plane -->
+  <rect x="40" y="187" width="1320" height="100" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="56" y="210" fill="#e4e8ef" font-size="13" font-weight="600">L2 · Enterprise Control Plane</text>
+  <text x="56" y="230" fill="#97a3b6" font-size="11">domain/policy_engine.py · OPA sidecar · policies/*.rego · domain/release_gate_engine.py · domain/framework_coverage.py</text>
+  <text x="56" y="248" fill="#97a3b6" font-size="11">domain/agents.py + AgentBinding · @policy_gate · pdf_report.py + domain/pdf_pack_base.py (6 packs)</text>
+  <text x="56" y="266" fill="#97a3b6" font-size="11">tamper-evident audit chain (domain/audit_chain.py · portalocker · checkpoint-inside-lock · HMAC sidecar — Session 11)</text>
+
+  <!-- L3 PII Boundary -->
+  <rect x="40" y="297" width="1320" height="80" rx="8" fill="#131a26" stroke="#f87171" stroke-width="2"/>
+  <text x="56" y="320" fill="#f87171" font-size="13" font-weight="600">L3 · PII / IP / Secret Scrubbing Pipeline  (THE BOUNDARY)</text>
+  <text x="56" y="340" fill="#97a3b6" font-size="11">scrubber.py (Presidio + 12 regex patterns) · domain/deid_vault.py (Fernet + Key Vault) · @scrub_pii · middleware/scrubber.py</text>
+  <text x="56" y="358" fill="#97a3b6" font-size="11">domain/right_to_forget.py — cascade across all 4 stores · HMAC-signed completion sidecar (Session 11)</text>
+
+  <!-- L4 Memory -->
+  <rect x="40" y="387" width="1320" height="90" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="56" y="410" fill="#e4e8ef" font-size="13" font-weight="600">L4 · Four-Tier Agent Memory</text>
+  <text x="56" y="430" fill="#97a3b6" font-size="11">T1 in-context (token budget) · T2 episodic (Postgres + JSONL fallback) · T3 RAG (Azure AI Search hybrid) · T4 procedural (in code)</text>
+  <text x="56" y="448" fill="#97a3b6" font-size="11">domain/agent_memory.py · domain/rag_engine.py · index-time scrubbing rejects HIGH-PII docs · Claude Haiku compression</text>
+
+  <!-- L5 Runtime + Eval -->
+  <rect x="40" y="487" width="1320" height="100" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="56" y="510" fill="#e4e8ef" font-size="13" font-weight="600">L5 · Runtime + Evaluation</text>
+  <text x="56" y="530" fill="#97a3b6" font-size="11">tracer.py (Langfuse · scrubbed payloads only) · evaluator.py (DeepEval 6-metric) · @trace_llm_call · @evaluate_response</text>
+  <text x="56" y="548" fill="#97a3b6" font-size="11">NeMo Guardrails + Llama Guard 3 (@guardrails) · garak adversarial · observability/* (App Insights + 8 alerts + Prometheus)</text>
+  <text x="56" y="566" fill="#97a3b6" font-size="11">data/calibration/ (50 cases × 6 metrics) · trend computation from event log</text>
+
+  <!-- L6 LLM -->
+  <rect x="40" y="597" width="1320" height="62" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="56" y="620" fill="#e4e8ef" font-size="13" font-weight="600">L6 · LLM Abstraction</text>
+  <text x="56" y="640" fill="#97a3b6" font-size="11">Anthropic (Claude Sonnet 4.6 / Opus 4.7 / Haiku 4.5) · OpenAI (GPT-4o-mini judge) ·
+    <tspan fill="#fbbf24">Bedrock provider — Phase-2 stub</tspan>
+  </text>
+
+  <!-- ====================================================================== -->
+  <!-- SECTION B — Decorator Chain (the load-bearing invariant)              -->
+  <!-- ====================================================================== -->
+  <text x="40" y="700" fill="#60a5fa" font-size="13" font-weight="600" letter-spacing="2">B · DECORATOR CHAIN — enforced order at SDK decoration time</text>
+
+  <!-- Five decorator boxes in order, with fail-closed exits going downward in red -->
+  <!-- inbound -->
+  <rect x="40" y="715" width="100" height="46" rx="6" fill="#1a2333" stroke="#2a3447"/>
+  <text x="90" y="744" fill="#e4e8ef" font-size="12" text-anchor="middle">request</text>
+
+  <!-- @policy_gate -->
+  <rect x="160" y="715" width="180" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="250" y="734" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">@policy_gate</text>
+  <text x="250" y="752" fill="#97a3b6" font-size="10" text-anchor="middle">middleware/policy.py · OPA</text>
+  <!-- DENY exit -->
+  <line x1="250" y1="761" x2="250" y2="810" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+  <text x="258" y="800" fill="#f87171" font-size="10">DENY→403</text>
+
+  <!-- @scrub_pii -->
+  <rect x="360" y="715" width="180" height="46" rx="6" fill="#131a26" stroke="#f87171"/>
+  <text x="450" y="734" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">@scrub_pii</text>
+  <text x="450" y="752" fill="#97a3b6" font-size="10" text-anchor="middle">scrubber + Fernet vault</text>
+  <line x1="450" y1="761" x2="450" y2="810" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+  <text x="458" y="800" fill="#f87171" font-size="10">fail→drop trace</text>
+
+  <!-- @guardrails -->
+  <rect x="560" y="715" width="180" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="650" y="734" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">@guardrails</text>
+  <text x="650" y="752" fill="#97a3b6" font-size="10" text-anchor="middle">NeMo + Llama Guard 3</text>
+  <line x1="650" y1="761" x2="650" y2="810" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+  <text x="658" y="800" fill="#f87171" font-size="10">block→reject</text>
+
+  <!-- @trace_llm_call -->
+  <rect x="760" y="715" width="180" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="850" y="734" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">@trace_llm_call</text>
+  <text x="850" y="752" fill="#97a3b6" font-size="10" text-anchor="middle">tracer.py · Langfuse</text>
+
+  <!-- @evaluate_response -->
+  <rect x="960" y="715" width="200" height="46" rx="6" fill="#131a26" stroke="#60a5fa"/>
+  <text x="1060" y="734" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">@evaluate_response</text>
+  <text x="1060" y="752" fill="#97a3b6" font-size="10" text-anchor="middle">DeepEval · gate</text>
+  <line x1="1060" y1="761" x2="1060" y2="810" stroke="#f87171" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+  <text x="1068" y="800" fill="#f87171" font-size="10">fail→gate close</text>
+
+  <!-- response -->
+  <rect x="1180" y="715" width="100" height="46" rx="6" fill="#1a2333" stroke="#2a3447"/>
+  <text x="1230" y="744" fill="#e4e8ef" font-size="12" text-anchor="middle">response</text>
+
+  <!-- main horizontal arrows -->
+  <line x1="140" y1="738" x2="160" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="340" y1="738" x2="360" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="540" y1="738" x2="560" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="740" y1="738" x2="760" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="940" y1="738" x2="960" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <line x1="1160" y1="738" x2="1180" y2="738" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+
+  <!-- Chain order assertion string (for grep + reader) -->
+  <text x="40" y="845" fill="#97a3b6" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">
+    chain order: @policy_gate → @scrub_pii → @guardrails → @trace_llm_call → @evaluate_response
+  </text>
+  <text x="40" y="861" fill="#97a3b6" font-size="11" font-family="ui-monospace, Menlo, Consolas, monospace">
+    enforced at decoration time in sdk/signallayer/order_guard.py — missing @scrub_pii raises MissingScrubberError
+  </text>
+
+  <!-- ====================================================================== -->
+  <!-- SECTION C — Data Plane (SSOT + materialised views + RTF cascade)      -->
+  <!-- ====================================================================== -->
+  <text x="40" y="910" fill="#60a5fa" font-size="13" font-weight="600" letter-spacing="2">C · DATA PLANE — events.jsonl is the single source of truth</text>
+
+  <!-- events.jsonl SSOT box -->
+  <rect x="40" y="925" width="220" height="80" rx="8" fill="#06090f" stroke="#34d399" stroke-width="2"/>
+  <text x="150" y="950" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">events.jsonl</text>
+  <text x="150" y="970" fill="#97a3b6" font-size="10" text-anchor="middle">append-only · SHA-256 chain</text>
+  <text x="150" y="985" fill="#97a3b6" font-size="10" text-anchor="middle">portalocker writer · SSOT</text>
+  <text x="150" y="1000" fill="#97a3b6" font-size="10" text-anchor="middle">/api/audit/verify</text>
+
+  <!-- Projection worker -->
+  <rect x="320" y="925" width="200" height="60" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="420" y="948" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Projection worker</text>
+  <text x="420" y="966" fill="#97a3b6" font-size="10" text-anchor="middle">api/projection.py · Postgres</text>
+  <text x="420" y="980" fill="#97a3b6" font-size="10" text-anchor="middle">(materialised views)</text>
+
+  <!-- Materialised views -->
+  <rect x="320" y="1000" width="200" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="420" y="1023" fill="#e4e8ef" font-size="11" text-anchor="middle">ai_systems · eval_runs · findings</text>
+  <text x="420" y="1041" fill="#97a3b6" font-size="10" text-anchor="middle">release_decisions · policy_evaluations</text>
+
+  <!-- Four stores (vault → T2 → T3 → Langfuse) -->
+  <g>
+    <rect x="580" y="925" width="160" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+    <text x="660" y="948" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Vault (Fernet)</text>
+    <text x="660" y="966" fill="#97a3b6" font-size="10" text-anchor="middle">deid_vault.jsonl</text>
+
+    <rect x="760" y="925" width="160" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+    <text x="840" y="948" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Tier-2 episodic</text>
+    <text x="840" y="966" fill="#97a3b6" font-size="10" text-anchor="middle">Postgres + JSONL</text>
+
+    <rect x="940" y="925" width="160" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+    <text x="1020" y="948" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Tier-3 RAG</text>
+    <text x="1020" y="966" fill="#97a3b6" font-size="10" text-anchor="middle">Azure AI Search</text>
+
+    <rect x="1120" y="925" width="160" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+    <text x="1200" y="948" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Langfuse</text>
+    <text x="1200" y="966" fill="#97a3b6" font-size="10" text-anchor="middle">scrubbed traces only</text>
+  </g>
+
+  <!-- RTF cascade arrow across the 4 stores -->
+  <text x="580" y="1005" fill="#f87171" font-size="11" font-weight="600">RTF cascade →</text>
+  <line x1="660" y1="1010" x2="1200" y2="1010" stroke="#f87171" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowRed)"/>
+  <text x="660" y="1025" fill="#97a3b6" font-size="10">vault</text>
+  <text x="840" y="1025" fill="#97a3b6" font-size="10">tier2</text>
+  <text x="1020" y="1025" fill="#97a3b6" font-size="10">tier3</text>
+  <text x="1200" y="1025" fill="#97a3b6" font-size="10">langfuse</text>
+
+  <text x="580" y="1050" fill="#97a3b6" font-size="10">HMAC-signed sidecar at data/rtf_completed_index.jsonl · falls back to events.jsonl tail scan (Session 11 migration mode)</text>
+
+  <!-- arrows: events.jsonl → projection worker → views -->
+  <line x1="260" y1="965" x2="320" y2="955" stroke="#34d399" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <line x1="420" y1="985" x2="420" y2="1000" stroke="#34d399" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <!-- arrows: each store writes events into events.jsonl -->
+  <line x1="660" y1="983" x2="220" y2="935" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <line x1="840" y1="983" x2="240" y2="935" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <line x1="1020" y1="983" x2="260" y2="935" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <line x1="1200" y1="983" x2="280" y2="935" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- ====================================================================== -->
+  <!-- SECTION D — Edges (clients + SDK + CLI + Demo Control)                -->
+  <!-- ====================================================================== -->
+  <text x="40" y="1100" fill="#60a5fa" font-size="13" font-weight="600" letter-spacing="2">D · CLIENT EDGES</text>
+
+  <rect x="40" y="1115" width="200" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="140" y="1138" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Python SDK</text>
+  <text x="140" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">signallayer · HMAC-signed</text>
+
+  <rect x="260" y="1115" width="200" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="360" y="1138" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">CLI</text>
+  <text x="360" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">sl login/onboard/gate/eval</text>
+
+  <rect x="480" y="1115" width="200" height="58" rx="8" fill="#131a26" stroke="#2a3447"/>
+  <text x="580" y="1138" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Dashboard (HTML)</text>
+  <text x="580" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">static/*.html · role-based</text>
+
+  <rect x="700" y="1115" width="220" height="58" rx="8" fill="#131a26" stroke="#fbbf24"/>
+  <text x="810" y="1138" fill="#fbbf24" font-size="12" font-weight="600" text-anchor="middle">Demo Control (Session 11)</text>
+  <text x="810" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">/demo-control · 6 scenarios</text>
+
+  <!-- Phase-2 clients with hatch fill -->
+  <rect x="940" y="1115" width="200" height="58" rx="8" fill="url(#hatch)" stroke="#97a3b6" stroke-dasharray="6 4"/>
+  <text x="1040" y="1138" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Team Portal split</text>
+  <text x="1040" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">Phase-2 stub</text>
+
+  <rect x="1160" y="1115" width="200" height="58" rx="8" fill="url(#hatch)" stroke="#97a3b6" stroke-dasharray="6 4"/>
+  <text x="1260" y="1138" fill="#e4e8ef" font-size="12" font-weight="600" text-anchor="middle">Real-time webhooks</text>
+  <text x="1260" y="1156" fill="#97a3b6" font-size="10" text-anchor="middle">Phase-2 stub (polling v1)</text>
+
+  <!-- ====================================================================== -->
+  <!-- LEGEND footer                                                          -->
+  <!-- ====================================================================== -->
+  <rect x="40" y="1200" width="1320" height="60" rx="6" fill="#0e1420" stroke="#2a3447"/>
+  <rect x="56" y="1216" width="20" height="14" rx="2" fill="#131a26" stroke="#60a5fa"/>
+  <text x="84" y="1228" fill="#97a3b6" font-size="11">Built (Sessions 01-11)</text>
+  <rect x="234" y="1216" width="20" height="14" rx="2" fill="url(#hatch)" stroke="#97a3b6" stroke-dasharray="4 3"/>
+  <text x="262" y="1228" fill="#97a3b6" font-size="11">Phase-2 (deferred · stub)</text>
+  <line x1="410" y1="1223" x2="435" y2="1223" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="443" y="1228" fill="#97a3b6" font-size="11">data flow</text>
+  <line x1="530" y1="1223" x2="555" y2="1223" stroke="#34d399" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="563" y="1228" fill="#97a3b6" font-size="11">event write → SSOT</text>
+  <line x1="700" y1="1223" x2="725" y2="1223" stroke="#f87171" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+  <text x="733" y="1228" fill="#97a3b6" font-size="11">fail-closed exit</text>
+
+  <text x="56" y="1250" fill="#97a3b6" font-size="10">
+    Phase-2 deferrals: Bedrock provider · multi-language SDKs · Team Portal split · real-time webhooks · external blockchain anchor · streaming evals · mobile UI · per-tenant search index
+  </text>
+</svg>

@@ -62,6 +62,7 @@ from api.agent_notifications import router as agent_notifications_router
 from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
 from api.projection import router as projection_router
+from api.demo_control import router as demo_control_router
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
 
@@ -198,6 +199,7 @@ app.include_router(agent_notifications_router)
 app.include_router(rtf_router)
 app.include_router(audit_verify_router)
 app.include_router(projection_router)
+app.include_router(demo_control_router)
 if _HAS_METRICS and _metrics_router is not None:
     app.include_router(_metrics_router)
 
@@ -282,6 +284,12 @@ async def page_connectors():
 @app.get("/demo")
 async def page_demo():
     return _page("demo.html")
+
+
+@app.get("/demo-control")
+async def page_demo_control():
+    """Session 11 — Demo Control Panel (one-click triggers for 6 scenarios)."""
+    return _page("demo-control.html")
 
 
 @app.get("/reports")

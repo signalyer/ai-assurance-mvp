@@ -72,3 +72,4 @@ data/
 # CLI + SDK build artifacts
 cli/dist/
 sdk/dist/
+_pytest_tmp/
