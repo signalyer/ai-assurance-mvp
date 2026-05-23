@@ -26,7 +26,17 @@ INCLUDE = [
     "storage.py",
     "tracer.py",
     "audit.py",
-    "guardrails.py",
+    # Session 03 replaced the legacy guardrails.py FILE with a guardrails/
+    # PACKAGE (nemo_adapters, llama_guard_adapter, financial_advisor_rail,
+    # config/financial_advisor_rails.yaml). api/security.py imports from this
+    # package at module load, so it MUST be in the zip. Day-12 root cause:
+    # this entry was renamed from 'guardrails.py' but the package replacement
+    # was never added, so dashboard.py crashed at import on every fresh
+    # antenv (ModuleNotFoundError: No module named 'guardrails').
+    "guardrails",
+    "frameworks",  # Session 06 -- YAML loader + 5 framework YAMLs
+    "observability",  # Session 10 -- structured logging + middleware + counters
+    "policies",  # Session 02 -- .rego policy bundles loaded by domain/policy_engine
     "evaluator.py",
     "adversarial.py",
     "mock_data.py",
