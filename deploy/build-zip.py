@@ -35,6 +35,10 @@ INCLUDE = [
     "domains.py",
     "domains",
     "data",
+    # Session 10 observability — was missing from the deploy package, which
+    # silently disabled telemetry on Azure because the try/ImportError in
+    # dashboard.py swallowed the missing-module error. Added Day-12.
+    "observability",
 ]
 # Note: encryption.py (cryptography), run.py + ragas_evaluator.py (deepeval/ragas/garak)
 # intentionally NOT included — they pull heavy deps and aren't on the dashboard runtime path.

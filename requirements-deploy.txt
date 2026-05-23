@@ -23,3 +23,10 @@ python-dotenv>=1.0.0
 # Utilities
 python-dateutil>=2.8.0
 tzdata>=2024.1
+
+# Observability — App Insights via OpenTelemetry distro (Day 12 finding).
+# The distro auto-wires traces+metrics+logs and bundles the exporter; without
+# it the workspace stays empty and the 8 scheduled-query alerts cannot fire.
+# Pinned conservatively so Oryx build on B1 SKU stays within timeout.
+azure-monitor-opentelemetry>=1.6,<2
+opentelemetry-instrumentation-fastapi>=0.50b0
