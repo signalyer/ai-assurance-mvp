@@ -52,8 +52,15 @@ pytz>=2023.3
 PyYAML>=6.0.0
 
 # Observability — Session 10
+# NOTE: azure-monitor-opentelemetry (the DISTRO) bundles the exporter + the
+# auto-instrumentors and exposes configure_azure_monitor() which wires
+# traces + metrics + logs in one call. The bare exporter package, used in
+# isolation, ships zero instrumentation — spans are never created. This was
+# the silent failure caught in Day-12 verification (workspace had no data
+# despite the connection string being set and init code running).
 opentelemetry-sdk>=1.27
-azure-monitor-opentelemetry-exporter>=1.0.0b30
+azure-monitor-opentelemetry>=1.6
+opentelemetry-instrumentation-fastapi>=0.50b0
 prometheus-client>=0.20
 
 # File locking — audit_chain cross-process advisory lock (Session 10)

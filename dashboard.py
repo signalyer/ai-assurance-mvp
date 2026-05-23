@@ -137,6 +137,18 @@ def print_startup_status() -> bool:
 
 app = FastAPI(title="AI Assurance Dashboard")
 
+# Wire OpenTelemetry FastAPI auto-instrumentation. This must happen AFTER
+# `app = FastAPI(...)` because FastAPI has no SDK-time entry-point hook
+# (unlike Flask/Django). No-op when init_app_insights() above was a no-op.
+# Day-12 finding (2026-05-23): without this call, the AzureMonitorTraceExporter
+# is configured but no spans are ever created, so the workspace stays empty
+# and the 8 alert rules cannot fire.
+try:
+    from observability.app_insights import instrument_fastapi as _instr_fastapi
+    _instr_fastapi(app)
+except ImportError:
+    pass  # observability package not yet installed -- safe to skip
+
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
