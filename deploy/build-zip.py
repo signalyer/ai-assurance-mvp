@@ -26,6 +26,9 @@ INCLUDE = [
     "storage.py",
     "tracer.py",
     "audit.py",
+    "scrubber.py",  # Session 01a — Presidio scrubber, imported by api/demo_run.py
+    "observability_compat.py",  # Session 10 — counter shims used by middleware + audit_chain
+    "providers",  # Session 05 — provider abstraction (deferred imports in scrubber/tracer/evaluator/agent_memory/rag_engine)
     # Session 03 replaced the legacy guardrails.py FILE with a guardrails/
     # PACKAGE (nemo_adapters, llama_guard_adapter, financial_advisor_rail,
     # config/financial_advisor_rails.yaml). api/security.py imports from this
