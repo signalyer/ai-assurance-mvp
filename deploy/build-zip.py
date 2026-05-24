@@ -19,6 +19,7 @@ OUT_ZIP = Path(__file__).resolve().parent / "app.zip"
 # Whitelist of source paths to ship.
 INCLUDE = [
     "dashboard.py",
+    "__version__.py",  # Session 13 — imported by dashboard.py line 72 for FastAPI(version=...)
     "api",
     "domain",
     "middleware",
