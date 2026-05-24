@@ -504,14 +504,46 @@ Compound rules earned this session:
   defers that decision to whoever splits the route per type later, without
   forcing it now.
 
+## Files — Built (2026-05-24, Session 27)
+### Session 27 (Track A third router — api/analytics.py)
+Third per-router OpenAPI sweep. Pattern from Sessions 25-26 applied. UI-consumer
+grep returned only `deploy/smoke_e2e.ps1` (asserts HTTP 200 only, no shape
+coupling) plus `ARCHITECTURE.md` itself — lowest-coupling sweep target so far.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [api/analytics.py](api/analytics.py) | Added 3 Pydantic v2 response models — 1 permissive (`AnalyticsResponse`, `ConfigDict(extra="allow")` with Optional `period_days`/`pass_rate` because `calculate_analytics()` returns 8 keys on the empty-history path vs 10 when runs exist) and 2 strict (`AnalyticsByDomainResponse`, `AnalyticsTrendsResponse` — fixed 3-key subsets). All 5 routes carry `operation_id="analytics_<resource>_<verb>"`. The 2 raw-export routes (`/api/export/csv`, `/api/export/json`) returning `PlainTextResponse`/`Response` get `operation_id` only, per compound rule 26a. Added `from __future__ import annotations`. |
+| #2 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. New component schemas: `AnalyticsResponse`, `AnalyticsByDomainResponse`, `AnalyticsTrendsResponse`. 5 new/renamed operationIds (`analytics_rollup_get`, `analytics_by_domain_get`, `analytics_trends_get`, `analytics_export_csv`, `analytics_export_json`). No removed routes; no shape changes to prior schemas. |
+
+**Sweep progress:** 3/25 routers done (16/66 routes — api/security.py 5 +
+api/reports.py 6 + api/analytics.py 5). Next candidates: `api/connectors.py`
+(4, low coupling), `api/evidence.py` (4, medium), `api/domains_api.py` (5).
+`api/guide.py` still deferred (9, high SPA surface).
+
+**Verification.** `python -c "import api.analytics"` → ok. OpenAPI export wrote
+425164 bytes. Inspector script confirmed 5/5 operationIds present and 3/3
+`Analytics*` schemas in `components.schemas`. Smoke script `deploy/smoke_e2e.ps1`
+scenario 5 only asserts HTTP 200 on `/api/analytics/trends`, so no shape
+contract was touched. Local `import dashboard` still logs
+`openapi.drift.production_warn` — expected per compound rule 25b.
+
+Compound rule earned this session:
+- **Session 27a:** When a router has *no* live UI consumers (only smoke-script
+  HTTP-200 assertions and doc cross-references), the OpenAPI sweep is the
+  cheapest place to introduce strict response models because the blast radius
+  of shape regressions is bounded to OpenAPI clients (none yet generated) and
+  spec-diff CI. Reserve permissive `extra="allow"` for genuinely polymorphic
+  rollup payloads (like `AnalyticsResponse`'s empty-vs-populated asymmetry),
+  not as a reflex.
+
 ## Files — Planned
 
-### Sessions 27+ — OpenAPI response-model sweep continuation (23/25 routers remaining)
-Session 26 closed `api/reports.py` (6/66 routes). Remaining top offenders:
-`guide.py` (9 — defer; high SPA coupling), `analytics.py` (5),
-`domains_api.py` (5), `connectors.py` (4), `evidence.py` (4). Recommended next
-target: `api/reports.py` or `api/analytics.py` — moderate route count, mid-
-risk UI coupling. Pattern locked by Session 25:
+### Sessions 28+ — OpenAPI response-model sweep continuation (22/25 routers remaining)
+Session 27 closed `api/analytics.py` (5/66 routes). Remaining top offenders:
+`guide.py` (9 — defer; high SPA coupling), `domains_api.py` (5),
+`connectors.py` (4), `evidence.py` (4). Recommended next target:
+`api/connectors.py` (lowest coupling) or `api/evidence.py`. Pattern locked
+by Sessions 25-27:
 1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
 2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
    crosses three routers).
