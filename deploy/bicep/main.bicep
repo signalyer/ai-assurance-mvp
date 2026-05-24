@@ -32,6 +32,20 @@ param appName string = 'app-aigovern-dev'
 @description('Optional Action Group resource ID for alert notifications. Leave empty to skip.')
 param actionGroupId string = ''
 
+// ---- V2 Phase 2 — Team Workspace SWA (opt-in, default OFF) -----------------
+
+@description('Toggle: provision the V2 Team Workspace Static Web App. Defaults to false to keep existing deploys idempotent.')
+param deployTeamPortal bool = false
+
+@description('Region for the Team Workspace SWA. Must be eastus2 per the global Static Web App regional rule.')
+param teamPortalLocation string = 'eastus2'
+
+@description('Resource name for the Team Workspace Static Web App.')
+param teamPortalSwaName string = 'swa-aigovern-portal-dev'
+
+@description('Pricing tier for the Team Workspace SWA. Free is sufficient for staging.')
+param teamPortalSwaSku string = 'Free'
+
 // ---------------------------------------------------------------------------
 // Existing resource references (read-only — do NOT create)
 // ---------------------------------------------------------------------------
@@ -65,6 +79,24 @@ module alertsModule 'alerts.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// V2 Phase 2 — Team Workspace Static Web App (conditional)
+// ---------------------------------------------------------------------------
+//
+// Opt-in via `deployTeamPortal=true`. Defaults to false so existing deploys
+// (App Insights + alerts only) remain a no-op what-if. Region forced to
+// eastus2 per SWA regional rule (not the eastus default of the rest of the
+// stack). NO custom DNS binding here — Week 5 cutover concern per
+// docs/plans/V2-PORTAL-SPLIT.md §6.
+module teamPortalSwa 'staticwebapps.bicep' = if (deployTeamPortal) {
+  name: 'team-portal-swa-deploy'
+  params: {
+    swaName: teamPortalSwaName
+    location: teamPortalLocation
+    sku: teamPortalSwaSku
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 
@@ -77,3 +109,6 @@ output workspaceId string = appInsightsModule.outputs.workspaceId
 
 @description('Reminder: inject the connection string into the web app after deploy.')
 output postDeployNote string = 'Run: az webapp config appsettings set --name ${appName} --resource-group rg-aigovern-dev --settings APPLICATIONINSIGHTS_CONNECTION_STRING=$(az deployment group show ... --query properties.outputs.appInsightsConnectionString.value -o tsv)'
+
+@description('Default *.azurestaticapps.net hostname for the Team Workspace SWA. Empty string when deployTeamPortal=false.')
+output teamPortalHostname string = deployTeamPortal ? teamPortalSwa.outputs.defaultHostname : ''
