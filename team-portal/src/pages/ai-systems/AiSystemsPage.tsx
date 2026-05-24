@@ -3,6 +3,8 @@ import { useEffect } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
 import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/components/Badges';
 import { AiSystemDrawer, openSystem } from './AiSystemDrawer';
+import { AiSystemEditModal } from './AiSystemEditModal';
+import { AiSystemRevisionsPanel } from './AiSystemRevisionsPanel';
 import type { AiSystemSummary, AiSystemsListResponse } from './types';
 
 // Page state — module-level signals so URL?id= deep-link survives navigation.
@@ -165,6 +167,8 @@ export function AiSystemsPage() {
       </div>
 
       <AiSystemDrawer />
+      <AiSystemEditModal />
+      <AiSystemRevisionsPanel />
     </div>
   );
 }

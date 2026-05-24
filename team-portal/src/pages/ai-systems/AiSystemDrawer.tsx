@@ -2,13 +2,22 @@ import { useEffect } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { apiGet } from '../../shared/api/client';
 import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/components/Badges';
-import type { AiSystemDetail } from './types';
+import { openEdit, registerEditSavedCallback } from './AiSystemEditModal';
+import { openRevisions } from './AiSystemRevisionsPanel';
+import type { AiSystemDetail, EditStatus } from './types';
 
 // Open-system signal: drives the side drawer.
 // Setting to a non-null id triggers a fetch; null closes the drawer.
 const openSystemId = signal<string | null>(null);
 const currentSystem = signal<AiSystemDetail | null>(null);
 const drawerError = signal<string | null>(null);
+const editStatus = signal<EditStatus | null>(null);
+
+// Edit modal calls back here on successful save so the drawer + status banner
+// reflect the new state without a page reload.
+registerEditSavedCallback((id: string) => {
+  if (openSystemId.value === id) void loadDetail(id);
+});
 
 export function openSystem(id: string): void {
   openSystemId.value = id;
@@ -29,12 +38,18 @@ export function closeSystem(): void {
 async function loadDetail(id: string): Promise<void> {
   drawerError.value = null;
   currentSystem.value = null;
-  const r = await apiGet<AiSystemDetail>(`/grc/ai-systems/${encodeURIComponent(id)}`);
-  if (r.ok) {
-    currentSystem.value = r.data;
+  editStatus.value = null;
+  const [detail, info] = await Promise.all([
+    apiGet<AiSystemDetail>(`/grc/ai-systems/${encodeURIComponent(id)}`),
+    apiGet<{ status: EditStatus }>(`/ai-systems/${encodeURIComponent(id)}/edit-info`),
+  ]);
+  if (detail.ok) {
+    currentSystem.value = detail.data;
   } else {
-    drawerError.value = r.detail;
+    drawerError.value = detail.detail;
   }
+  if (info.ok) editStatus.value = info.data.status;
+  // edit-info is best-effort enrichment; silent on failure (banner is optional).
 }
 
 export function AiSystemDrawer() {
@@ -58,6 +73,11 @@ export function AiSystemDrawer() {
         <div class="drawer-body">
           {drawerError.value && <div class="error-banner">{drawerError.value}</div>}
           {!s && !drawerError.value && <div class="loading">Loading…</div>}
+          {s && editStatus.value?.has_pending_material && (
+            <div class="error-banner" style={{ marginBottom: 12 }}>
+              Material revision pending ({editStatus.value.pending_revision_id}) — release is blocked.
+            </div>
+          )}
           {s && <DrawerContent system={s} />}
         </div>
       </aside>
@@ -167,13 +187,11 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         <a class="btn btn-sm btn-primary" href={`/assessment?system=${encodeURIComponent(s.id)}`}>
           Run Assessment
         </a>
-        {/* V1 parity TODOs (Task #4 follow-ups, deferred this turn):
-            - Edit System (soft/material tiered form + change reason/category)
-            - Revision History (with approve/reject for governance)
-            - Frameworks coverage tab (4 framework cards)
-            - Bound Agents tab (list, add, pin, unbind, accept upgrade) */}
-        <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Edit System</button>
-        <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Revision History</button>
+        {/* #9/#10 wired. #11 Frameworks + #12 Bound Agents pending follow-ups. */}
+        <button class="btn btn-sm btn-secondary" onClick={() => openEdit(s.id)}>Edit System</button>
+        <button class="btn btn-sm btn-secondary" onClick={() => openRevisions(s.id)}>
+          Revision History{editStatus.value && editStatus.value.revision_count > 0 ? ` (${editStatus.value.revision_count})` : ''}
+        </button>
         <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Frameworks</button>
         <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Bound Agents</button>
       </div>

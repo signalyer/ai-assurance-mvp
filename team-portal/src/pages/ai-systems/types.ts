@@ -53,3 +53,66 @@ export interface AiSystemDetail extends AiSystemSummary {
 export interface AiSystemsListResponse {
   systems: AiSystemSummary[];
 }
+
+// --- Edit flow (api/ai_system_edit.py) -------------------------------------
+
+export interface EditStatus {
+  has_pending_material: boolean;
+  release_blocked_by_revision: boolean;
+  pending_revision_id: string | null;
+  revision_count: number;
+  last_revision_at: string | null;
+  last_revision_tier: string | null;
+}
+
+export interface EditInfo {
+  ai_system_id: string;
+  field_tiers: { soft: string[]; material: string[]; locked: string[] };
+  rerun_matrix: Record<string, string[]>;
+  approval_roles_by_level: Record<string, string[]>;
+  valid_change_categories: string[];
+  status: EditStatus;
+}
+
+export interface FieldChange {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+
+export interface Approver {
+  user: string;
+  role: string;
+  decision: string;
+  signed_at: string;
+  note?: string;
+}
+
+export interface Revision {
+  revision_id: string;
+  ai_system_id: string;
+  created_at: string;
+  created_by: string;
+  tier: string;
+  fields_changed: FieldChange[];
+  soft_changes?: string[];
+  material_changes?: string[];
+  change_reason?: string;
+  change_category?: string;
+  approval_status?: string;
+  required_approver_roles?: string[];
+  approvers?: Approver[];
+  triggered_reruns?: string[];
+  decided_at?: string;
+}
+
+export interface RevisionsListResponse {
+  revisions: Revision[];
+  count: number;
+}
+
+export interface SubmitEditResponse {
+  revision: Revision;
+  status: EditStatus;
+  next_step: 'pending_approval' | 'applied' | string;
+}
