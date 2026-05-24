@@ -337,8 +337,9 @@ error, latency_ms}`. `index` now reflects completion order (not submission
 order), which is fine — the SPA uses it for the row key and a progress
 counter, both of which only require uniqueness ≤ total.
 
-Compound rule earned this session:
+Compound rules earned this session:
 - **Session 20a:** When parallelizing a sync generator that already drives an SSE stream, keep it sync — don't convert to async. The wrapping `asyncio.to_thread(next, gen, sentinel)` pattern is the contract; converting the inner generator to `async def` would force a rewrite of the wrapper and break the "engine is sync, transport is async" separation. Use `ThreadPoolExecutor` + `as_completed` inside the sync generator instead.
+- **Session 20b:** Session 19d's "200 ≠ fresh" rule applies to the *readiness* check, not just the final verifier. The first Session 20 deploy failed because the wait loop broke on `code=200` after 10s — but App Service was still serving the previous container during the zip-swap window. Collapse "wait for ready" + "verify SHA" into a single loop that polls until `live_sha == GITHUB_SHA`. Any intermediate 200 is meaningless; only SHA match proves the swap completed.
 
 ## Files — Planned
 

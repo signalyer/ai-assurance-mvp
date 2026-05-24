@@ -57,30 +57,24 @@ jobs:
           # No publish-profile — webapps-deploy@v3 reuses the OIDC session
           # from azure/login. SCM Basic Auth stays disabled (secure default).
 
-      - name: Wait for app to come ready
-        # App Service B1 cold-restart after a deploy can take 60-120s.
-        # Memory rule: "cold-start cooldown" — polling too aggressively
-        # makes the platform delay readiness further.
+      - name: Wait for deployed SHA to match commit
+        # Single readiness gate: poll /api/health until the live sha equals
+        # GITHUB_SHA. A 200 alone is insufficient — during the App Service
+        # zip-swap window the *previous* container keeps serving 200 with
+        # the prior sha (Session 20b: extends Session 19d "200 != fresh"
+        # to the readiness check, not just the final verifier).
+        # B1 cold-restart can take 60-120s; we allow up to 5 min.
         run: |
+          deployed=""
           for i in $(seq 1 30); do
             sleep 10
-            code=$(curl -s -o /tmp/health.json -w "%{http_code}" https://app-aigovern-dev.azurewebsites.net/api/health || true)
-            echo "[$i] /api/health -> $code"
-            if [ "$code" = "200" ]; then
-              cat /tmp/health.json
-              echo
-              break
+            body=$(curl -fsS https://app-aigovern-dev.azurewebsites.net/api/health 2>/dev/null || echo "")
+            deployed=$(echo "$body" | python -c "import json,sys; print(json.loads(sys.stdin.read() or '{}').get('sha',''))" 2>/dev/null || echo "")
+            echo "[$i] live sha: ${deployed:-<no response>}  expected: $GITHUB_SHA"
+            if [ "$deployed" = "$GITHUB_SHA" ]; then
+              echo "OK: live sha matches commit after ${i}0s"
+              exit 0
             fi
           done
-          [ "$code" = "200" ] || { echo "App did not come ready"; exit 1; }
-
-      - name: Verify deployed SHA matches commit
-        run: |
-          deployed=$(curl -fsS https://app-aigovern-dev.azurewebsites.net/api/health | python -c "import json,sys; print(json.load(sys.stdin).get('sha',''))")
-          echo "deployed sha: $deployed"
-          echo "expected sha: $GITHUB_SHA"
-          if [ "$deployed" != "$GITHUB_SHA" ]; then
-            echo "::error::Deployed SHA does not match commit. Deploy likely failed silently (memory rule: 'OneDeploy CLI polling lies') or app served stale zip."
-            exit 1
-          fi
-          echo "OK: live sha matches commit"
+          echo "::error::Deployed SHA never matched commit within 5 min. Last live sha: '$deployed'. Deploy likely failed silently (memory rule: 'OneDeploy CLI polling lies') or the swap stalled."
+          exit 1
