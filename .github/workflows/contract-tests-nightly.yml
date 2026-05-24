@@ -35,7 +35,7 @@ jobs:
           schemathesis run \
             https://aigovern.sandboxhub.co/openapi.json \
             --checks all \
-            --hypothesis-max-examples 25 \
+            --max-examples 25 \
             --workers 2 \
             --rate-limit 5/s \
             --hooks ci/schemathesis_hooks.py \

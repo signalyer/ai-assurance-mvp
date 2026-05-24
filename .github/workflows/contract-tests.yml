@@ -77,7 +77,7 @@ jobs:
           schemathesis run \
             http://127.0.0.1:9007/openapi.json \
             --checks all \
-            --hypothesis-max-examples 50 \
+            --max-examples 50 \
             --workers 4 \
             --hooks ci/schemathesis_hooks.py \
             --validate-schema=false
