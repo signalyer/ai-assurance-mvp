@@ -380,13 +380,35 @@ Compound rules earned this session:
 - **Session 22a:** GitHub's `paths-ignore` is evaluated against the union of changed files in the push, not file-by-file. A commit that changes one `.py` and ten `.md` files still triggers the workflow. This is the correct safety semantic for a deploy filter — opposite of how a naive reader might interpret "ignore." Document this explicitly in any path-filtered workflow; it's the question every future maintainer will ask.
 - **Session 22b:** Keep `workflow_dispatch` on every deploy workflow that has a path filter. Path filters are a heuristic for "what can affect the running app"; the heuristic will sometimes be wrong (e.g. a `MANIFEST.in`-style packaging file that looks like config but ships into the zip). Manual re-trigger costs nothing and unblocks the edge case without weakening the filter.
 
+## Files — Built (2026-05-24, Session 23)
+### Session 23 (ADR-001 Garak + deploy completeness test)
+Two carry-overs closed in one session: Track B (Garak integration design)
+landed as an ADR rather than code, and V1 debt
+`tests/test_deploy_completeness.py` was finally written.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [docs/adr/ADR-001-garak.md](docs/adr/ADR-001-garak.md) | NEW. First ADR in the repo. Decides **subprocess via dedicated Azure Container App sidecar** (`ca-aigovern-garak-dev`) for Garak integration. Rejects library-import (violates Session 12 slim-deploy invariant — Garak's torch/transformers transitives are ~1.5 GB) and full HTTP service (defer to V2 multi-tenancy). Garak suite is **additive** to `adversarial.py`, not replacement: presented as "Quick Smoke" (in-house, ~10s) vs "Deep Scan" (Garak, 1-10 min). New endpoint `POST /api/adversarial/deep-scan` mirroring the Session 18c SSE contract. Includes 6-step implementation plan deliberately scoped to a *future* session — this session is design only. |
+| #2 | [tests/test_deploy_completeness.py](tests/test_deploy_completeness.py) | NEW. Catches the Session 12 / Session 19 root-cause class: INCLUDE whitelist drift in `deploy/build-zip.py`. Four tests: `test_build_sha_baked` (Session 19 invariant), `test_dashboard_imports_from_zip_contents` (builds zip, extracts to tmpdir, runs `python -c "import dashboard"` in fresh subprocess with that dir as only PYTHONPATH — mimics App Service antenv cold-start), `test_include_list_documented_excludes_still_excluded` (locks the slim-deploy invariant by asserting `garak`/`ragas`/`encryption.py` never appear in INCLUDE — paired with ADR-001 §2), `test_forbidden_files_not_in_zip`. Third-party `ModuleNotFoundError` triggers an honest skip with explicit message ("This skip does NOT validate zip completeness") so a missing dev dep can't be mistaken for green. CI with `requirements-deploy.txt` installed runs the import test for real. |
+
+Local verification (Python 3.14, no `requirements-deploy.txt` installed):
+3 passed, 1 skipped — the skip path correctly identified `dotenv` as
+third-party rather than blaming the zip. CI will exercise the full path.
+
+Compound rules earned this session:
+- **Session 23a:** ADRs live at `docs/adr/ADR-NNN-{slug}.md`, numbered sequentially, status header at top. The repo had no ADR convention before this session because every prior decision was small enough to capture in ARCHITECTURE.md `## Architectural decisions`. Integrations with persistent operational footprint (a sidecar Container App, a new Docker image, a new SSE surface) deserve their own document with rejected-options and revisit triggers.
+- **Session 23b:** A deploy-completeness test must honestly distinguish "zip is incomplete" from "test runner is missing third-party deps." Failing on a missing dev `dotenv` would have trained future maintainers to ignore the test; skipping with an explicit "does NOT validate" message keeps the failure mode load-bearing. CI installs the real requirements file, so the test runs for real exactly where it matters.
+
 ## Files — Planned
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Two parallel tracks:
 - Track A (V2 prep): OpenAPI hardening, contract tests, parent-domain cookie, `api.aigovern.sandboxhub.co` CNAME
-- Track B (V1 debt): `tests/test_deploy_completeness.py`, ARCHITECTURE.md backfill, SESSION-12B §6 update
+- Track B (V1 debt): ~~`tests/test_deploy_completeness.py`~~ ✓ Session 23, ARCHITECTURE.md backfill, SESSION-12B §6 update
 - Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy
+
+### Garak Deep Scan — implementation (per ADR-001 §7)
+Six-step plan deferred to a future session pending ADR-001 acceptance: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Estimated 2 sessions.
 
 ## Environment variables
 ### Existing (set on app-aigovern-dev)
