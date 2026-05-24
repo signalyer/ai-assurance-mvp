@@ -1922,6 +1922,25 @@
         "title": "DecideRevisionOut",
         "type": "object"
       },
+      "DeleteDocumentResponse": {
+        "description": "Response from DELETE /api/rag/documents/{doc_id}.",
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "deleted"
+        ],
+        "title": "DeleteDocumentResponse",
+        "type": "object"
+      },
       "DomainConfig": {
         "description": "Schema for creating/updating a domain.",
         "properties": {
@@ -4393,6 +4412,69 @@
         "title": "IncidentsOut",
         "type": "object"
       },
+      "IndexDocumentRequest": {
+        "description": "Body for POST /api/rag/documents.",
+        "properties": {
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "doc_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "scrub": {
+            "default": true,
+            "title": "Scrub",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "doc_id",
+          "content"
+        ],
+        "title": "IndexDocumentRequest",
+        "type": "object"
+      },
+      "IndexDocumentResponse": {
+        "description": "Response from POST /api/rag/documents.",
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "indexed": {
+            "title": "Indexed",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "doc_id",
+          "indexed"
+        ],
+        "title": "IndexDocumentResponse",
+        "type": "object"
+      },
       "IntakePayload": {
         "description": "All fields gathered across the 5 wizard steps. Most are optional during\npreview; submit performs final validation.",
         "properties": {
@@ -6043,6 +6125,51 @@
         "title": "PurgeStepOut",
         "type": "object"
       },
+      "RagStatsResponse": {
+        "description": "Response from GET /api/rag/stats. Mirrors domain.rag_engine.RagStats.",
+        "properties": {
+          "doc_count": {
+            "title": "Doc Count",
+            "type": "integer"
+          },
+          "embedding_model": {
+            "title": "Embedding Model",
+            "type": "string"
+          },
+          "index_size": {
+            "title": "Index Size",
+            "type": "integer"
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          },
+          "rag_enabled": {
+            "title": "Rag Enabled",
+            "type": "boolean"
+          },
+          "rejections_total": {
+            "title": "Rejections Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index_size",
+          "doc_count",
+          "embedding_model",
+          "rejections_total",
+          "rag_enabled"
+        ],
+        "title": "RagStatsResponse",
+        "type": "object"
+      },
       "RecallItem": {
         "description": "Single result from semantic recall.",
         "properties": {
@@ -6559,6 +6686,101 @@
           "states"
         ],
         "title": "RuntimeStatesOut",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "description": "Body for POST /api/rag/search.",
+        "properties": {
+          "hybrid": {
+            "default": true,
+            "title": "Hybrid",
+            "type": "boolean"
+          },
+          "query": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "description": "Response from POST /api/rag/search.",
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "results",
+          "total"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultItem": {
+        "description": "Single result returned from /api/rag/search.",
+        "properties": {
+          "bm25_score": {
+            "title": "Bm25 Score",
+            "type": "number"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "semantic_score": {
+            "title": "Semantic Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "score",
+          "metadata",
+          "bm25_score",
+          "semantic_score"
+        ],
+        "title": "SearchResultItem",
         "type": "object"
       },
       "SimulatedRunOut": {
@@ -13413,6 +13635,159 @@
         "summary": "Projection View",
         "tags": [
           "projection"
+        ]
+      }
+    },
+    "/api/rag/documents": {
+      "post": {
+        "description": "Index a document with optional PII scrubbing.\n\nThe engine returns False (not an exception) for two distinct cases:\n  1. RAG disabled \u2014 no Azure creds.\n  2. PII confidence > 0.7 \u2014 document rejected and logged.\nWe can't distinguish them from the engine's return value alone, so the\nresponse uses indexed=False with a generic 'rejected_or_disabled' reason.\nEngineers can correlate with data/rag_rejections.jsonl or stats.rag_enabled\nif they need specifics \u2014 both surfaces already exist.",
+        "operationId": "index_document_api_rag_documents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndexDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Index Document",
+        "tags": [
+          "rag"
+        ]
+      }
+    },
+    "/api/rag/documents/{doc_id}": {
+      "delete": {
+        "description": "Remove a single document from the Azure AI Search index.\n\nReturns deleted=False when RAG is disabled \u2014 same fail-soft contract as\nthe engine. 404 is NOT used: Azure Search delete is idempotent and the\nengine has no read-before-delete, so we can't distinguish 'didn't exist'\nfrom 'deleted successfully' without an extra round trip we don't want.",
+        "operationId": "delete_document_api_rag_documents__doc_id__delete",
+        "parameters": [
+          {
+            "description": "Document ID to remove",
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "description": "Document ID to remove",
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Doc Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Document",
+        "tags": [
+          "rag"
+        ]
+      }
+    },
+    "/api/rag/search": {
+      "post": {
+        "description": "Hybrid (BM25 + semantic vector) search over the RAG corpus.\n\nWhen RAG is disabled the engine returns an empty list \u2014 we surface that\nas results=[] / total=0 (200 OK), not as an error.",
+        "operationId": "search_api_rag_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "rag"
+        ]
+      }
+    },
+    "/api/rag/stats": {
+      "get": {
+        "description": "Return statistics about the RAG corpus.\n\nWhen RAG is disabled (no Azure creds or RAG_ENABLED=false), returns zeroed\ncounters with rag_enabled=false \u2014 never raises. This is the same fail-soft\ncontract domain.rag_engine.rag_stats() honors.",
+        "operationId": "get_stats_api_rag_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Stats",
+        "tags": [
+          "rag"
         ]
       }
     },
