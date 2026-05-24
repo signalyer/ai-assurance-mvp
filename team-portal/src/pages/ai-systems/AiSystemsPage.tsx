@@ -34,6 +34,52 @@ const filtered = computed<AiSystemSummary[]>(() => {
   });
 });
 
+// Export currently-filtered inventory as CSV. Pure client-side — no API
+// call, no server round-trip. Honours the active filters so the file matches
+// what the user sees on screen.
+const EXPORT_COLUMNS: ReadonlyArray<{ key: keyof AiSystemSummary; header: string }> = [
+  { key: 'id', header: 'ID' },
+  { key: 'name', header: 'Name' },
+  { key: 'business_owner', header: 'Business Owner' },
+  { key: 'technical_owner', header: 'Technical Owner' },
+  { key: 'domain', header: 'Domain' },
+  { key: 'risk_level', header: 'Risk Level' },
+  { key: 'autonomy_level', header: 'Autonomy' },
+  { key: 'data_classes', header: 'Data Classes' },
+  { key: 'runtime_status', header: 'Runtime Status' },
+  { key: 'release_decision', header: 'Release Decision' },
+  { key: 'open_findings', header: 'Open Findings' },
+  { key: 'critical_findings', header: 'Critical Findings' },
+  { key: 'last_assessment', header: 'Last Assessment' },
+];
+
+function csvEscape(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const s = Array.isArray(v) ? v.join('; ') : String(v);
+  // RFC 4180 — quote if comma, quote, CR, or LF; double internal quotes.
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function exportInventoryCsv(rows: AiSystemSummary[]): void {
+  const header = EXPORT_COLUMNS.map((c) => c.header).join(',');
+  const lines = rows.map((r) =>
+    EXPORT_COLUMNS.map((c) => csvEscape(r[c.key])).join(','),
+  );
+  // BOM so Excel opens the file in UTF-8 instead of cp1252.
+  const csv = '﻿' + [header, ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `ai-systems-inventory-${ts}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 async function loadSystems(): Promise<void> {
   loading.value = true;
   loadError.value = null;
@@ -65,7 +111,12 @@ export function AiSystemsPage() {
           <div class="page-subtitle">Production and pre-production AI systems under governance</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-sm" disabled title="Pending Phase 2 follow-up">Export Inventory</button>
+          <button
+            class="btn btn-sm"
+            disabled={filtered.value.length === 0}
+            onClick={() => exportInventoryCsv(filtered.value)}
+            title="Download the filtered inventory as CSV"
+          >Export Inventory ({filtered.value.length})</button>
           <a class="btn btn-sm btn-primary" href="/ai-systems/new">+ Register System</a>
         </div>
       </div>
