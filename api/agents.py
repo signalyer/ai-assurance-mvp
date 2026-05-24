@@ -210,14 +210,18 @@ async def create_agent(body: CreateAgentRequest) -> dict[str, object]:
     logger.info("agents.create.enter name=%s team=%s owner_type=%s", body.name, body.team, body.owner_type)
 
     mod = _agents()
+    # domain.agents.create_agent expects enums (AgentOwnerType, RiskLevel) and
+    # calls .value on them. Pydantic Literal validates the string but does not
+    # coerce; coerce at the boundary.
+    from domain.models import AgentOwnerType, RiskLevel
     try:
         agent = await asyncio.to_thread(
             mod.create_agent,
             name=body.name,
             description=body.description,
             team=body.team,
-            owner_type=body.owner_type,
-            inherent_risk=body.inherent_risk,
+            owner_type=AgentOwnerType(body.owner_type),
+            inherent_risk=RiskLevel(body.inherent_risk),
         )
     except HTTPException:
         raise

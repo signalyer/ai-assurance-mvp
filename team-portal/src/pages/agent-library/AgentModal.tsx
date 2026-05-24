@@ -1,14 +1,16 @@
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
-import { apiGet } from '../../shared/api/client';
+import { apiGet, apiPost } from '../../shared/api/client';
 import type { AgentDetail, AgentVersion, AgentSubscriber } from './types';
 
 type Tab = 'overview' | 'versions' | 'subscribers' | 'publish';
+type SseState = 'connecting' | 'open' | 'closed';
 
 const openAgentId = signal<string | null>(null);
 const currentAgent = signal<AgentDetail | null>(null);
 const modalError = signal<string | null>(null);
 const activeTab = signal<Tab>('overview');
+const sseState = signal<SseState>('closed');
 
 export function openAgent(id: string): void {
   openAgentId.value = id;
@@ -36,6 +38,28 @@ function riskClass(r?: string): string {
   return `badge-risk-${r ?? 'MEDIUM'}`;
 }
 
+// SSE lifecycle (#19). Opens on modal open, closes on modal close.
+// On agent_update event → reload agent detail (versions / subscribers
+// may have changed via another tab or the SDK).
+function useAgentSse(id: string | null): void {
+  useEffect(() => {
+    if (!id) {
+      sseState.value = 'closed';
+      return;
+    }
+    sseState.value = 'connecting';
+    // VITE_API_BASE_URL defaults to /api/v1; mirror that for EventSource.
+    const base = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '');
+    const es = new EventSource(`${base}/agents/${encodeURIComponent(id)}/listen`);
+
+    es.onopen = () => { sseState.value = 'open'; };
+    es.onerror = () => { sseState.value = 'closed'; };
+    es.addEventListener('agent_update', () => { void loadAgent(id); });
+
+    return () => { es.close(); sseState.value = 'closed'; };
+  }, [id]);
+}
+
 export function AgentModal() {
   const id = openAgentId.value;
 
@@ -43,10 +67,19 @@ export function AgentModal() {
     if (id) void loadAgent(id);
   }, [id]);
 
+  useAgentSse(id);
+
   if (!id) return null;
 
   const a = currentAgent.value;
   const tab = activeTab.value;
+  const sse = sseState.value;
+  const sseLabel = sse === 'open' ? 'Live updates connected'
+    : sse === 'connecting' ? 'Connecting live updates…'
+    : 'Live updates offline';
+  const sseDotColor = sse === 'open' ? 'var(--pass)'
+    : sse === 'connecting' ? 'var(--medium)'
+    : 'var(--text-tertiary)';
 
   return (
     <div class="modal-overlay open" onClick={(e) => {
@@ -86,13 +119,21 @@ export function AgentModal() {
           {a && tab === 'overview' && <OverviewTab agent={a} />}
           {a && tab === 'versions' && <VersionsTab versions={a.versions ?? []} />}
           {a && tab === 'subscribers' && <SubscribersTab subscribers={a.subscribers ?? []} />}
-          {a && tab === 'publish' && <PublishTabStub />}
+          {a && tab === 'publish' && <PublishTab agentId={a.id} />}
         </div>
         <div class="modal-footer">
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {/* V1 SSE live-update indicator deferred (Task #18). */}
-            <span class="sse-dot" />
-            <span>Live updates disabled</span>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              class="sse-dot"
+              style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: sseDotColor,
+              }}
+            />
+            <span>{sseLabel}</span>
           </span>
           <div style={{ flex: 1 }} />
           <button class="btn btn-sm btn-secondary" onClick={closeAgent}>Close</button>
@@ -184,10 +225,70 @@ function SubscribersTab({ subscribers }: { subscribers: AgentSubscriber[] }) {
   );
 }
 
-function PublishTabStub() {
+// Publish New Version form (#18). POST /agents/{id}/publish.
+// Semver MAJOR.MINOR.PATCH per api/agents.py:130 regex.
+const publishSemver = signal<string>('');
+const publishChangelog = signal<string>('');
+const publishSaving = signal<boolean>(false);
+const publishError = signal<string | null>(null);
+const publishSuccess = signal<string | null>(null);
+
+function PublishTab({ agentId }: { agentId: string }) {
+  async function submit(): Promise<void> {
+    publishError.value = null;
+    publishSuccess.value = null;
+    if (!/^\d+\.\d+\.\d+/.test(publishSemver.value.trim())) {
+      publishError.value = 'Semver must be MAJOR.MINOR.PATCH (e.g. 1.2.0).';
+      return;
+    }
+    publishSaving.value = true;
+    const r = await apiPost(`/agents/${encodeURIComponent(agentId)}/publish`, {
+      semver: publishSemver.value.trim(),
+      changelog: publishChangelog.value.trim(),
+      config: {},
+    });
+    publishSaving.value = false;
+    if (r.ok) {
+      publishSuccess.value = `Published v${publishSemver.value.trim()}`;
+      publishSemver.value = '';
+      publishChangelog.value = '';
+      // Refresh agent detail to surface the new version in the Versions tab.
+      void loadAgent(agentId);
+    } else {
+      publishError.value = `Publish failed: ${r.detail}`;
+    }
+  }
+
   return (
-    <div class="empty-state">
-      Publish New Version form — pending Phase 2 follow-up (Task #17).
+    <div>
+      {publishError.value && <div class="error-banner">{publishError.value}</div>}
+      {publishSuccess.value && (
+        <div class="badge badge-pass" style={{ display: 'inline-block', padding: '4px 8px', marginBottom: 8 }}>
+          {publishSuccess.value}
+        </div>
+      )}
+      <div class="form-row">
+        <label class="form-label">Semver (MAJOR.MINOR.PATCH) <span style={{ color: 'var(--critical)' }}>*</span></label>
+        <input
+          class="form-input font-mono"
+          placeholder="1.2.0"
+          value={publishSemver.value}
+          onInput={(e) => { publishSemver.value = (e.currentTarget as HTMLInputElement).value; }}
+        />
+      </div>
+      <div class="form-row">
+        <label class="form-label">Changelog</label>
+        <textarea
+          class="form-input"
+          rows={4}
+          placeholder="What changed in this version?"
+          value={publishChangelog.value}
+          onInput={(e) => { publishChangelog.value = (e.currentTarget as HTMLTextAreaElement).value; }}
+        />
+      </div>
+      <button class="btn btn-sm btn-primary" disabled={publishSaving.value} onClick={() => void submit()}>
+        {publishSaving.value ? 'Publishing…' : 'Publish Version'}
+      </button>
     </div>
   );
 }

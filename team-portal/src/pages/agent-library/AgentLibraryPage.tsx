@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
 import type { AgentSummary } from './types';
 import { AgentModal, openAgent } from './AgentModal';
+import { AgentCreateModal, openCreateAgent, registerAgentsReload } from './AgentCreateModal';
 
 type OwnerFilter = '' | 'REUSABLE' | 'CUSTOM';
 
@@ -47,7 +48,10 @@ async function loadAgents(): Promise<void> {
 }
 
 export function AgentLibraryPage() {
-  useEffect(() => { void loadAgents(); }, []);
+  useEffect(() => {
+    registerAgentsReload(loadAgents);
+    void loadAgents();
+  }, []);
   const rows = filtered.value;
 
   return (
@@ -58,7 +62,7 @@ export function AgentLibraryPage() {
           <div class="page-subtitle">Publish, subscribe, and govern reusable AI agents across systems</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-sm btn-primary" disabled title="Pending Phase 2 follow-up">
+          <button class="btn btn-sm btn-primary" onClick={openCreateAgent}>
             + Register Agent
           </button>
         </div>
@@ -102,6 +106,7 @@ export function AgentLibraryPage() {
       )}
 
       <AgentModal />
+      <AgentCreateModal />
     </div>
   );
 }
