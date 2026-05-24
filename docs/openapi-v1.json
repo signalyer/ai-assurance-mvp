@@ -59,6 +59,66 @@
         "title": "AI600_1RiskAreaOut",
         "type": "object"
       },
+      "AdversarialCategoriesResponse": {
+        "description": "Response shape for GET /api/security/adversarial/categories.",
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeCategory"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "total_probes": {
+            "title": "Total Probes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "categories",
+          "total_probes"
+        ],
+        "title": "AdversarialCategoriesResponse",
+        "type": "object"
+      },
+      "AdversarialHistoryResponse": {
+        "additionalProperties": true,
+        "description": "Response shape for GET /api/security/adversarial/history.",
+        "properties": {
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "AdversarialHistoryResponse",
+        "type": "object"
+      },
+      "AdversarialRunResponse": {
+        "additionalProperties": true,
+        "description": "Response shape for POST /api/security/adversarial/run.\n\nPermissive (`extra=\"allow\"`) because `run_adversarial_suite()` returns a\ndeeply nested structure that evolves per probe set. The explicit `error`\nfield is the only stable contract callers branch on.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "title": "AdversarialRunResponse",
+        "type": "object"
+      },
       "AgentBindingOut": {
         "additionalProperties": true,
         "description": "AgentBinding record. Loosely typed; underlying shape from domain.agent_bindings.\n\nlist_bindings returns enriched dicts with agent_name/agent_team/version_semver\nadded on top of the binding fields; extra='allow' permits the enrichment.",
@@ -4030,6 +4090,169 @@
         "title": "GuardrailCheckRequest",
         "type": "object"
       },
+      "GuardrailCheckResponse": {
+        "additionalProperties": true,
+        "description": "Response shape for POST /api/security/guardrails/check.\n\nUnioned input/output shape: `apply_guardrails` returns the `allowed/reason/\nviolation/prompt` tuple; `filter_output` returns the `safe/response/violations`\ntuple. Both fields are optional so either branch validates.",
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "redacted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redacted"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          },
+          "safe": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "violation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Violation"
+          },
+          "violation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Violation Count"
+          },
+          "violations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Violations"
+          }
+        },
+        "title": "GuardrailCheckResponse",
+        "type": "object"
+      },
+      "GuardrailsSummaryResponse": {
+        "additionalProperties": true,
+        "description": "Response shape for GET /api/security/guardrails/summary.\n\nPermissive because the rail summary is intentionally diagnostic and the\ninner shape (input_rails / output_rails) is documented by example, not pinned.",
+        "properties": {
+          "domain_rules": {
+            "title": "Domain Rules",
+            "type": "string"
+          },
+          "guardrail_version": {
+            "title": "Guardrail Version",
+            "type": "string"
+          },
+          "total_input_patterns": {
+            "title": "Total Input Patterns",
+            "type": "integer"
+          },
+          "total_output_categories": {
+            "title": "Total Output Categories",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "guardrail_version",
+          "total_input_patterns",
+          "total_output_categories",
+          "domain_rules"
+        ],
+        "title": "GuardrailsSummaryResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5845,6 +6068,33 @@
           "data_classes_count"
         ],
         "title": "PolicySummaryOut",
+        "type": "object"
+      },
+      "ProbeCategory": {
+        "description": "One adversarial probe category and its enrolled probes.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "probe_count": {
+            "title": "Probe Count",
+            "type": "integer"
+          },
+          "probes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Probes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "probe_count",
+          "probes"
+        ],
+        "title": "ProbeCategory",
         "type": "object"
       },
       "ProjectionStatusResponse": {
@@ -14417,15 +14667,13 @@
     "/api/security/adversarial/categories": {
       "get": {
         "description": "Get available adversarial test categories.",
-        "operationId": "get_categories_api_security_adversarial_categories_get",
+        "operationId": "security_adversarial_categories",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Categories Api Security Adversarial Categories Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdversarialCategoriesResponse"
                 }
               }
             },
@@ -14441,7 +14689,7 @@
     "/api/security/adversarial/history": {
       "get": {
         "description": "Get historical adversarial test results.",
-        "operationId": "adversarial_history_api_security_adversarial_history_get",
+        "operationId": "security_adversarial_history",
         "parameters": [
           {
             "in": "query",
@@ -14461,9 +14709,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Adversarial History Api Security Adversarial History Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdversarialHistoryResponse"
                 }
               }
             },
@@ -14489,7 +14735,7 @@
     "/api/security/adversarial/run": {
       "post": {
         "description": "Run adversarial test suite against a model.\n\nArgs:\n    model: Model name (e.g., 'claude-sonnet-4-6', 'gpt-4o-mini')\n    provider: 'anthropic' or 'openai'\n    categories: Comma-separated list (None = all)",
-        "operationId": "run_adversarial_api_security_adversarial_run_post",
+        "operationId": "security_adversarial_run",
         "parameters": [
           {
             "in": "query",
@@ -14526,9 +14772,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Adversarial Api Security Adversarial Run Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdversarialRunResponse"
                 }
               }
             },
@@ -14554,7 +14798,7 @@
     "/api/security/guardrails/check": {
       "post": {
         "description": "Check text against guardrails.",
-        "operationId": "check_guardrails_api_security_guardrails_check_post",
+        "operationId": "security_guardrails_check",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14570,9 +14814,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Check Guardrails Api Security Guardrails Check Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuardrailCheckResponse"
                 }
               }
             },
@@ -14598,15 +14840,13 @@
     "/api/security/guardrails/summary": {
       "get": {
         "description": "Get summary of active guardrail capabilities.",
-        "operationId": "guardrails_summary_api_security_guardrails_summary_get",
+        "operationId": "security_guardrails_summary",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Guardrails Summary Api Security Guardrails Summary Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GuardrailsSummaryResponse"
                 }
               }
             },

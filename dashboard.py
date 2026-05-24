@@ -187,8 +187,11 @@ def _validate_openapi_artifact() -> None:
         _logger.warning("openapi.artifact_missing path=%s", artifact_path)
         return
 
-    is_prod = os.environ.get("WEBSITE_SITE_NAME", "").startswith("app-aigovern")
-    strict_default = "false" if is_prod else "true"
+    # Strict mode is opt-in: CI=true (GitHub Actions) or explicit SL_OPENAPI_STRICT=true.
+    # Local dev and prod both default to warn-only so `import dashboard` never raises
+    # on routine drift. The committed artifact is gated by CI on PRs.
+    is_ci = os.environ.get("CI", "").lower() == "true"
+    strict_default = "true" if is_ci else "false"
     strict = os.environ.get("SL_OPENAPI_STRICT", strict_default).lower() == "true"
 
     try:

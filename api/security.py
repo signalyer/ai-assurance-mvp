@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from dotenv import load_dotenv
 
 from adversarial import (
@@ -42,6 +42,78 @@ class GuardrailCheckRequest(BaseModel):
     text: str
     domain: Optional[str] = None
     direction: str = "input"  # input or output
+
+
+class ProbeCategory(BaseModel):
+    """One adversarial probe category and its enrolled probes."""
+
+    name: str
+    probe_count: int
+    probes: list[str]
+
+
+class AdversarialCategoriesResponse(BaseModel):
+    """Response shape for GET /api/security/adversarial/categories."""
+
+    categories: list[ProbeCategory]
+    total_probes: int
+
+
+class AdversarialRunResponse(BaseModel):
+    """Response shape for POST /api/security/adversarial/run.
+
+    Permissive (`extra="allow"`) because `run_adversarial_suite()` returns a
+    deeply nested structure that evolves per probe set. The explicit `error`
+    field is the only stable contract callers branch on.
+    """
+
+    model_config = ConfigDict(extra="allow")
+    error: Optional[str] = None
+
+
+class AdversarialHistoryResponse(BaseModel):
+    """Response shape for GET /api/security/adversarial/history."""
+
+    model_config = ConfigDict(extra="allow")
+    results: list[dict]
+
+
+class GuardrailsSummaryResponse(BaseModel):
+    """Response shape for GET /api/security/guardrails/summary.
+
+    Permissive because the rail summary is intentionally diagnostic and the
+    inner shape (input_rails / output_rails) is documented by example, not pinned.
+    """
+
+    model_config = ConfigDict(extra="allow")
+    guardrail_version: str
+    total_input_patterns: int
+    total_output_categories: int
+    domain_rules: str
+
+
+class GuardrailCheckResponse(BaseModel):
+    """Response shape for POST /api/security/guardrails/check.
+
+    Unioned input/output shape: `apply_guardrails` returns the `allowed/reason/
+    violation/prompt` tuple; `filter_output` returns the `safe/response/violations`
+    tuple. Both fields are optional so either branch validates.
+    """
+
+    model_config = ConfigDict(extra="allow")
+    # Input-direction fields
+    allowed: Optional[bool] = None
+    reason: Optional[str] = None
+    violation: Optional[dict] = None
+    prompt: Optional[str] = None
+    # Output-direction fields
+    safe: Optional[bool] = None
+    response: Optional[str] = None
+    original: Optional[str] = None
+    violations: Optional[list[str]] = None
+    redacted: Optional[bool] = None
+    violation_count: Optional[int] = None
+    score: Optional[float] = None
 
 
 def apply_guardrails(prompt: str, domain: Optional[str] = None) -> dict:
@@ -194,7 +266,11 @@ def get_rail_summary() -> dict:
     }
 
 
-@router.get("/adversarial/categories")
+@router.get(
+    "/adversarial/categories",
+    response_model=AdversarialCategoriesResponse,
+    operation_id="security_adversarial_categories",
+)
 async def get_categories() -> dict:
     """Get available adversarial test categories."""
     categories = get_available_categories()
@@ -211,7 +287,11 @@ async def get_categories() -> dict:
     }
 
 
-@router.post("/adversarial/run")
+@router.post(
+    "/adversarial/run",
+    response_model=AdversarialRunResponse,
+    operation_id="security_adversarial_run",
+)
 async def run_adversarial(
     model: str = Query("claude-sonnet-4-6"),
     provider: str = Query("anthropic"),
@@ -253,19 +333,31 @@ async def run_adversarial(
     return results
 
 
-@router.get("/adversarial/history")
+@router.get(
+    "/adversarial/history",
+    response_model=AdversarialHistoryResponse,
+    operation_id="security_adversarial_history",
+)
 async def adversarial_history(limit: int = Query(50, ge=1, le=200)) -> dict:
     """Get historical adversarial test results."""
     return {"results": get_adversarial_results(limit=limit)}
 
 
-@router.get("/guardrails/summary")
+@router.get(
+    "/guardrails/summary",
+    response_model=GuardrailsSummaryResponse,
+    operation_id="security_guardrails_summary",
+)
 async def guardrails_summary() -> dict:
     """Get summary of active guardrail capabilities."""
     return get_rail_summary()
 
 
-@router.post("/guardrails/check")
+@router.post(
+    "/guardrails/check",
+    response_model=GuardrailCheckResponse,
+    operation_id="security_guardrails_check",
+)
 async def check_guardrails(request: GuardrailCheckRequest) -> dict:
     """Check text against guardrails."""
     if request.direction == "input":
