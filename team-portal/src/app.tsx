@@ -7,6 +7,7 @@ import { AgentLibraryPage } from './pages/agent-library/AgentLibraryPage';
 import { MemoryPage } from './pages/memory/MemoryPage';
 import { SdkQuickstartPage } from './pages/sdk-quickstart/SdkQuickstartPage';
 import { RtfRequestPage } from './pages/rtf/RtfRequestPage';
+import { PortfolioPage } from './pages/portfolio/PortfolioPage';
 
 export function App() {
   return (
@@ -20,6 +21,7 @@ export function App() {
         <Route path="/memory" component={MemoryPage} />
         <Route path="/sdk" component={SdkQuickstartPage} />
         <Route path="/rtf" component={RtfRequestPage} />
+        <Route path="/portfolio" component={PortfolioPage} />
         <Route>
           <div class="empty-state">Page not found.</div>
         </Route>

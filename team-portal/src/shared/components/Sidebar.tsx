@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/memory', label: 'Memory' },
   { path: '/sdk', label: 'SDK Quickstart' },
   { path: '/rtf', label: 'Right-to-Forget' },
+  { path: '/portfolio', label: 'My Portfolio' },
 ];
 
 export function Sidebar() {
