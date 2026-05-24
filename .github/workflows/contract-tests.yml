@@ -73,14 +73,15 @@ jobs:
           exit 1
 
       - name: Run Schemathesis
+        env:
+          # Schemathesis v4 removed --hooks; load via env var instead.
+          SCHEMATHESIS_HOOKS: ci.schemathesis_hooks
         run: |
           schemathesis run \
             http://127.0.0.1:9007/openapi.json \
             --checks all \
             --max-examples 50 \
-            --workers 4 \
-            --hooks ci/schemathesis_hooks.py \
-            --validate-schema=false
+            --workers 4
 
       - name: Show engine logs on failure
         if: failure()

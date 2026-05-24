@@ -31,15 +31,16 @@ jobs:
           pip install schemathesis 'hypothesis<7' httpx
 
       - name: Schemathesis against deployed engine
+        env:
+          # Schemathesis v4 removed --hooks; load via env var instead.
+          SCHEMATHESIS_HOOKS: ci.schemathesis_hooks
         run: |
           schemathesis run \
             https://aigovern.sandboxhub.co/openapi.json \
             --checks all \
             --max-examples 25 \
             --workers 2 \
-            --rate-limit 5/s \
-            --hooks ci/schemathesis_hooks.py \
-            --validate-schema=false
+            --rate-limit 5/s
 
       - name: Alert on failure
         if: failure() && env.APP_INSIGHTS_INGESTION_URL != ''
