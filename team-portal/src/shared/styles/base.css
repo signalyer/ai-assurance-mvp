@@ -380,6 +380,128 @@ input:focus { outline: none; border-color: var(--border-focus); }
 .cell-secondary { font-size: 11px; color: var(--text-tertiary); font-family: 'SF Mono', Menlo, Consolas, monospace; }
 .page-actions { display: flex; gap: 0.5rem; }
 
+/* ============ KPI ROW ============ */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+}
+.kpi-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+.kpi-value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+.kpi-value.critical { color: var(--critical); }
+.kpi-value.medium   { color: var(--medium); }
+.kpi-trend { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+
+/* ============ CARDS WITH HEADER ============ */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.card-title { font-size: 13px; font-weight: 700; }
+.card-subtitle { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.card-body { padding: 0.25rem 0; }
+.mb-4 { margin-bottom: 1rem; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* ============ RUNTIME · CONNECTOR + LIST ROWS ============ */
+.connector-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 90px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.connector-row:last-child { border-bottom: none; }
+
+.list-row {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.list-row:last-child { border-bottom: none; }
+
+/* ============ RUNTIME · SYSTEM STATE CARDS ============ */
+.sys-state-card {
+  display: grid;
+  grid-template-columns: 1fr 110px 130px 1fr;
+  gap: 0.625rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.sys-state-card:last-child { border-bottom: none; }
+.sys-state-card.killed     { background: var(--critical-bg); }
+.sys-state-card.heightened { background: var(--medium-bg); }
+
+.light { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.light.green { background: var(--pass); box-shadow: 0 0 6px rgba(16,185,129,0.5); }
+.light.red   { background: var(--critical); box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+.light.amber { background: var(--medium); }
+
+/* ============ RUNTIME · EVENT STREAM ROWS ============ */
+.ev-table { font-size: 12px; }
+.ev-row {
+  display: grid;
+  grid-template-columns: 110px 130px 1fr 130px 90px 110px 100px 70px;
+  gap: 0.625rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.ev-row:last-child { border-bottom: none; }
+.ev-row.head {
+  background: var(--bg-elevated);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.ev-row.sev-CRITICAL { border-left: 3px solid var(--critical); }
+.ev-row.sev-HIGH     { border-left: 3px solid var(--high); }
+.ev-row.sev-MEDIUM   { border-left: 3px solid var(--medium); }
+.ev-row.sev-LOW      { border-left: 3px solid var(--pass); }
+.ev-row.sev-INFO     { border-left: 3px solid var(--border-strong); }
+
+.src-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.action-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.action-blocked, .action-halted   { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.3); }
+.action-masked, .action-queued    { background: var(--accent-bg);   color: var(--accent);   border: 1px solid rgba(99,102,241,0.3); }
+.action-refused, .action-escalated, .action-throttled, .action-flagged { background: var(--medium-bg); color: var(--medium); border: 1px solid rgba(245,158,11,0.3); }
+.action-logged                    { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
+.action-ingested                  { background: var(--high-bg);     color: var(--high);     border: 1px solid rgba(249,115,22,0.3); }
+
 /* Table primitive — used by AI Systems, Runtime, Agent Library pages */
 .data-table {
   width: 100%;
