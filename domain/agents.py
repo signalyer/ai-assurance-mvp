@@ -267,8 +267,7 @@ def get_agent(agent_id: str) -> Optional[Agent]:
     logger.info("get_agent: entry", extra={"agent_id": agent_id})
 
     if _engine is None:
-        logger.warning("get_agent: engine unavailable — returning None")
-        return None
+        return _inmem_agents.get(agent_id)
 
     try:
         from sqlalchemy import text

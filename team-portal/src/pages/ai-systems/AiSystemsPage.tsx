@@ -6,6 +6,7 @@ import { AiSystemDrawer, openSystem } from './AiSystemDrawer';
 import { AiSystemEditModal } from './AiSystemEditModal';
 import { AiSystemRevisionsPanel } from './AiSystemRevisionsPanel';
 import { AiSystemFrameworksPanel } from './AiSystemFrameworksPanel';
+import { AiSystemBoundAgentsPanel } from './AiSystemBoundAgentsPanel';
 import type { AiSystemSummary, AiSystemsListResponse } from './types';
 
 // Page state — module-level signals so URL?id= deep-link survives navigation.
@@ -171,6 +172,7 @@ export function AiSystemsPage() {
       <AiSystemEditModal />
       <AiSystemRevisionsPanel />
       <AiSystemFrameworksPanel />
+      <AiSystemBoundAgentsPanel />
     </div>
   );
 }
