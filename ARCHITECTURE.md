@@ -466,11 +466,49 @@ Compound rules earned this session:
   that would require running every local import under `ci`-profile env,
   which defeats the purpose of having local backends configurable.
 
+## Files — Built (2026-05-24, Session 26)
+### Session 26 (Track A second router — api/reports.py)
+Second per-router OpenAPI sweep. Pattern from Session 25 applied verbatim:
+grep UI consumers first (only `static/reports.html` — keys off
+`reports[].type/title/scope` and `systems[].id/name`); read router + consumer
+end-to-end; draft Pydantic v2 models inline; add `response_model=` +
+`operation_id=` to every route.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [api/reports.py](api/reports.py) | Added 5 Pydantic v2 response models (2 strict — `ReportCatalogResponse` wrapping `ReportCatalogItem`, `ReportSystemsResponse` wrapping `ReportSystemItem`; 1 permissive — `ReportDataResponse` with `ConfigDict(extra="allow")` pinning only `report_title` / `generated_at` / `audience` per compound rule 25a, since the report payload diverges across the six builders). All 6 routes carry `operation_id="reports_<resource>_<verb>"`. The 3 export endpoints (`export.json`/`.csv`/`.pdf`) get `operation_id` only — they return raw `Response` / `HTMLResponse` so FastAPI skips runtime `response_model` validation anyway; documenting the raw body via OpenAPI was not worth the schema complexity. |
+| #2 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. +163/-13: 5 new component schemas + 6 cleaned-up operationIds (replacing FastAPI auto-generated `catalog_api_reports_catalog_get` style with `reports_catalog_list`). No removed routes; no shape changes to existing schemas. |
+
+**Sweep progress:** 2/25 routers done (11/66 routes — api/security.py 5 +
+api/reports.py 6). Next candidates per SESSION-27 plan: `api/analytics.py`
+(5 routes, medium UI coupling) or `api/connectors.py` (4 routes, low
+coupling). `api/guide.py` still deferred (9 routes, high SPA surface).
+
+**Verification.** `python -c "from api.reports import router; print(len(router.routes), [r.operation_id for r in router.routes])"` → 6 routes, all 6 `reports_*` op_ids present. Spec diff smoke (`git diff docs/openapi-v1.json | grep -E 'operationId|Report*'`) matched expectations: 5 new schemas, 6 renamed operationIds, zero removed routes. Local `import dashboard` still logs `openapi.drift.production_warn` — expected per compound rule 25b (`ci`-profile artifact is the only committable one). Prod smoke deferred to post-deploy verifier; no UI consumer change since `static/reports.html` only reads stable discriminator fields that were already preserved.
+
+Compound rules earned this session:
+- **Session 26a:** For routes that return a `Response` subclass (`JSONResponse`,
+  `HTMLResponse`, raw `Response`) FastAPI skips runtime `response_model`
+  validation but **still uses it for OpenAPI schema generation**. This is
+  the safest path for documenting JSON-returning endpoints that currently
+  return `JSONResponse(...)` rather than a dict: you get the schema in the
+  spec without altering serialization behavior. The 3 raw-binary exports
+  (`.csv`, `.pdf`) intentionally got `operation_id` only — adding a
+  response_model would have been schema-noise without payload typing.
+- **Session 26b:** Permissive-model pattern (compound 25a) extends cleanly to
+  multi-builder dispatch routes like `GET /reports/{report_type}`. The
+  alternative — six discriminated Union members keyed on `report_type` —
+  would have required either (a) freezing six internal `domain.reports`
+  builder shapes into the public OpenAPI contract, or (b) duplicating the
+  shape-evolution logic in two places. Permissive + pinned discriminators
+  defers that decision to whoever splits the route per type later, without
+  forcing it now.
+
 ## Files — Planned
 
-### Sessions 26+ — OpenAPI response-model sweep continuation (24/25 routers remaining)
-Session 25 closed `api/security.py` (5/66 routes). Remaining top offenders:
-`guide.py` (9 — defer; high SPA coupling), `reports.py` (6), `analytics.py` (5),
+### Sessions 27+ — OpenAPI response-model sweep continuation (23/25 routers remaining)
+Session 26 closed `api/reports.py` (6/66 routes). Remaining top offenders:
+`guide.py` (9 — defer; high SPA coupling), `analytics.py` (5),
 `domains_api.py` (5), `connectors.py` (4), `evidence.py` (4). Recommended next
 target: `api/reports.py` or `api/analytics.py` — moderate route count, mid-
 risk UI coupling. Pattern locked by Session 25:
@@ -489,7 +527,7 @@ Closed in Session 25: `api.aigovern.sandboxhub.co` was already bound with SNI SS
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
-- Track A: A1 OpenAPI hardening (per-router series, 1/25 done Session 25), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
+- Track A: A1 OpenAPI hardening (per-router series, 2/25 done Sessions 25-26), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
 - Track B: ~~B1 `tests/test_deploy_completeness.py`~~ ✓ Session 23, B2 ARCHITECTURE.md backfill ✓ Sessions 11-24 inline, ~~B3 SESSION-12B §6 update~~ ✓ Session 24
 - Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy ✓ Session 19
 
