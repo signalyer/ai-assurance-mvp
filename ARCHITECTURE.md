@@ -536,14 +536,53 @@ Compound rule earned this session:
   rollup payloads (like `AnalyticsResponse`'s empty-vs-populated asymmetry),
   not as a reflex.
 
+## Files — Built (2026-05-24, Session 28)
+### Session 28 (Track A fourth router — api/connectors.py)
+Fourth per-router OpenAPI sweep. UI-consumer grep across `static/` and
+`team-portal/` returned **zero hits** — only doc / plan files reference
+`/api/grc/connectors/v2/`. Lowest-coupling target in the sweep so far; per
+compound rule 27a, all four routes get **strict** response models (no
+`extra="allow"` anywhere — every payload shape is fully known and stable).
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [api/connectors.py](api/connectors.py) | Added 6 Pydantic v2 response models — `ConnectorSummary` (11 fields), `ConnectorListResponse` (envelope), `SyncResultModel` (9 fields mirroring `domain.connectors.SyncResult` dataclass; `error: Optional[str]`, `sample_ids: dict[str, list[str]]`), `SyncAllTotals` (5 ints), `SyncAllResponse` (envelope), `ConnectorResultsResponse` (4× `list[dict]` + `sync_count`). Domain-model payloads (EvalResult/Finding/RuntimeEvent/Evidence) typed as `list[dict]` — already validated by domain layer via `model_dump(mode="json")`; binding to full domain Pydantic models would re-validate on response and couple the connectors OpenAPI surface to every domain schema bump. All 4 routes carry `operation_id` (`connectors_list_get`, `connectors_sync_run`, `connectors_sync_all_run`, `connectors_results_get`) — `_run` semantic verb chosen for the two POST sync actions per reports.py precedent. |
+| #2 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. New component schemas: `ConnectorSummary`, `ConnectorListResponse`, `SyncResultModel`, `SyncAllTotals`, `SyncAllResponse`, `ConnectorResultsResponse`. 4 new operationIds on `/api/grc/connectors/v2/*`. Pre-existing `ConnectorsOut`/`ConnectorStatusOut` schemas (different router) untouched. |
+
+**Sweep progress:** 4/25 routers done (20/66 routes — security 5 + reports 6 +
+analytics 5 + connectors 4). Next candidates: `api/evidence.py` (4, medium),
+`api/domains_api.py` (5, medium-high). `api/guide.py` still deferred (9, high
+SPA surface).
+
+**Verification.** `python -c "import api.connectors"` → ok (4 routes). OpenAPI
+export wrote 432061 bytes. Inspector confirmed 4/4 operationIds + 6/6 new
+schemas in `components.schemas`. `TestClient` end-to-end against
+`dashboard.app`: all four routes return 200 with shapes matching the strict
+models exactly — POST `/sync` returns the 9 `SyncResultModel` fields, POST
+`/sync-all` `totals` carries exactly the 5 expected keys. Local `import
+dashboard` still logs `openapi.drift.production_warn` — expected per compound
+rule 25b (dashboard generates under production profile vs the ci-profile spec
+on disk).
+
+**Open issue surfaced this session (not a fix — log for a focused later
+session):** Prod `/api/health` reports SHA `241991b` (the Session 27 doc
+commit), not `149bc8e` (the Session 27 code commit). The Session 27 code IS
+deployed — `241991b` is a descendant of `149bc8e` so its worktree contains
+the analytics.py and openapi-v1.json changes — but the doc-only commit
+triggered a deploy it should have been filtered out of. Indicates
+`.github/workflows/azure-deploy.yml` `paths-ignore` is not catching
+`ARCHITECTURE.md` / `docs/plans/**` (Session 22 regression resurfacing). No
+runtime impact; wastes deploy cycles and risks masking a real deploy
+failure. Recommend dedicated single-file workflow-fix session with a
+doc-only test commit to confirm filter.
+
 ## Files — Planned
 
-### Sessions 28+ — OpenAPI response-model sweep continuation (22/25 routers remaining)
-Session 27 closed `api/analytics.py` (5/66 routes). Remaining top offenders:
+### Sessions 29+ — OpenAPI response-model sweep continuation (21/25 routers remaining)
+Session 28 closed `api/connectors.py` (4/66 routes). Remaining top offenders:
 `guide.py` (9 — defer; high SPA coupling), `domains_api.py` (5),
-`connectors.py` (4), `evidence.py` (4). Recommended next target:
-`api/connectors.py` (lowest coupling) or `api/evidence.py`. Pattern locked
-by Sessions 25-27:
+`evidence.py` (4). Recommended next target: `api/evidence.py`. Pattern locked
+by Sessions 25-28:
 1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
 2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
    crosses three routers).
