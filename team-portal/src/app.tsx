@@ -9,6 +9,7 @@ import { SdkQuickstartPage } from './pages/sdk-quickstart/SdkQuickstartPage';
 import { RtfRequestPage } from './pages/rtf/RtfRequestPage';
 import { PortfolioPage } from './pages/portfolio/PortfolioPage';
 import { RagCorpusPage } from './pages/rag/RagCorpusPage';
+import { AdversarialPage } from './pages/adversarial/AdversarialPage';
 
 export function App() {
   return (
@@ -24,6 +25,7 @@ export function App() {
         <Route path="/rtf" component={RtfRequestPage} />
         <Route path="/portfolio" component={PortfolioPage} />
         <Route path="/rag" component={RagCorpusPage} />
+        <Route path="/adversarial" component={AdversarialPage} />
         <Route>
           <div class="empty-state">Page not found.</div>
         </Route>

@@ -56,6 +56,7 @@ from api.ai_system_edit import router as ai_system_edit_router
 from api.aws_demo import router as aws_demo_router
 from api.memory import router as memory_router
 from api.rag import router as rag_router
+from api.adversarial import router as adversarial_router
 from api.frameworks import router as frameworks_router
 from api.agents import router as agents_router
 from api.agent_bindings import router as agent_bindings_router
@@ -279,6 +280,7 @@ app.include_router(ai_system_edit_router)
 app.include_router(aws_demo_router)
 app.include_router(memory_router)
 app.include_router(rag_router)
+app.include_router(adversarial_router)
 app.include_router(frameworks_router)
 app.include_router(agents_router)
 app.include_router(agent_bindings_router)

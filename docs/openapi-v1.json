@@ -1518,6 +1518,28 @@
         "title": "CascadeResultOut",
         "type": "object"
       },
+      "CategoriesResponse": {
+        "description": "Response from GET /api/adversarial/categories.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "total_probes": {
+            "title": "Total Probes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "categories",
+          "total_probes"
+        ],
+        "title": "CategoriesResponse",
+        "type": "object"
+      },
       "ChainVerifyResponse": {
         "additionalProperties": false,
         "description": "Response from GET /api/audit/verify.",
@@ -6461,6 +6483,43 @@
         "title": "RotateKeyOut",
         "type": "object"
       },
+      "RunSuiteRequest": {
+        "description": "Body for POST /api/adversarial/run.",
+        "properties": {
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categories"
+          },
+          "model_name": {
+            "default": "claude-sonnet-4-6",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model Name",
+            "type": "string"
+          },
+          "model_provider": {
+            "default": "anthropic",
+            "enum": [
+              "anthropic",
+              "openai"
+            ],
+            "title": "Model Provider",
+            "type": "string"
+          }
+        },
+        "title": "RunSuiteRequest",
+        "type": "object"
+      },
       "RuntimeActionOut": {
         "additionalProperties": false,
         "description": "Audit-log entry produced by every runtime state mutation.",
@@ -7772,6 +7831,68 @@
           }
         },
         "summary": "Page Analytics Usage"
+      }
+    },
+    "/api/adversarial/categories": {
+      "get": {
+        "description": "Return the available adversarial probe categories and total probe count.",
+        "operationId": "list_categories_api_adversarial_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Categories",
+        "tags": [
+          "adversarial"
+        ]
+      }
+    },
+    "/api/adversarial/run": {
+      "post": {
+        "description": "Run the adversarial suite and stream per-probe results via SSE.\n\nResponse type: text/event-stream. Events fired (each with `event:` header):\n  start  \u2014 once, with model + total_probes + categories\n  probe  \u2014 once per probe, with index/total/resisted/severity/latency_ms\n  done   \u2014 once at the end, with the full summary dict\n  error  \u2014 only on engine failure, before the stream terminates\n\nEmpty `categories` is rejected at the boundary (422) so the SPA never\nstreams an empty run.",
+        "operationId": "run_suite_api_adversarial_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunSuiteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Suite",
+        "tags": [
+          "adversarial"
+        ]
       }
     },
     "/api/agents": {

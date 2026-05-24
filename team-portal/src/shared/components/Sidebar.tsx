@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/rtf', label: 'Right-to-Forget' },
   { path: '/portfolio', label: 'My Portfolio' },
   { path: '/rag', label: 'RAG Corpus' },
+  { path: '/adversarial', label: 'Adversarial Suite' },
 ];
 
 export function Sidebar() {
