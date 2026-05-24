@@ -1,0 +1,77 @@
+name: deploy
+
+# Build deploy zip and push to Azure App Service app-aigovern-dev.
+# Triggered on push to main. The build-zip step bakes GITHUB_SHA into a
+# BUILD_SHA file inside the zip; the post-deploy smoke test reads
+# /api/health and confirms the live sha matches the commit we deployed.
+#
+# Session 19: closes the "is it actually deployed?" gap. Previously every
+# session's merge required `python deploy/build-zip.py` + manual zip push
+# (deploy/deploy-and-poll.ps1) — easy to forget, no audit trail.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-app-aigovern-dev
+  cancel-in-progress: false  # never cancel a deploy mid-flight
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # GITHUB_SHA env is enough; no git history needed
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build deploy zip
+        run: python deploy/build-zip.py
+        # build-zip.py reads GITHUB_SHA (always set by Actions) and writes it
+        # into the zip as a BUILD_SHA file. dashboard.py reads BUILD_SHA at
+        # startup and returns it from /api/health.
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: app-aigovern-dev
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AIGOVERN }}
+          package: deploy/app.zip
+
+      - name: Wait for app to come ready
+        # App Service B1 cold-restart after a deploy can take 60-120s.
+        # Memory rule: "cold-start cooldown" — polling too aggressively
+        # makes the platform delay readiness further.
+        run: |
+          for i in $(seq 1 30); do
+            sleep 10
+            code=$(curl -s -o /tmp/health.json -w "%{http_code}" https://app-aigovern-dev.azurewebsites.net/api/health || true)
+            echo "[$i] /api/health -> $code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/health.json
+              echo
+              break
+            fi
+          done
+          [ "$code" = "200" ] || { echo "App did not come ready"; exit 1; }
+
+      - name: Verify deployed SHA matches commit
+        run: |
+          deployed=$(curl -fsS https://app-aigovern-dev.azurewebsites.net/api/health | python -c "import json,sys; print(json.load(sys.stdin).get('sha',''))")
+          echo "deployed sha: $deployed"
+          echo "expected sha: $GITHUB_SHA"
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "::error::Deployed SHA does not match commit. Deploy likely failed silently (memory rule: 'OneDeploy CLI polling lies') or app served stale zip."
+            exit 1
+          fi
+          echo "OK: live sha matches commit"

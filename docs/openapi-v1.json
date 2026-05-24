@@ -13278,7 +13278,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "Return API health status.\n\nReturns only {\"status\": \"ready\" | \"incomplete\"}.\nThe previous api_keys disclosure (a map of configured-key flags) has been\nremoved in Session 10 -- it leaked security-relevant configuration to\nunauthenticated callers (SECURITY DEBT -- Session 09, closed here).",
+        "description": "Return API health status plus the deployed build SHA.\n\nReturns {\"status\": \"ready\" | \"incomplete\", \"sha\": \"<40-char-or-unknown>\"}.\nThe sha field (Session 19) lets deploy verification confirm which commit\nis live without authenticating. The previous api_keys disclosure was\nremoved in Session 10.",
         "operationId": "health_check_api_health_get",
         "responses": {
           "200": {

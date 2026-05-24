@@ -315,18 +315,39 @@ async def _seed_agents_on_startup() -> None:
         print(f"[startup] seed_agents failed (non-fatal): {exc}")
 
 
+def _read_build_sha() -> str:
+    """Read the BUILD_SHA file baked into the deploy zip.
+
+    Session 19: enables deploy-drift detection. Falls back to GITHUB_SHA env
+    var (CI runs the app directly) then 'unknown'. Read once at import.
+    """
+    try:
+        sha_path = Path(__file__).resolve().parent / "BUILD_SHA"
+        if sha_path.exists():
+            return sha_path.read_text(encoding="ascii").strip() or "unknown"
+    except Exception:  # noqa: BLE001
+        pass
+    return os.getenv("GITHUB_SHA", "unknown").strip() or "unknown"
+
+
+_BUILD_SHA = _read_build_sha()
+
+
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Return API health status.
+    """Return API health status plus the deployed build SHA.
 
-    Returns only {"status": "ready" | "incomplete"}.
-    The previous api_keys disclosure (a map of configured-key flags) has been
-    removed in Session 10 -- it leaked security-relevant configuration to
-    unauthenticated callers (SECURITY DEBT -- Session 09, closed here).
+    Returns {"status": "ready" | "incomplete", "sha": "<40-char-or-unknown>"}.
+    The sha field (Session 19) lets deploy verification confirm which commit
+    is live without authenticating. The previous api_keys disclosure was
+    removed in Session 10.
     """
     status = validate_api_keys()
     all_required = bool(status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY"))
-    return {"status": "ready" if all_required else "incomplete"}
+    return {
+        "status": "ready" if all_required else "incomplete",
+        "sha": _BUILD_SHA,
+    }
 
 
 @app.get("/api/report/compliance")

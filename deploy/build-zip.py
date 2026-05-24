@@ -70,6 +70,21 @@ def should_skip(relpath: Path) -> bool:
     return False
 
 
+def _resolve_sha() -> str:
+    """Return the build SHA. Prefers GITHUB_SHA (CI), falls back to git, then 'unknown'."""
+    sha = os.getenv("GITHUB_SHA", "").strip()
+    if sha:
+        return sha
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=str(ROOT), stderr=subprocess.DEVNULL
+        )
+        return out.decode("ascii").strip()
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
 def main() -> None:
     if OUT_ZIP.exists():
         OUT_ZIP.unlink()
@@ -106,6 +121,13 @@ def main() -> None:
             raise SystemExit("requirements-deploy.txt missing")
         zf.write(slim, arcname="requirements.txt")
         file_count += 1
+
+        # Bake the build SHA into the zip. /api/health reads BUILD_SHA at startup
+        # so deploy verification can confirm prod matches the intended commit.
+        sha = _resolve_sha()
+        zf.writestr("BUILD_SHA", sha + "\n")
+        file_count += 1
+        print(f"BUILD_SHA baked: {sha}")
 
     size_kb = OUT_ZIP.stat().st_size / 1024
     print(f"Built {OUT_ZIP} ({file_count} files, {size_kb:.1f} KB)")
