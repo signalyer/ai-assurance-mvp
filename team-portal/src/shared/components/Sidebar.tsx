@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/sdk', label: 'SDK Quickstart' },
   { path: '/rtf', label: 'Right-to-Forget' },
   { path: '/portfolio', label: 'My Portfolio' },
+  { path: '/rag', label: 'RAG Corpus' },
 ];
 
 export function Sidebar() {

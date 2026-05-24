@@ -8,6 +8,7 @@ import { MemoryPage } from './pages/memory/MemoryPage';
 import { SdkQuickstartPage } from './pages/sdk-quickstart/SdkQuickstartPage';
 import { RtfRequestPage } from './pages/rtf/RtfRequestPage';
 import { PortfolioPage } from './pages/portfolio/PortfolioPage';
+import { RagCorpusPage } from './pages/rag/RagCorpusPage';
 
 export function App() {
   return (
@@ -22,6 +23,7 @@ export function App() {
         <Route path="/sdk" component={SdkQuickstartPage} />
         <Route path="/rtf" component={RtfRequestPage} />
         <Route path="/portfolio" component={PortfolioPage} />
+        <Route path="/rag" component={RagCorpusPage} />
         <Route>
           <div class="empty-state">Page not found.</div>
         </Route>
