@@ -114,6 +114,12 @@ Things explicitly out of scope so future sessions don't drift:
 
 **Total:** 22 surfaces, of which **18 already exist in V1** and **4 are net-new pages**.
 
+### Decision log — surface placement
+
+| Date | Question | Decision | Rationale |
+|---|---|---|---|
+| 2026-05-24 | Should **Findings** dual-home on Team Workspace (filtered to own systems) in addition to CISO Console? | **No — CISO Console only.** | V2 deliberately split write-heavy engineer self-serve from governance read-overlay. Findings are governance artifacts; engineers see *their* operational signals via Runtime (#6) and Evals (#4). Dual-homing would require engine-side scope filtering + a second SPA page + two smoke probes for limited engineer-actionable value. Reversible: add a filtered Team-Workspace view later if engineers ask for it. |
+
 ---
 
 ## 4. What stays the same (the 80%)
