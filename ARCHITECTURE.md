@@ -317,6 +317,29 @@ Compound rules earned this session:
 - **Session 19c:** `deploy/build-zip.py` uses an explicit whitelist (not a `.funcignore` blacklist) so missing files fail visibly — but only if you actually run the deploy. Without CI auto-deploy, the whitelist drift accumulated silently for 6 sessions. Compound: any explicit-allowlist deploy needs CI to enforce its own correctness.
 - **Session 19d:** Verify deploys with a SHA round-trip, never a 200 health check. `/api/health` 200 means a container is serving — not the container you just shipped. Bake commit SHA into the deploy artifact at build time, verify at smoke-test time.
 
+## Files — Built (2026-05-24, Session 20)
+### Session 20 (adversarial.py tech debt cleanup)
+Cleared two pre-existing rule violations flagged in Session 18's risk register,
+now safe to refactor because Session 19's SHA round-trip catches regressions
+in ~90s.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [adversarial.py](adversarial.py) | Lazy-imported `anthropic` + `openai` SDKs inside `run_single_probe()` (was module-top-level). `/api/adversarial/categories` no longer drags in either SDK transitively. |
+| #1 | [adversarial.py](adversarial.py) | Parallelized probe execution in both `run_adversarial_suite()` and `run_adversarial_suite_streaming()` via `ThreadPoolExecutor(max_workers=5)` + `as_completed`. Sync-generator interface preserved so the SSE wrapper's `asyncio.to_thread(next, gen, sentinel)` drain pattern (Session 18c) keeps working unchanged. 13-probe wall clock: ~40-60s → ~10-15s. |
+| #2 | [tests/test_adversarial_lazy_imports.py](tests/test_adversarial_lazy_imports.py) | NEW. AST-walks `adversarial.py` asserting no top-level `import anthropic`/`import openai`. Plus a runtime check that neither symbol leaks into the module namespace at import time. Belt-and-suspenders against regression. |
+
+**SSE protocol stability.** Event shape verified compatible with the SPA
+consumer at `team-portal/src/pages/adversarial/AdversarialPage.tsx`:
+`start` / `probe` / `done` event names unchanged; `probe` events still carry
+`{index, total, category, probe_name, severity, resisted, confidence, reason,
+error, latency_ms}`. `index` now reflects completion order (not submission
+order), which is fine — the SPA uses it for the row key and a progress
+counter, both of which only require uniqueness ≤ total.
+
+Compound rule earned this session:
+- **Session 20a:** When parallelizing a sync generator that already drives an SSE stream, keep it sync — don't convert to async. The wrapping `asyncio.to_thread(next, gen, sentinel)` pattern is the contract; converting the inner generator to `async def` would force a rewrite of the wrapper and break the "engine is sync, transport is async" separation. Use `ThreadPoolExecutor` + `as_completed` inside the sync generator instead.
+
 ## Files — Planned
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)

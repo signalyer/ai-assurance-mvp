@@ -6,12 +6,16 @@ lightweight self-contained module for the AI Assurance platform.
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Iterator, Optional
 from dotenv import load_dotenv
-from anthropic import Anthropic
-from openai import OpenAI
 
 load_dotenv()
+
+# Concurrency cap for parallel probe execution. 5 keeps us comfortably under
+# both Anthropic and OpenAI default tier rate limits while still cutting a
+# 13-probe run from ~40-60s sequential to ~10-15s wall clock.
+_PROBE_CONCURRENCY = 5
 
 
 # Adversarial probe suite — categorized attacks
@@ -196,6 +200,17 @@ def run_single_probe(
         start = time.time()
 
         if model_provider == "anthropic":
+            try:
+                from anthropic import Anthropic  # noqa: PLC0415 — lazy: heavy SDK
+            except ImportError as exc:
+                return {
+                    "category": category,
+                    "probe_name": probe["name"],
+                    "severity": probe["severity"],
+                    "error": f"anthropic SDK not installed: {exc}",
+                    "model": model_name,
+                    "provider": model_provider,
+                }
             client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
                 model=model_name,
@@ -205,6 +220,17 @@ def run_single_probe(
             response_text = message.content[0].text
             tokens = message.usage.input_tokens + message.usage.output_tokens
         elif model_provider == "openai":
+            try:
+                from openai import OpenAI  # noqa: PLC0415 — lazy: heavy SDK
+            except ImportError as exc:
+                return {
+                    "category": category,
+                    "probe_name": probe["name"],
+                    "severity": probe["severity"],
+                    "error": f"openai SDK not installed: {exc}",
+                    "model": model_name,
+                    "provider": model_provider,
+                }
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             completion = client.chat.completions.create(
                 model=model_name,
@@ -270,20 +296,26 @@ def run_adversarial_suite(
     if categories is None:
         categories = list(ADVERSARIAL_PROBES.keys())
 
-    results = []
-    total_probes = 0
+    flat_probes: list[tuple[str, dict]] = [
+        (c, p) for c in categories if c in ADVERSARIAL_PROBES
+        for p in ADVERSARIAL_PROBES[c]
+    ]
+    total_probes = len(flat_probes)
     resisted_count = 0
     failed_by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    results: list[dict] = []
 
-    for category in categories:
-        if category not in ADVERSARIAL_PROBES:
-            continue
-
-        for probe in ADVERSARIAL_PROBES[category]:
-            result = run_single_probe(model_provider, model_name, probe, category)
+    # Probes are independent network-bound calls — run in parallel under a
+    # bounded thread pool. Order doesn't matter for the summary; each result
+    # already carries its own category + probe_name.
+    with ThreadPoolExecutor(max_workers=_PROBE_CONCURRENCY) as pool:
+        futures = [
+            pool.submit(run_single_probe, model_provider, model_name, probe, category)
+            for category, probe in flat_probes
+        ]
+        for fut in as_completed(futures):
+            result = fut.result()
             results.append(result)
-            total_probes += 1
-
             if result.get("resisted"):
                 resisted_count += 1
             elif "error" not in result:
@@ -338,9 +370,9 @@ def run_adversarial_suite_streaming(
        "latency_ms": int, "error": str|None, "reason": str|None}
       {"event": "done", "summary": {...same fields as run_adversarial_suite()...}}
 
-    Each probe still blocks on a real Anthropic/OpenAI call (the underlying
-    SDK is sync). For a 13-probe suite this is ~40-60s wall time — exactly
-    why the API surface above this is SSE rather than a single JSON response.
+    Probes run concurrently via a bounded thread pool (concurrency cap of
+    _PROBE_CONCURRENCY=5). A 13-probe suite drops from ~40-60s sequential to
+    ~10-15s wall clock. SSE keeps the SPA responsive across that window.
 
     Backward compatibility: run_adversarial_suite() (above) is unchanged;
     new callers wanting incremental progress use this generator.
@@ -367,28 +399,39 @@ def run_adversarial_suite_streaming(
         "CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0,
     }
 
-    for i, (category, probe) in enumerate(flat_probes):
-        result = run_single_probe(model_provider, model_name, probe, category)
-
-        if result.get("resisted"):
-            resisted_count += 1
-        elif "error" not in result:
-            severity = result.get("severity", "MEDIUM")
-            failed_by_severity[severity] = failed_by_severity.get(severity, 0) + 1
-
-        yield {
-            "event": "probe",
-            "index": i + 1,
-            "total": total,
-            "category": category,
-            "probe_name": probe["name"],
-            "severity": probe["severity"],
-            "resisted": result.get("resisted"),
-            "confidence": result.get("confidence"),
-            "reason": result.get("reason"),
-            "error": result.get("error"),
-            "latency_ms": result.get("latency_ms", 0),
+    # Run probes in parallel under a bounded thread pool; yield each result
+    # as it completes. `index` reflects completion order, not submission order
+    # — the SPA uses (index, probe_name) as a row key and renders index/total
+    # as a progress counter, so monotonic completion-order indices are fine.
+    with ThreadPoolExecutor(max_workers=_PROBE_CONCURRENCY) as pool:
+        future_to_meta = {
+            pool.submit(run_single_probe, model_provider, model_name, probe, category):
+                (category, probe)
+            for category, probe in flat_probes
         }
+        for i, fut in enumerate(as_completed(future_to_meta)):
+            category, probe = future_to_meta[fut]
+            result = fut.result()
+
+            if result.get("resisted"):
+                resisted_count += 1
+            elif "error" not in result:
+                severity = result.get("severity", "MEDIUM")
+                failed_by_severity[severity] = failed_by_severity.get(severity, 0) + 1
+
+            yield {
+                "event": "probe",
+                "index": i + 1,
+                "total": total,
+                "category": category,
+                "probe_name": probe["name"],
+                "severity": probe["severity"],
+                "resisted": result.get("resisted"),
+                "confidence": result.get("confidence"),
+                "reason": result.get("reason"),
+                "error": result.get("error"),
+                "latency_ms": result.get("latency_ms", 0),
+            }
 
     security_score = (resisted_count / total) if total > 0 else 0.0
 
