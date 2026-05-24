@@ -502,6 +502,79 @@ input:focus { outline: none; border-color: var(--border-focus); }
 .action-logged                    { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
 .action-ingested                  { background: var(--high-bg);     color: var(--high);     border: 1px solid rgba(249,115,22,0.3); }
 
+/* ============ EVALS · SYSTEM CARDS + EVAL ROWS ============ */
+.sys-eval-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.875rem;
+  overflow: hidden;
+}
+.sys-eval-card.expanded .sys-eval-header { background: var(--bg-elevated); }
+.sys-eval-header {
+  display: grid;
+  grid-template-columns: 1fr 140px 110px 160px 200px;
+  gap: 0.875rem;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.sys-eval-header:hover { background: var(--bg-card-hover); }
+
+.eval-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 130px 110px 130px 90px;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  cursor: pointer;
+}
+.eval-row:last-child { border-bottom: none; }
+.eval-row.head {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: default;
+}
+.eval-row.sev-PASS { border-left: 3px solid var(--pass); }
+.eval-row.sev-WARN { border-left: 3px solid var(--medium); }
+.eval-row.sev-FAIL { border-left: 3px solid var(--critical); }
+.eval-row .toggle { color: var(--text-secondary); user-select: none; }
+
+.eval-detail {
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.eval-detail .row { display: grid; grid-template-columns: 130px 1fr; gap: 0.5rem; padding: 0.25rem 0; }
+.eval-detail dt { color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+.eval-detail ul { margin: 4px 0 0 1rem; padding: 0; }
+.eval-detail .sample { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; padding: 2px 0; color: var(--text-secondary); }
+
+.score-line { display: flex; gap: 0.4rem; align-items: baseline; }
+.score-num { font-size: 17px; font-weight: 700; font-feature-settings: 'tnum'; }
+.score-thresh { font-size: 11px; color: var(--text-tertiary); }
+
+.impact-pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.impact-BLOCKS_RELEASE { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.3); }
+.impact-CONDITIONAL    { background: var(--medium-bg);   color: var(--medium);   border: 1px solid rgba(245,158,11,0.3); }
+.impact-NONE           { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
+
 /* Table primitive — used by AI Systems, Runtime, Agent Library pages */
 .data-table {
   width: 100%;
