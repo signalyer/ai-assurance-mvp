@@ -362,6 +362,24 @@ Compound rules earned this session:
 - **Session 21a:** `os.environ.setdefault()` in a build/export script is nondeterminism waiting to happen. It looks like a defensive guard but is really "trust whatever the shell happens to leave alone." For any artifact whose drift triggers CI gates, force-set the env contract explicitly and document the profile. Reserve setdefault for opt-in debugging modes.
 - **Session 21b:** When GitHub deprecates a runner-level dependency (Node 20→24), prefer the workflow-scope env flag (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`) over bumping every action version. The env flag is reversible (delete one line); version bumps compound with each action's own breaking changes (`actions/checkout@v5` may change defaults). Only bump versions when an action gains a feature you actually want.
 
+## Files — Built (2026-05-24, Session 22)
+### Session 22 (CI hygiene: deploy path filter)
+Pure CI change — no app code touched. Closes the Session 21 carry-over:
+doc-only / CI-only pushes were triggering full 3-min App Service redeploys.
+Session 21's own commits (`1231cd4` workflow + `7c86b8d` script + `ad1f98f`
+plan) each fired a deploy that proved nothing about runtime behavior.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [.github/workflows/deploy.yml](.github/workflows/deploy.yml) | Added `paths-ignore` block under `on.push`: `docs/**`, `**.md`, `.github/workflows/contract-tests*.yml`. Path filters are per-push (not per-file), so any mixed code+doc commit still deploys. `workflow_dispatch` retained as escape hatch for wrongly-skipped pushes. |
+
+**Done criteria:** a doc-only follow-up commit shows zero new entries in the
+deploy workflow's run history. A code-touching commit deploys as before.
+
+Compound rules earned this session:
+- **Session 22a:** GitHub's `paths-ignore` is evaluated against the union of changed files in the push, not file-by-file. A commit that changes one `.py` and ten `.md` files still triggers the workflow. This is the correct safety semantic for a deploy filter — opposite of how a naive reader might interpret "ignore." Document this explicitly in any path-filtered workflow; it's the question every future maintainer will ask.
+- **Session 22b:** Keep `workflow_dispatch` on every deploy workflow that has a path filter. Path filters are a heuristic for "what can affect the running app"; the heuristic will sometimes be wrong (e.g. a `MANIFEST.in`-style packaging file that looks like config but ships into the zip). Manual re-trigger costs nothing and unblocks the edge case without weakening the filter.
+
 ## Files — Planned
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)

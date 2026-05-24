@@ -12,6 +12,14 @@ name: deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      # Session 22: skip deploy for changes that can't affect the running app.
+      # Path filters are evaluated per-commit across the diff — a mixed
+      # code+doc commit still triggers deploy. workflow_dispatch below
+      # always allows manual re-trigger if a skip turns out to be wrong.
+      - 'docs/**'
+      - '**.md'
+      - '.github/workflows/contract-tests*.yml'
   workflow_dispatch:
 
 concurrency:
