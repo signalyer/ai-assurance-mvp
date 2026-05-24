@@ -1,7 +1,11 @@
-# Session 22 — Plan (draft)
+# Session 22 — Plan
 
-**Status:** draft — pick one track at session start
+**Status:** Track A complete (commit `b629a01`)
 **Branch:** main (direct commits, ≤3-file changes per session)
+
+This commit itself serves as the done-criteria probe: if no new entry
+appears in `gh run list --workflow=deploy.yml` for this push, the
+`paths-ignore` filter is working.
 
 ## Candidate tracks (pick one)
 
