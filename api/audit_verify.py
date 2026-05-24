@@ -14,11 +14,14 @@ Session 10 hardening:
     and any scrubbed_prompt field from every event payload before returning.
   - Pagination switched from tail-relative (offset from end) to absolute
     from_index (0-based index into the full ordered event list).
+
+Session 13: added operation_id, tightened response models to extra='forbid'.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -34,6 +37,7 @@ _PUBLIC_MODE_STRIP_FIELDS: frozenset[str] = frozenset(
     {"subject_id", "reason", "scrubbed_prompt"}
 )
 
+
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
@@ -42,7 +46,7 @@ _PUBLIC_MODE_STRIP_FIELDS: frozenset[str] = frozenset(
 class ChainVerifyResponse(BaseModel):
     """Response from GET /api/audit/verify."""
 
-    model_config = ConfigDict()
+    model_config = ConfigDict(extra="forbid")
 
     status: str  # "CLEAN" | "BROKEN"
     events_checked: int
@@ -51,11 +55,16 @@ class ChainVerifyResponse(BaseModel):
 
 
 class AuditEventsResponse(BaseModel):
-    """Response from GET /api/audit/events."""
+    """Response from GET /api/audit/events.
 
-    model_config = ConfigDict()
+    `events` is list[dict[str, Any]] because audit events are heterogeneous --
+    every event_type carries different payload fields. Tightening per event_type
+    is a Phase 1.5 follow-up; for now Schemathesis fuzzes the envelope only.
+    """
 
-    events: list[dict]
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[dict[str, Any]]
     total: int
     limit: int
     from_index: int
@@ -82,19 +91,7 @@ def _audit_chain():
 
 
 def _strip_public(event: object) -> object:
-    """Return a copy of *event* with PII-bearing fields removed at any depth.
-
-    Recursively walks nested dicts and lists, dropping any key in
-    ``_PUBLIC_MODE_STRIP_FIELDS`` wherever it appears. Required because audit
-    events nest PII fields inside payload sub-dicts (e.g. RTF_CASCADE_*
-    embeds ``subject_id`` inside the event body).
-
-    Args:
-        event: Any JSON-serialisable value (dict, list, scalar).
-
-    Returns:
-        A deep-stripped copy with sensitive keys removed at every depth.
-    """
+    """Return a copy of *event* with PII-bearing fields removed at any depth."""
     if isinstance(event, dict):
         return {
             k: _strip_public(v)
@@ -111,19 +108,16 @@ def _strip_public(event: object) -> object:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/verify", response_model=ChainVerifyResponse)
+@router.get(
+    "/verify",
+    response_model=ChainVerifyResponse,
+    operation_id="audit_chain_verify",
+)
 async def verify_chain(
     window: int = Query(1000, ge=1, le=100_000, description="Max events to check from tail"),
     full: bool = Query(False, description="Verify entire event log (overrides window)"),
 ) -> ChainVerifyResponse:
-    """Verify the tamper-evident hash chain over recent events.
-
-    With default window=1000 this checks the last 1000 events against their
-    hash chain.  Pass full=true to verify the entire log from genesis.
-
-    Returns status CLEAN or BROKEN.  On BROKEN, broken_at contains the
-    event_id of the first hash mismatch.
-    """
+    """Verify the tamper-evident hash chain over recent events."""
     logger.info("verify_chain: window=%d full=%s", window, full)
     ac = _audit_chain()
 
@@ -151,7 +145,11 @@ async def verify_chain(
     )
 
 
-@router.get("/events", response_model=AuditEventsResponse)
+@router.get(
+    "/events",
+    response_model=AuditEventsResponse,
+    operation_id="audit_events_list",
+)
 async def list_audit_events(
     limit: int = Query(100, ge=1, le=1000, description="Max events to return"),
     from_index: int = Query(0, ge=0, description="Absolute 0-based start index into the full event list"),
@@ -164,21 +162,7 @@ async def list_audit_events(
     ),
     _role: None = Depends(require_role("auditor", "ciso")),
 ) -> AuditEventsResponse:
-    """Return a paged slice of the audit event log.
-
-    Pagination uses an absolute ``from_index`` (not tail-relative offset) so
-    successive pages are stable as new events are appended.
-
-    Events are returned oldest-first within the requested slice.  Each event
-    dict includes event_id, ts, event_type, hash, and prev_hash fields when
-    present.  Pre-genesis events (written before Session 08) will have
-    hash=null and prev_hash=null.
-
-    When ``public_mode=true``, PII-bearing fields (subject_id, reason,
-    scrubbed_prompt) are stripped from every event before returning.
-
-    Requires role: auditor or ciso.
-    """
+    """Return a paged slice of the audit event log. Requires auditor or ciso role."""
     logger.info(
         "list_audit_events: limit=%d from_index=%d public_mode=%s",
         limit, from_index, public_mode,
@@ -186,7 +170,6 @@ async def list_audit_events(
     ac = _audit_chain()
 
     try:
-        # read all events then slice by absolute index
         all_events: list[dict] = await asyncio.to_thread(
             ac._read_jsonl,
             ac.EVENTS_FILE,

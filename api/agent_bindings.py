@@ -17,6 +17,18 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, field_validator
 
+
+class AgentBindingOut(BaseModel):
+    """AgentBinding record. Loosely typed; underlying shape from domain.agent_bindings.
+
+    list_bindings returns enriched dicts with agent_name/agent_team/version_semver
+    added on top of the binding fields; extra='allow' permits the enrichment.
+    """
+    model_config = ConfigDict(extra="allow")
+    id: str
+    system_id: str
+    agent_id: str
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent-bindings"])
@@ -147,7 +159,11 @@ def _enrich_binding(
 # GET /api/systems/{system_id}/bindings
 # ---------------------------------------------------------------------------
 
-@router.get("/api/systems/{system_id}/bindings")
+@router.get(
+    "/api/systems/{system_id}/bindings",
+    response_model=list[AgentBindingOut],
+    operation_id="bindings_list",
+)
 async def list_bindings(system_id: str) -> list[dict[str, object]]:
     """Return all agent bindings for a system, enriched with agent name + version semver.
 
@@ -206,7 +222,12 @@ async def list_bindings(system_id: str) -> list[dict[str, object]]:
 # POST /api/systems/{system_id}/bindings
 # ---------------------------------------------------------------------------
 
-@router.post("/api/systems/{system_id}/bindings", status_code=201)
+@router.post(
+    "/api/systems/{system_id}/bindings",
+    status_code=201,
+    response_model=AgentBindingOut,
+    operation_id="bindings_create",
+)
 async def create_binding(system_id: str, body: CreateBindingRequest) -> dict[str, object]:
     """Bind an agent to a system.
 
@@ -290,7 +311,11 @@ async def create_binding(system_id: str, body: CreateBindingRequest) -> dict[str
 # PATCH /api/systems/{system_id}/bindings/{binding_id}
 # ---------------------------------------------------------------------------
 
-@router.patch("/api/systems/{system_id}/bindings/{binding_id}")
+@router.patch(
+    "/api/systems/{system_id}/bindings/{binding_id}",
+    response_model=AgentBindingOut,
+    operation_id="bindings_update",
+)
 async def update_binding(
     system_id: str,
     binding_id: str,
@@ -368,7 +393,11 @@ async def update_binding(
 # DELETE /api/systems/{system_id}/bindings/{binding_id}
 # ---------------------------------------------------------------------------
 
-@router.delete("/api/systems/{system_id}/bindings/{binding_id}", status_code=204)
+@router.delete(
+    "/api/systems/{system_id}/bindings/{binding_id}",
+    status_code=204,
+    operation_id="bindings_delete",
+)
 async def delete_binding(system_id: str, binding_id: str) -> Response:
     """Remove a binding and unsubscribe the system from agent notifications.
 
