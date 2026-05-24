@@ -256,12 +256,33 @@ PR: [signalyer/ai-assurance-mvp#1](https://github.com/signalyer/ai-assurance-mvp
 (draft) — accumulates all of Sessions 14-17 (17 commits). Branch pushed to
 origin at `47af837`.
 
+## Files — Built (2026-05-24, Session 18)
+### Session 18 (Phase 2 Week 3 close-out — Team Workspace SPA surfaces 9 + 5)
+Brought count from **9/12 → 11/12** (only #3 remains, locked-deferred per
+V2 risk register §9). Two engine deltas added with ADR-style justification,
+both because the *engine* layer existed since prior sessions but the *HTTP*
+layer had never been wired:
+
+| # | File | Purpose |
+|---|---|---|
+| #9 RAG | [api/rag.py](api/rag.py) | NEW. Thin router over `domain/rag_engine.py`. GET /stats, POST /search, POST /documents, DELETE /documents/{id}. Async via `asyncio.to_thread` over sync httpx + OpenAI SDK. Fail-soft when RAG disabled (200 OK with `rag_enabled:false`, never 500). |
+| #9 RAG | [team-portal/src/pages/rag/RagCorpusPage.tsx](team-portal/src/pages/rag/RagCorpusPage.tsx) | NEW. Stats KPIs + search + index form + delete. Mirrors `RtfRequestPage` mutation template. |
+| #5 Adv | [adversarial.py](adversarial.py) | Added `run_adversarial_suite_streaming()` generator. Original `run_adversarial_suite()` unchanged — additive, not a rewrite. |
+| #5 Adv | [api/adversarial.py](api/adversarial.py) | NEW. GET /categories + POST /run returning **text/event-stream** (SSE). First SSE surface in the portal. Sync generator drained via `asyncio.to_thread(next, gen, sentinel)` so the event loop stays responsive while LLM probes block. Errors after stream start surface as an `error` SSE event, not HTTP 500. |
+| #5 Adv | [team-portal/src/pages/adversarial/AdversarialPage.tsx](team-portal/src/pages/adversarial/AdversarialPage.tsx) | NEW. Uses `fetch + ReadableStream` (not EventSource — EventSource is GET-only; needed POST + JSON body). Manual SSE frame parser splits on `\n\n`. Results table fills row-by-row; live progress bar + elapsed timer; final KPIs on `done` event. |
+
+CI workflow drift fixed in same session:
+- [.github/workflows/contract-tests.yml](.github/workflows/contract-tests.yml) — schemathesis v4 renamed `--hypothesis-max-examples` → `--max-examples` and removed `--hooks`; hooks now load via `SCHEMATHESIS_HOOKS=ci.schemathesis_hooks` env var (PEP 420 namespace package, no `__init__.py` needed).
+- Same fix applied to [.github/workflows/contract-tests-nightly.yml](.github/workflows/contract-tests-nightly.yml).
+
+PR: PR #1 squash-merged at [`3b246aa`](https://github.com/signalyer/ai-assurance-mvp/commit/3b246aa) (10/12 cut), then 3 post-PR commits cherry-picked directly to main ([`e4b7886`](https://github.com/signalyer/ai-assurance-mvp/commit/e4b7886), [`7aec9d9`](https://github.com/signalyer/ai-assurance-mvp/commit/7aec9d9), [`4ad2515`](https://github.com/signalyer/ai-assurance-mvp/commit/4ad2515)) per user "don't create any more PRs" rule after PR sync got stuck. Stale `phase/14-team-workspace-scaffold` branch deleted from origin.
+
+Compound rules earned this session:
+- **Session 18a:** GitHub PR head can desync from branch ref when webhook delivery silently fails. `gh pr view --json headRefOid` is the canary; force re-sync via close+reopen if stuck. Empty-commit nudges do NOT fix it.
+- **Session 18b:** schemathesis v4 dropped `--hooks` and `--hypothesis-*` prefixes. If contract-tests fails with "No such option", check for upstream CLI breakage before treating as a contract regression.
+- **Session 18c:** SSE for long-running probes — drain a sync generator with `await asyncio.to_thread(next, gen, sentinel)` per iteration. Don't use `async for` directly over a sync generator; the event loop blocks on every iteration.
+
 ## Files — Planned
-### Session 18 — V2 Phase 2 Week 3 close-out (3 surfaces remaining)
-See `docs/plans/SESSION-18-week3-closeout.md`. Three Team Workspace surfaces
-remain: #9 RAG corpus management (net-new UI), #5 Adversarial test runner
-(net-new + async job UX), #3 Per-system 6-layer config (deferred per V2 risk
-register §9 until "request change" workflow exists).
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Two parallel tracks:
