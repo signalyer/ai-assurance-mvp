@@ -56,6 +56,13 @@ python-dateutil>=2.8.0
 pytz>=2023.3
 PyYAML>=6.0.0
 
+# Starlette SessionMiddleware signer — required at module-load time by
+# middleware/auth.py. Previously only in requirements-deploy.txt, causing
+# CI to fail on OpenAPI export (Session 17 / 2026-05-24). Same drift class
+# as PyYAML (S12) and pydantic-settings (S12B): runtime deps must live here,
+# not only in requirements-deploy.txt.
+itsdangerous>=2.1.2
+
 # Observability — Session 10
 opentelemetry-sdk>=1.27
 azure-monitor-opentelemetry-exporter>=1.0.0b30
