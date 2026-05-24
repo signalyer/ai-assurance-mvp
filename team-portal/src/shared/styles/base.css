@@ -575,6 +575,134 @@ input:focus { outline: none; border-color: var(--border-focus); }
 .impact-CONDITIONAL    { background: var(--medium-bg);   color: var(--medium);   border: 1px solid rgba(245,158,11,0.3); }
 .impact-NONE           { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
 
+/* ============ AGENT LIBRARY ============ */
+.chip-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+  align-items: center;
+}
+.chip {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.agent-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.agent-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.agent-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem; }
+.agent-name { font-weight: 700; font-size: 13px; color: var(--text-primary); }
+.agent-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.agent-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 0.5rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+
+.badge-reusable { background: rgba(99,102,241,0.12);  border: 1px solid rgba(99,102,241,0.35);  color: #a5b4fc; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+.badge-custom   { background: rgba(20,184,166,0.12);  border: 1px solid rgba(20,184,166,0.35);  color: #5eead4; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+.badge-team     { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary); font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
+.badge-risk-LOW      { background: var(--pass-bg);     color: var(--pass);     border: 1px solid rgba(16,185,129,0.3); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+.badge-risk-MEDIUM   { background: var(--medium-bg);   color: var(--medium);   border: 1px solid rgba(245,158,11,0.3); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+.badge-risk-HIGH     { background: var(--high-bg);     color: var(--high);     border: 1px solid rgba(249,115,22,0.3); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+.badge-risk-CRITICAL { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.3);  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+
+/* ============ MODAL (centered, used by Agent Library) ============ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: min(820px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.modal-title { font-weight: 700; font-size: 14px; }
+.modal-close { background: none; border: none; color: var(--text-secondary); font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.modal-close:hover { color: var(--text-primary); }
+.modal-body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+.modal-footer { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+.modal-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.modal-tab {
+  padding: 0.4rem 0.85rem;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.modal-tab:hover:not(.active) { color: var(--text-primary); }
+
+.version-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.version-table th { background: var(--bg-elevated); color: var(--text-secondary); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); text-align: left; }
+.version-table td { padding: 0.4rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.version-table tr:last-child td { border-bottom: none; }
+.version-table tr:hover td { background: var(--bg-elevated); }
+
+.upgrade-banner {
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.35);
+  border-radius: 5px;
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  color: #fcd34d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  display: inline-block;
+  margin-right: 4px;
+}
+.sse-dot.connected { background: var(--pass); }
+
 /* Table primitive — used by AI Systems, Runtime, Agent Library pages */
 .data-table {
   width: 100%;
