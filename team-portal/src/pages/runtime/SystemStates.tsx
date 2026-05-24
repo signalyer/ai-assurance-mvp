@@ -1,14 +1,10 @@
 import type { RuntimeState } from './types';
+import { openStateChange } from './RuntimeModals';
 
 interface Props {
   items: RuntimeState[];
 }
 
-/**
- * Read-only system state cards. Action buttons (kill switch, monitoring,
- * enable/disable) are disabled with "deferred" titles — wired in a
- * follow-up task per the lean-cut pattern.
- */
 export function SystemStates({ items }: Props) {
   if (items.length === 0) return <div class="empty-state">No systems registered.</div>;
 
@@ -42,11 +38,25 @@ export function SystemStates({ items }: Props) {
               <div class="text-sm">{s.monitoring_level}</div>
             </div>
             <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button class="btn btn-sm" disabled title="Pending Phase 2 follow-up">
+              <button
+                class="btn btn-sm"
+                onClick={() => openStateChange({
+                  system: s,
+                  action: s.kill_switch_engaged ? 'reset-kill-switch' : 'kill-switch',
+                })}
+              >
                 {s.kill_switch_engaged ? 'Reset Kill' : 'Kill Switch'}
               </button>
-              <button class="btn btn-sm" disabled title="Pending Phase 2 follow-up">Monitoring</button>
-              <button class="btn btn-sm" disabled title="Pending Phase 2 follow-up">
+              <button
+                class="btn btn-sm"
+                onClick={() => openStateChange({ system: s, action: 'monitoring' })}
+              >
+                Monitoring
+              </button>
+              <button
+                class="btn btn-sm"
+                onClick={() => openStateChange({ system: s, action: 'enabled' })}
+              >
                 {s.enabled ? 'Disable' : 'Enable'}
               </button>
             </div>

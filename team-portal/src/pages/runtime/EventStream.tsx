@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from './types';
+import { openCreateIncident } from './RuntimeModals';
 
 interface Props {
   events: RuntimeEvent[];
@@ -34,7 +35,13 @@ export function EventStream({ events, loading }: Props) {
         const ts = e.timestamp ?? '';
         const sevCls = SEVERITY_BADGE[e.severity] ?? 'badge-neutral';
         return (
-          <div key={e.id} class={`ev-row sev-${e.severity}`}>
+          <div
+            key={e.id}
+            class={`ev-row sev-${e.severity}`}
+            style={{ cursor: 'pointer' }}
+            title="Click to create an incident from this event"
+            onClick={() => openCreateIncident(e)}
+          >
             <div class="text-xs text-tertiary">
               {ts.slice(11, 19)}
               <br />

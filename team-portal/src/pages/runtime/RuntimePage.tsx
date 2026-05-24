@@ -8,6 +8,9 @@ import type {
 } from './types';
 import { EventStream } from './EventStream';
 import { SystemStates } from './SystemStates';
+import {
+  RuntimeModals, runtimeActionError, registerRuntimeReload, openRequestApproval,
+} from './RuntimeModals';
 
 const SOURCES = [
   'Langfuse', 'AWS CloudTrail', 'AWS Security Hub', 'AWS GuardDuty', 'AWS Macie',
@@ -65,7 +68,10 @@ async function loadAll(): Promise<void> {
 }
 
 export function RuntimePage() {
-  useEffect(() => { void loadAll(); }, []);
+  useEffect(() => {
+    registerRuntimeReload(loadAll);
+    void loadAll();
+  }, []);
 
   return (
     <div>
@@ -106,6 +112,9 @@ export function RuntimePage() {
       </div>
 
       {loadError.value && <div class="error-banner">Failed to load runtime data: {loadError.value}</div>}
+      {runtimeActionError.value && (
+        <div class="error-banner">{runtimeActionError.value}</div>
+      )}
 
       <KpiRow />
 
@@ -122,7 +131,14 @@ export function RuntimePage() {
           <Card
             title="Human Approval Queue"
             subtitle="Actions awaiting human approval. TTL-bounded, auto-expire."
-            action={<button class="btn btn-sm btn-primary" disabled title="Pending Phase 2 follow-up">+ Request</button>}
+            action={
+              <button
+                class="btn btn-sm btn-primary"
+                onClick={() => openRequestApproval(aiSystems.value)}
+              >
+                + Request
+              </button>
+            }
           >
             <Approvals items={approvals.value} />
           </Card>
@@ -132,9 +148,11 @@ export function RuntimePage() {
         </div>
       </div>
 
-      <Card title="Runtime Event Stream" subtitle="Latest first — click an event to create an incident (deferred)">
+      <Card title="Runtime Event Stream" subtitle="Latest first — click an event to create an incident">
         <EventStream events={events.value} loading={loading.value} />
       </Card>
+
+      <RuntimeModals />
     </div>
   );
 }
