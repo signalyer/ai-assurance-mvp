@@ -597,7 +597,56 @@ def llm_response_has_trace_id(response, case):
         )
 ```
 
-### 5.3 Schemathesis exclusions
+### 5.4 Nightly Schemathesis against deployed engine
+
+GitHub Actions workflow `.github/workflows/contract-tests-nightly.yml`:
+
+```yaml
+name: contract-tests-nightly
+on:
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC = 02:00 ET / 23:00 PT
+  workflow_dispatch:
+
+jobs:
+  schemathesis-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install schemathesis
+      - name: Schemathesis against deployed engine
+        run: |
+          schemathesis run https://api.aigovern.sandboxhub.co/openapi.json \
+            --checks all \
+            --hypothesis-max-examples 25 \
+            --workers 2 \
+            --hooks ci/schemathesis_hooks.py \
+            --rate-limit 5/s
+      - name: Alert on failure
+        if: failure()
+        run: |
+          # POST to App Insights custom event so the existing alert rules fire
+          curl -X POST "$APP_INSIGHTS_INGESTION_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"contract_drift_nightly","properties":{"branch":"main"}}'
+        env:
+          APP_INSIGHTS_INGESTION_URL: ${{ secrets.APP_INSIGHTS_INGESTION_URL }}
+```
+
+**Lower `--hypothesis-max-examples 25`** (vs 50 in CI) and **`--rate-limit 5/s`** to keep
+load light on App Service B1. **`--workers 2`** for same reason. Estimated cost: ~5-8 min
+runtime, well within the existing B1 cold-start cooldown rules per
+`feedback_appservice_deploy_python.md`.
+
+**Why nightly matters in Phase 1 (not deferred):** the SDK + CLI shipped Session 09 already
+sign requests against the deployed engine. A nightly drift check catches the case where a
+hotfix deploy bypasses the PR-time check (manual deploys per SESSION-13 §2 "What's NOT built"
+item 6). Until CI-on-merge deploy (Track B item B6) ships, nightly is the only deploy-time
+contract gate.
+
+### 5.5 Schemathesis exclusions
 
 ```yaml
 # schemathesis.yaml (project root)
@@ -663,7 +712,67 @@ repos:
         stages: [commit]
 ```
 
-### 6.3 `__version__` source
+### 6.3a Startup drift check in `dashboard.py`
+
+Per §10 resolution #2, `dashboard.py` validates the committed OpenAPI artifact at startup.
+
+```python
+# dashboard.py (additions)
+import json
+import logging
+import os
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+def _validate_openapi_artifact(app: FastAPI) -> None:
+    """Compare generated OpenAPI to committed artifact.
+
+    Per docs/plans/SESSION-13-api-typing-audit.md §10 resolution #2:
+    - Dev/local: fail-closed (raise RuntimeError, refuse to start)
+    - Production: warn-only (log to App Insights, continue serving)
+
+    Environment toggle: SL_OPENAPI_STRICT in {"true", "false"}.
+    Defaults: false in production, true everywhere else.
+    """
+    artifact_path = Path(__file__).parent / "docs" / "openapi-v1.json"
+    if not artifact_path.exists():
+        logger.warning("openapi.artifact_missing path=%s", artifact_path)
+        return
+
+    is_prod = os.environ.get("WEBSITE_SITE_NAME", "").startswith("app-aigovern")
+    strict_default = "false" if is_prod else "true"
+    strict = os.environ.get("SL_OPENAPI_STRICT", strict_default).lower() == "true"
+
+    committed = json.loads(artifact_path.read_text())
+    generated = app.openapi()
+
+    # Compare ignoring info.version (so version bumps don't trip on local dev)
+    def _strip_version(spec: dict) -> dict:
+        s = {**spec, "info": {**spec["info"], "version": "<ignored>"}}
+        return s
+
+    if _strip_version(committed) == _strip_version(generated):
+        return
+
+    msg = (
+        "openapi.drift detected: committed docs/openapi-v1.json does not match "
+        "generated spec. Run `python scripts/export_openapi.py` and commit the diff."
+    )
+    if strict:
+        raise RuntimeError(msg)
+    logger.error("openapi.drift.production_warn %s", msg)
+
+
+# Call after all routers are mounted, before the app starts serving:
+_validate_openapi_artifact(app)
+```
+
+**Why warn-only in prod:** a hotfix deploy that legitimately bumps the artifact would
+otherwise crash-loop the App Service if the artifact wasn't committed first. Production
+logs to App Insights — the existing alert rules pick it up and page within 5 min.
+
+### 6.4 `__version__` source
 
 Create `__version__.py` at repo root:
 
@@ -695,7 +804,7 @@ This replaces the table in SESSION-13 §5 for Track A with a more concrete plan.
 | **2** | Create `api/_models.py` + `api/_errors.py` + `__version__.py`. Wire global exception handlers in `dashboard.py`. Smoke. | Type `api/grc.py` (20 endpoints). Smoke after every 5 endpoints. Commit per logical group. | B2 — ARCHITECTURE.md Sessions 11/12/12B entries |
 | **3** | Type `api/runtime_v2.py` (14) + `api/findings_v2.py` (5) + `api/release_gates.py` (4) + `api/evals_v2.py` (3). | Type Tier P1 routers (assurance_model, ai_system_edit, RTF, audit_verify, batch, agents, agent_bindings, intake). | B1 — `tests/test_deploy_completeness.py` |
 | **4** | Type Tier P2 routers. Add Schemathesis hooks. | Write `scripts/export_openapi.py`. Generate first `docs/openapi-v1.json`. PR review of diff with Praveen. | B3 — SESSION-12B §6 update |
-| **5** | Add `middleware/api_version_alias.py`. Wire `/api/v1/*` alias. Engine custom domain CNAME (A4). | Run full Schemathesis pass locally + verify CI green. Tag `v2-phase-1-complete`. | B6 — GitHub Actions deploy workflow draft (no deploy) |
+| **5** | Add `middleware/api_version_alias.py`. Wire `/api/v1/*` alias. Engine custom domain CNAME (A4). Wire `_validate_openapi_artifact()` in `dashboard.py` (§6.3a). | Run full Schemathesis pass locally + verify CI green. Add nightly workflow (§5.4). Tag `v2-phase-1-complete`. | B6 — GitHub Actions deploy workflow draft (no deploy) |
 
 **Smoke checkpoint after every router commit:**
 ```powershell
@@ -737,29 +846,33 @@ forward through a red smoke.
 
 ---
 
-## 10. Open questions (answer before Day 2 starts)
+## 10. Open questions — RESOLVED 2026-05-23
 
-1. **`__version__` initial value.** Proposed `"2.0.0-phase1"` per §6.3. Alternative: `"1.12.0"`
-   continuing V1 numbering until Phase 5 cutover, then jump to 2.0.0. Recommend the former
-   so the spec advertises "this is V2-track" from Day 2.
+All 5 answered by Praveen before Day 2 start. Decisions are now locked into §6.3, §5,
+§1.2, §1.1 above. Nothing in this section is open.
 
-2. **Where does `dashboard.py` validate the OpenAPI artifact?** Two options: (a) startup check
-   that compares generated spec to committed artifact, fails fast if drift; (b) CI-only check
-   per §5.1. Option (b) is cheaper; option (a) catches local-dev drift faster. Recommend (b).
+1. **`__version__` initial value:** `"2.0.0-phase1"` — locked. Spec advertises V2-track from
+   Day 2. See §6.3.
 
-3. **CISO Console `ConflictDetail` vocabulary lock.** §1.2 lists 4 `conflict_type` values
-   (`GATE_DENIED`, `POLICY_DENIED`, `IDEMPOTENCY`, `STATE_TRANSITION`). Is this the complete
-   list, or are there governance-specific conflicts I'm missing? Most likely complete; flag
-   if not.
+2. **OpenAPI artifact drift check: BOTH.** (a) Startup check in `dashboard.py` compares
+   generated spec to committed `docs/openapi-v1.json` and fails fast on drift in non-prod;
+   (b) CI workflow per §5.1 catches drift before merge. Startup check is **warn-only** in
+   production (logs to App Insights) and **fail-closed** in dev/local. See §6.4 below for
+   the implementation.
 
-4. **`OkResponse` vs returning the mutated resource.** Some POST endpoints currently return
-   `{"ok": True, **resource}`. The audit treats those as "return resource" (typed model),
-   not `OkResponse`. Confirm: do you want explicit `OkResponse` for fire-and-forget mutations
-   (e.g. `notifications/reset`), and full resource echo for state-changing mutations (e.g.
-   `notifications/{id}/resolve`)? Recommend yes.
+3. **`ConflictDetail` vocabulary:** complete. The 4 values (`GATE_DENIED`, `POLICY_DENIED`,
+   `IDEMPOTENCY`, `STATE_TRANSITION`) are the locked set. Adding a new value = minor version
+   bump of `__version__`.
 
-5. **Schemathesis run frequency.** Every PR (locked) — also on a nightly cron against the
-   deployed engine? Recommend deferring nightly to Phase 1.5 to keep CI free during Phase 1.
+4. **`OkResponse` vs full-resource echo:** confirmed split. `OkResponse` for fire-and-forget
+   mutations where the server has no resource state to echo (e.g. `notifications/reset`,
+   purge endpoints). Full typed resource for state-changing mutations where the client wants
+   the new state without a re-fetch (e.g. `notifications/{id}/resolve` returns the resolved
+   notification, `runtime_v2_kill_switch` returns updated `RuntimeStateOut`).
+
+5. **Schemathesis nightly against deployed engine: in Phase 1.** Both PR-time (local
+   uvicorn, fast) AND nightly cron against `aigovern.sandboxhub.co` are in scope this
+   phase. See §5.4 below for the nightly workflow.
 
 ---
 
