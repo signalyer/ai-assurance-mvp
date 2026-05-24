@@ -341,6 +341,27 @@ Compound rules earned this session:
 - **Session 20a:** When parallelizing a sync generator that already drives an SSE stream, keep it sync — don't convert to async. The wrapping `asyncio.to_thread(next, gen, sentinel)` pattern is the contract; converting the inner generator to `async def` would force a rewrite of the wrapper and break the "engine is sync, transport is async" separation. Use `ThreadPoolExecutor` + `as_completed` inside the sync generator instead.
 - **Session 20b:** Session 19d's "200 ≠ fresh" rule applies to the *readiness* check, not just the final verifier. The first Session 20 deploy failed because the wait loop broke on `code=200` after 10s — but App Service was still serving the previous container during the zip-swap window. Collapse "wait for ready" + "verify SHA" into a single loop that polls until `live_sha == GITHUB_SHA`. Any intermediate 200 is meaningless; only SHA match proves the swap completed.
 
+## Files — Built (2026-05-24, Session 21)
+### Session 21 (CI hygiene: Node 24 + OpenAPI export reproducibility)
+Pure CI hardening — no app-code change. Two carried items closed:
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [.github/workflows/deploy.yml](.github/workflows/deploy.yml) | Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'` at job-scope env. Validates the Node 24 runtime flip on our schedule, ahead of the GitHub-forced 2026-06-02 cutover. |
+| #1 | [.github/workflows/contract-tests.yml](.github/workflows/contract-tests.yml) | Same flag, alongside the existing `SL_OPENAPI_STRICT: 'false'`. |
+| #1 | [.github/workflows/contract-tests-nightly.yml](.github/workflows/contract-tests-nightly.yml) | Same flag. New job-level `env:` block. |
+| #2 | [scripts/export_openapi.py](scripts/export_openapi.py) | Replaced `os.environ.setdefault()` with an explicit `SL_OPENAPI_EXPORT_PROFILE` switch. Default `ci` force-sets the canonical env (caller's shell loses); `local` opts back into setdefault behavior for debugging. Output is now byte-reproducible across machines regardless of shell pollution. |
+
+**Validation:** deploy run 26374360142 (commit 1231cd4) ran green under Node 24 in 1m04s — annotation explicitly confirms `actions/checkout@v4`, `actions/setup-python@v5`, and `azure/login@v2` were forced onto Node 24. `docs/openapi-v1.json` regenerated under the new `ci` profile produced a zero-byte diff (existing artifact already canonical).
+
+**Env contract** (`SL_OPENAPI_EXPORT_PROFILE`):
+- `ci` (default) — pins `EVAL_BACKEND=noop`, `SCRUBBER_BACKEND=regex`, `TRACER_BACKEND=noop`, `MEMORY_BACKEND=noop`, `RAG_BACKEND=noop`, `POLICY_BACKEND=noop`, `SL_OPENAPI_SKIP_STARTUP_CHECK=true`. Caller's shell env loses. **This is the only profile whose output is committable.**
+- `local` — legacy setdefault: shell env participates. Useful for inspecting route registration under a real backend, but the output **must not** be committed.
+
+Compound rules earned this session:
+- **Session 21a:** `os.environ.setdefault()` in a build/export script is nondeterminism waiting to happen. It looks like a defensive guard but is really "trust whatever the shell happens to leave alone." For any artifact whose drift triggers CI gates, force-set the env contract explicitly and document the profile. Reserve setdefault for opt-in debugging modes.
+- **Session 21b:** When GitHub deprecates a runner-level dependency (Node 20→24), prefer the workflow-scope env flag (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`) over bumping every action version. The env flag is reversible (delete one line); version bumps compound with each action's own breaking changes (`actions/checkout@v5` may change defaults). Only bump versions when an action gains a feature you actually want.
+
 ## Files — Planned
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)

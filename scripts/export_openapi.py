@@ -24,9 +24,22 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure noop backends so dashboard import doesn't hit Langfuse / Postgres / etc.
-# Matches the CI workflow env (.github/workflows/contract-tests.yml).
-_NOOP_BACKENDS = {
+# Pinned env profile for deterministic OpenAPI export.
+#
+# Session 21: setdefault() was the source of nondeterministic drift -- if a
+# dev had TRACER_BACKEND=langfuse in their shell, the existing value won and
+# the exported schema picked up tracer-induced route mutations. CI happened
+# to be clean so the artifact check fired false positives only locally.
+#
+# Profiles:
+#   ci     (default) -- force the canonical export env. Output is byte-
+#                       reproducible across machines. This is what
+#                       docs/openapi-v1.json is generated under.
+#   local           -- respect the caller's shell env (legacy setdefault
+#                      behavior). Useful for debugging route registration
+#                      under a real backend, but the result MUST NOT be
+#                      committed.
+_CI_PROFILE = {
     "EVAL_BACKEND": "noop",
     "SCRUBBER_BACKEND": "regex",
     "TRACER_BACKEND": "noop",
@@ -37,8 +50,22 @@ _NOOP_BACKENDS = {
     # otherwise (script generates artifact <-> dashboard checks artifact).
     "SL_OPENAPI_SKIP_STARTUP_CHECK": "true",
 }
-for k, v in _NOOP_BACKENDS.items():
-    os.environ.setdefault(k, v)
+_profile = os.environ.get("SL_OPENAPI_EXPORT_PROFILE", "ci").lower()
+if _profile == "ci":
+    # Force-set: caller's shell env loses. This is what makes the artifact
+    # reproducible across dev machines.
+    for k, v in _CI_PROFILE.items():
+        os.environ[k] = v
+elif _profile == "local":
+    for k, v in _CI_PROFILE.items():
+        os.environ.setdefault(k, v)
+else:
+    print(
+        f"ERROR: unknown SL_OPENAPI_EXPORT_PROFILE={_profile!r}. "
+        "Expected 'ci' or 'local'.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 
 def _generate() -> dict:
