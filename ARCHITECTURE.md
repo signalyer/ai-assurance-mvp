@@ -190,7 +190,79 @@ Engine fixes uncovered during smoke verification (folded into the Agent Library 
 
 Verification: all 7 endpoints reached end-to-end through the Vite proxy (200/201), all UI flows driven via `preview_eval` (modals open/submit/close, state refreshes, no console errors). No PR opened per user direction — branch accumulates for now.
 
+## Files — Built (2026-05-24, Session 17)
+### Session 17 (Phase 2 Week 3 — Team Workspace SPA surfaces 8/2/10/11)
+
+Four commits on `phase/14-team-workspace-scaffold`. Brings Team Workspace from
+4/12 surfaces to **9/12**. Zero engine endpoint changes; all four surfaces
+consume existing APIs through the Vite `/api/v1/*` → engine `/api/*` proxy.
+
+`fe99a6e` (#8 Memory inspector + V2 plan addendum + hygiene): new
+`team-portal/src/pages/memory/{types.ts,MemoryPage.tsx}` — four-panel SPA
+decompose of V1 `static/memory.html`. Module-level signals (`stats`,
+`episodes`, `recallResults`, `ctxResult`) matching the Phase 2 pattern.
+Stats KPIs auto-refresh every 30s via `window.setInterval` cleanup-on-unmount.
+Endpoints: `GET /api/memory/stats`, `GET /api/memory/episodes`,
+`GET /api/memory/recall`, `GET /api/memory/context`, plus
+`GET /api/domains/` for the workload picker.
+Also in this commit: `.gitignore` now excludes `ai-systems-inventory-*.csv`
+(session-produced exports). `docs/plans/V2-PORTAL-SPLIT.md` §3 gets a Decision
+Log table — first entry locks Findings to CISO Console only (rejected dual-
+home framing from the Session 17 handoff prompt; reversible if engineers
+later need a filtered Team view).
+
+`258c89f` (#2 SDK Quickstart): new
+`team-portal/src/pages/sdk-quickstart/SdkQuickstartPage.tsx` — pure display
+surface. System picker reuses `/api/grc/ai-systems` (zero new endpoints).
+Snippet template mirrors `sdk/README.md` so divergence is visible at code-
+review time; `scope` ← `system.domain`, `workload_id` ← `system.id`. Per-card
+Copy button with 1.5s "Copied!" flash. Four code blocks: install command,
+env file, decorator stack, plus a "selected system context" sanity panel
+showing what got baked into the snippet.
+
+`5f78bad` (#10 RTF engineer side): new
+`team-portal/src/pages/rtf/{types.ts,RtfRequestPage.tsx}` — form-driven
+cascade submission + own-history table. Client-side validation mirrors the
+Session 08 server validator (subject_id `[A-Za-z0-9._@\-]+`, ≤256 chars;
+reason 1-1024 chars). Submit button disabled until both fields valid; success
+banner shows cascade_id, status, and store/items-removed summary; list
+auto-refreshes. List is reverse-sorted (newest first) — the V1 envelope
+returns oldest-first per audit §1.1; engineer UX wants newest-first.
+Hardcoded `actor = "demo-engineer"` matching the Session 16 pattern.
+Per-store SHA-256 forensics and approval queue stay on CISO Console per
+V2-PORTAL-SPLIT.md §3.
+Verified end-to-end: `POST /api/right-to-forget` returned 201, cascade ran
+across vault · tier2 · tier3 · langfuse.
+
+`47af837` (#11 My Portfolio): new
+`team-portal/src/pages/portfolio/PortfolioPage.tsx` — dashboard view
+(KPIs + risk distribution + top-N by findings), complementary to the AI
+Systems CRUD list rather than duplicating it. All four panels are pure
+`computed()` projections off `/api/grc/ai-systems` — no new endpoints, no
+chart-library dependency (runtime mix is a string breakdown).
+Own-team filter is a client-side All/My team toggle. "My team" matches on
+`business_owner` / `technical_owner` string containment of the actor token.
+Defaults to "All" so dev renders non-empty; "My team" honestly returns 0
+in dev (no seeded match for "demo-engineer") and shows an explicit stub-
+mode banner rather than faking matches. Swap to engine-side `?scope=` when
+session auth wires the real actor in Phase 3.
+
+All four routes registered in `team-portal/src/app.tsx`; nav items added in
+`team-portal/src/shared/components/Sidebar.tsx`. Sidebar now: AI Systems,
+Runtime, Evals, Agent Library, Memory, SDK Quickstart, Right-to-Forget,
+My Portfolio.
+
+PR: [signalyer/ai-assurance-mvp#1](https://github.com/signalyer/ai-assurance-mvp/pull/1)
+(draft) — accumulates all of Sessions 14-17 (17 commits). Branch pushed to
+origin at `47af837`.
+
 ## Files — Planned
+### Session 18 — V2 Phase 2 Week 3 close-out (3 surfaces remaining)
+See `docs/plans/SESSION-18-week3-closeout.md`. Three Team Workspace surfaces
+remain: #9 RAG corpus management (net-new UI), #5 Adversarial test runner
+(net-new + async job UX), #3 Per-system 6-layer config (deferred per V2 risk
+register §9 until "request change" workflow exists).
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Two parallel tracks:
 - Track A (V2 prep): OpenAPI hardening, contract tests, parent-domain cookie, `api.aigovern.sandboxhub.co` CNAME
