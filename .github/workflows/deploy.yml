@@ -25,6 +25,7 @@ jobs:
     environment: production
     permissions:
       contents: read
+      id-token: write  # required for OIDC federated credential
 
     steps:
       - uses: actions/checkout@v4
@@ -41,12 +42,20 @@ jobs:
         # into the zip as a BUILD_SHA file. dashboard.py reads BUILD_SHA at
         # startup and returns it from /api/health.
 
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: app-aigovern-dev
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_AIGOVERN }}
           package: deploy/app.zip
+          # No publish-profile — webapps-deploy@v3 reuses the OIDC session
+          # from azure/login. SCM Basic Auth stays disabled (secure default).
 
       - name: Wait for app to come ready
         # App Service B1 cold-restart after a deploy can take 60-120s.
