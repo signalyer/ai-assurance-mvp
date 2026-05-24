@@ -607,6 +607,135 @@
         "title": "AiSystemsListOut",
         "type": "object"
       },
+      "AnalyticsByDomainResponse": {
+        "additionalProperties": true,
+        "description": "Domain-scoped subset of the analytics rollup.",
+        "properties": {
+          "by_domain": {
+            "additionalProperties": true,
+            "title": "By Domain",
+            "type": "object"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_days",
+          "by_domain",
+          "total_runs"
+        ],
+        "title": "AnalyticsByDomainResponse",
+        "type": "object"
+      },
+      "AnalyticsResponse": {
+        "additionalProperties": true,
+        "description": "Full analytics rollup.\n\nPermissive: empty-history path returns 8 keys, populated path returns 10.\nby_domain/by_model/failure_types are dynamic dicts keyed on real-world\nnames (domain, model id, metric name) so they're typed as plain dicts.",
+        "properties": {
+          "average_latency_ms": {
+            "default": 0,
+            "title": "Average Latency Ms",
+            "type": "integer"
+          },
+          "by_domain": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "By Domain",
+            "type": "object"
+          },
+          "by_model": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "By Model",
+            "type": "object"
+          },
+          "by_risk": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "By Risk",
+            "type": "object"
+          },
+          "failure_types": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Failure Types",
+            "type": "object"
+          },
+          "pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate"
+          },
+          "period_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Days"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "trends": {
+            "default": [],
+            "items": {},
+            "title": "Trends",
+            "type": "array"
+          }
+        },
+        "required": [
+          "total_runs"
+        ],
+        "title": "AnalyticsResponse",
+        "type": "object"
+      },
+      "AnalyticsTrendsResponse": {
+        "additionalProperties": true,
+        "description": "Time-series subset of the analytics rollup.",
+        "properties": {
+          "pass_rate": {
+            "title": "Pass Rate",
+            "type": "number"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "trends": {
+            "items": {},
+            "title": "Trends",
+            "type": "array"
+          }
+        },
+        "required": [
+          "period_days",
+          "trends",
+          "pass_rate"
+        ],
+        "title": "AnalyticsTrendsResponse",
+        "type": "object"
+      },
       "ApprovalCreate": {
         "properties": {
           "action_description": {
@@ -8881,7 +9010,7 @@
     "/api/analytics": {
       "get": {
         "description": "Get analytics for recent period.",
-        "operationId": "get_analytics_api_analytics_get",
+        "operationId": "analytics_rollup_get",
         "parameters": [
           {
             "in": "query",
@@ -8901,9 +9030,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Analytics Api Analytics Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AnalyticsResponse"
                 }
               }
             },
@@ -8929,7 +9056,7 @@
     "/api/analytics/by-domain": {
       "get": {
         "description": "Get analytics grouped by domain.",
-        "operationId": "analytics_by_domain_api_analytics_by_domain_get",
+        "operationId": "analytics_by_domain_get",
         "parameters": [
           {
             "in": "query",
@@ -8949,9 +9076,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Analytics By Domain Api Analytics By Domain Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AnalyticsByDomainResponse"
                 }
               }
             },
@@ -8977,7 +9102,7 @@
     "/api/analytics/trends": {
       "get": {
         "description": "Get daily trends for the period.",
-        "operationId": "get_trends_api_analytics_trends_get",
+        "operationId": "analytics_trends_get",
         "parameters": [
           {
             "in": "query",
@@ -8997,9 +9122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Trends Api Analytics Trends Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AnalyticsTrendsResponse"
                 }
               }
             },
@@ -10463,7 +10586,7 @@
     "/api/export/csv": {
       "get": {
         "description": "Export runs as CSV.",
-        "operationId": "export_csv_api_export_csv_get",
+        "operationId": "analytics_export_csv",
         "parameters": [
           {
             "in": "query",
@@ -10525,7 +10648,7 @@
     "/api/export/json": {
       "get": {
         "description": "Export runs as JSON.",
-        "operationId": "export_json_api_export_json_get",
+        "operationId": "analytics_export_json",
         "parameters": [
           {
             "in": "query",
