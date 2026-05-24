@@ -38,6 +38,8 @@ jobs:
       # Don't fail the local engine boot on OpenAPI drift -- the artifact
       # check is its own step below with a clearer error message.
       SL_OPENAPI_STRICT: 'false'
+      # Opt into Node 24 ahead of the 2026-06-02 forced flip.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
     steps:
       - uses: actions/checkout@v4
 
