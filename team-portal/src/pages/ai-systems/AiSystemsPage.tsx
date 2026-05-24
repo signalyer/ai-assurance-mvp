@@ -5,6 +5,7 @@ import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/com
 import { AiSystemDrawer, openSystem } from './AiSystemDrawer';
 import { AiSystemEditModal } from './AiSystemEditModal';
 import { AiSystemRevisionsPanel } from './AiSystemRevisionsPanel';
+import { AiSystemFrameworksPanel } from './AiSystemFrameworksPanel';
 import type { AiSystemSummary, AiSystemsListResponse } from './types';
 
 // Page state — module-level signals so URL?id= deep-link survives navigation.
@@ -169,6 +170,7 @@ export function AiSystemsPage() {
       <AiSystemDrawer />
       <AiSystemEditModal />
       <AiSystemRevisionsPanel />
+      <AiSystemFrameworksPanel />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { apiGet } from '../../shared/api/client';
 import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/components/Badges';
 import { openEdit, registerEditSavedCallback } from './AiSystemEditModal';
 import { openRevisions } from './AiSystemRevisionsPanel';
+import { openFrameworks } from './AiSystemFrameworksPanel';
 import type { AiSystemDetail, EditStatus } from './types';
 
 // Open-system signal: drives the side drawer.
@@ -187,12 +188,12 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         <a class="btn btn-sm btn-primary" href={`/assessment?system=${encodeURIComponent(s.id)}`}>
           Run Assessment
         </a>
-        {/* #9/#10 wired. #11 Frameworks + #12 Bound Agents pending follow-ups. */}
+        {/* #9/#10/#11 wired. #12 Bound Agents pending follow-up. */}
         <button class="btn btn-sm btn-secondary" onClick={() => openEdit(s.id)}>Edit System</button>
         <button class="btn btn-sm btn-secondary" onClick={() => openRevisions(s.id)}>
           Revision History{editStatus.value && editStatus.value.revision_count > 0 ? ` (${editStatus.value.revision_count})` : ''}
         </button>
-        <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Frameworks</button>
+        <button class="btn btn-sm btn-secondary" onClick={() => openFrameworks(s.id)}>Frameworks</button>
         <button class="btn btn-sm btn-secondary" disabled title="Pending Phase 2 follow-up">Bound Agents</button>
       </div>
     </>
