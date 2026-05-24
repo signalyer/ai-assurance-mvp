@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/evals', label: 'Evals' },
   { path: '/agent-library', label: 'Agent Library' },
   { path: '/memory', label: 'Memory' },
+  { path: '/sdk', label: 'SDK Quickstart' },
 ];
 
 export function Sidebar() {
