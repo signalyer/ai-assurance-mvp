@@ -73,11 +73,10 @@ Deployment: Azure App Service Linux Python 3.12 at aigovern.sandboxhub.co
 `domain/agent_memory.py` (Tier 2 episodic memory backed by Postgres with database-level TTL, inline schema bootstrap, parameterized SQL, scrubber vault_id enforcement, full-text search via tsvector, six public functions: write_episode/build_context/compress_episode/selective_recall/list_episodes/memory_stats/purge_expired), `domain/rag_engine.py` (Azure AI Search hybrid retrieval — BM25 + semantic vector via text-embedding-3-small, index-time PII rejection at confidence > 0.7, auto-disables on missing creds, four public functions: index_document/search_corpus/rag_stats/delete_document), `api/memory.py` (5 endpoints: POST /episodes, GET /episodes, GET /recall, GET /stats, GET /context — all using asyncio.to_thread for sync domain calls), `static/memory.html` (memory viewer UI: stats panel auto-refresh 30s, episode browser, semantic search, context viewer)
 
 ## Files — In Progress
-None — Sessions 01, 02, 03, and 04 fully complete.
-
-### RAG-related (Session 04)
-- `api/rag.py` — new
-- `static/rag-governance.html` — new
+None. (Prior session left stale RAG-related entries here; both shipped in
+Session 18 under different paths — `api/rag.py` exists; the UI shipped as
+`team-portal/src/pages/rag/RagCorpusPage.tsx` instead of `static/rag-governance.html`.
+Cleaned in Session 25.)
 
 ## Files — Built (2026-05-21, Session 05)
 ### Session 05 (provider abstraction + legacy cleanup)
@@ -415,10 +414,68 @@ Compound rules earned this session:
 - **Session 24a:** A `set_cookie` with `domain=` MUST be paired with a `delete_cookie` carrying the same `domain=`. The browser treats host-only and parent-domain cookies as distinct entries with the same name; deleting one does not delete the other. Logout that calls host-only `delete_cookie` against a parent-domain session leaves the cookie alive — a silent auth-bypass-on-logout. Pattern: route both calls through a single `_cookie_domain()` helper so the two paths can't drift.
 - **Session 24b:** When a multi-file sweep is technically straightforward but blasts past the per-session file-count rule, do the survey, document the count, defer to a per-unit series. The Session 24 OpenAPI sweep is a 66-route change across 25 files — mechanically possible in one session, but the SESSION-13 §6 risk register explicitly warns "do one router at a time" because pinned response models surface latent shape inconsistencies that would break V1 UI consumers. A 25-router parallel sweep would amortize the risk into one giant unreviewable commit; per-router sessions keep each diff small enough to read and each smoke test cheap enough to run.
 
+## Files — Built (2026-05-24, Session 25)
+### Session 25 (Track A first router + drift gate fix)
+First per-router OpenAPI sweep + the openapi.drift gate fix carried from
+the Session 24 spawned-task chip. Track C (DNS + cookie activation) deferred
+— remains as a half-session whenever Azure DNS ops are scheduled.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [api/security.py](api/security.py) | Added 6 Pydantic v2 response models (3 strict — `ProbeCategory`, `AdversarialCategoriesResponse`, `AdversarialHistoryResponse`; 3 permissive with `ConfigDict(extra="allow")` — `AdversarialRunResponse`, `GuardrailsSummaryResponse`, `GuardrailCheckResponse`). All 5 routes now carry `response_model=` + `operation_id="security_<resource>_<verb>"`. Permissive models pin only the stable contract fields (e.g. `error`, `guardrail_version`) and surface the rest via `extra="allow"` — deliberate tradeoff to avoid freezing internal shapes of `run_adversarial_suite()` on the first sweep. Zero UI consumers verified via grep across `static/` + `team-portal/` before changes. |
+| #2 | [dashboard.py](dashboard.py) | `_validate_openapi_artifact()` strict mode flipped from "any non-prod = strict" to opt-in via `CI=true` (GitHub Actions default). Local `import dashboard` now warns rather than raises on routine spec drift — unblocks per-router OpenAPI verification ergonomics for Sessions 25+. Prod warn-only (unchanged). CI still strict — drift in PR validation still fails the build. Closes the spawned-task chip from Session 24. |
+| #3 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. +260/-20: 6 new component schemas + 5 cleaned-up operationIds (replacing FastAPI's auto-generated `get_categories_api_security_adversarial_categories_get` style). |
+
+**Sweep progress:** 1/25 routers done (api/security.py — 5/66 routes). Order
+for Sessions 26+: leave high-traffic UI consumers (`api/guide.py` — 9 routes,
+high SPA coupling) for later in the sweep; pick low-coupling routers first
+to build the model-definition pattern.
+
+**Verification.** Local: `from api.security import router` → 5 routes OK;
+`import middleware.auth; _cookie_domain` → True (Session 24 dormant path
+still wired); `import dashboard` → no raise (drift fix working as designed,
+logs `openapi.drift.production_warn` because the local spec includes real
+backends; the committed ci-profile artifact is the only committable one
+per Session 21a). Prod smoke deferred to the post-deploy verifier (no UI
+consumer change, response shape additive-only for the 3 permissive models).
+
+Compound rules earned this session:
+- **Session 25a:** When introducing `response_model=` on an existing route
+  whose handler returns a multi-shape dict (e.g. `apply_guardrails` returns
+  the input-direction shape; `filter_output` returns the output-direction
+  shape from the same endpoint), use a unioned Pydantic model with all
+  fields `Optional` + `ConfigDict(extra="allow")`. A strict Union[A, B]
+  forces FastAPI to pick one schema for the OpenAPI surface; a permissive
+  union surfaces both branches as discoverable fields without breaking
+  callers that branch on field presence. Lock the few fields that are
+  genuinely stable (here: `guardrail_version`, `total_input_patterns`)
+  and leave the rest extra=allow until the underlying handler is itself
+  split.
+- **Session 25b:** The Session 21a "the `ci`-profile artifact is the only
+  committable one" rule has a corollary worth surfacing: the local-import
+  drift warning is *expected* and *correct* on bare-Python imports, because
+  real backends (deepeval, presidio, etc.) register routes that the
+  `ci`-profile artifact omits. The Session 24 spawned-task chip mistakenly
+  treated this as a defect. Fix shape: gate the *raise* on CI (where the
+  committed-artifact contract is enforced), keep warn-only on local + prod.
+  Do not try to make local match the committed artifact byte-for-byte —
+  that would require running every local import under `ci`-profile env,
+  which defeats the purpose of having local backends configurable.
+
 ## Files — Planned
 
-### Sessions 25+ — OpenAPI response-model sweep (Track A item A1, per-router)
-Survey result this session: 66 routes across ~25 files lack `response_model=`. Top offenders: `guide.py` (9), `reports.py` (6), `analytics.py` (5), `domains_api.py` (5), `security.py` (5), `connectors.py` (4), `evidence.py` (4). Plan: one PR per `api/*.py` file, drafted Pydantic v2 BaseModel in the same file (or shared `api/contracts/` if duplication emerges per SESSION-13 §6 default), `smoke_e2e.ps1` after each. Acceptance unchanged from SESSION-13 §3.A1.
+### Sessions 26+ — OpenAPI response-model sweep continuation (24/25 routers remaining)
+Session 25 closed `api/security.py` (5/66 routes). Remaining top offenders:
+`guide.py` (9 — defer; high SPA coupling), `reports.py` (6), `analytics.py` (5),
+`domains_api.py` (5), `connectors.py` (4), `evidence.py` (4). Recommended next
+target: `api/reports.py` or `api/analytics.py` — moderate route count, mid-
+risk UI coupling. Pattern locked by Session 25:
+1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
+2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
+   crosses three routers).
+3. `response_model=` + `operation_id="<prefix>_<resource>_<verb>"`.
+4. Regenerate `docs/openapi-v1.json` under `SL_OPENAPI_EXPORT_PROFILE=ci`.
+5. Verify diff includes new schemas + new operationIds only (no removed routes).
 
 ### Sessions 25-26 — Garak Deep Scan implementation (now unblocked)
 ADR-001 accepted this session. Six-step plan per ADR §7: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Independent of V2 critical path.
