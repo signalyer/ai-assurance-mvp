@@ -282,6 +282,41 @@ Compound rules earned this session:
 - **Session 18b:** schemathesis v4 dropped `--hooks` and `--hypothesis-*` prefixes. If contract-tests fails with "No such option", check for upstream CLI breakage before treating as a contract regression.
 - **Session 18c:** SSE for long-running probes — drain a sync generator with `await asyncio.to_thread(next, gen, sentinel)` per iteration. Don't use `async for` directly over a sync generator; the event loop blocks on every iteration.
 
+## Files — Built (2026-05-24, Session 19)
+### Session 19 (CI auto-deploy + drift detection)
+Closed the "is it actually live?" gap that left every prior session's merge
+unverified in prod. Before this session, deploys required manual
+`python deploy/build-zip.py` + `pwsh deploy/deploy-and-poll.ps1`. Prod was
+serving stale code of unknown vintage — possibly back to before Session 13
+(see #1 below).
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [.github/workflows/deploy.yml](.github/workflows/deploy.yml) | NEW. Push-to-main triggers zip build + `azure/webapps-deploy@v3` + post-deploy SHA-match verification. `concurrency: deploy-app-aigovern-dev` with `cancel-in-progress:false` (never cancel mid-flight; config-zip is non-atomic). Auth via OIDC federated credential — no long-lived secret. |
+| #1 | [dashboard.py](dashboard.py) | `_read_build_sha()` reads `BUILD_SHA` file baked into zip; `/api/health` now returns `{"status","sha"}` so deploy verification works without auth. |
+| #1 | [deploy/build-zip.py](deploy/build-zip.py) | `_resolve_sha()` prefers `GITHUB_SHA` (CI) then `git rev-parse HEAD` (local). Writes `BUILD_SHA` to zip. Also adds `__version__.py` to INCLUDE whitelist — missing since Session 13. |
+| #1 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated for new `/api/health` response shape. |
+
+**Azure identity (created out-of-band):**
+- Entra app `github-deploy-aigovern` (appId `7899ac3e-ad16-415e-9780-192bd9e94c3b`)
+- Two federated credentials: `repo:signalyer/ai-assurance-mvp:ref:refs/heads/main` and `repo:signalyer/ai-assurance-mvp:environment:production`
+- RBAC: `Website Contributor` on `app-aigovern-dev` only (least privilege)
+- GitHub repo variables (not secrets): `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+
+**First deploy validated the design.** The SHA-match step caught a silent
+failure on first run: the deploy succeeded but `/api/health` returned a SHA
+that didn't match the commit. Diagnosis: `dashboard.py` line 72
+`from __version__ import __version__` (added Session 13) had never been
+shipped — the build-zip whitelist was never updated. Adding the file to
+INCLUDE produced a green deploy. **Prior prod was serving pre-Session-13
+code.**
+
+Compound rules earned this session:
+- **Session 19a:** App Service SCM Basic Auth is OFF by default on modern provisions. `webapps-deploy@v3` with a publish profile fails 'Publish profile is invalid' even though the XML looks right. Use OIDC federated credentials instead — no security regression, no secret rotation.
+- **Session 19b:** az CLI 2.85.0 has a bug where `az role assignment create` returns `MissingSubscription` even with explicit `--subscription` and subscription set as default. Workaround: `az rest --method PUT` directly against `https://management.azure.com/.../roleAssignments/{guid}?api-version=2022-04-01`. Body needs `principalType: ServicePrincipal` when assigning to a brand-new SP (replication lag).
+- **Session 19c:** `deploy/build-zip.py` uses an explicit whitelist (not a `.funcignore` blacklist) so missing files fail visibly — but only if you actually run the deploy. Without CI auto-deploy, the whitelist drift accumulated silently for 6 sessions. Compound: any explicit-allowlist deploy needs CI to enforce its own correctness.
+- **Session 19d:** Verify deploys with a SHA round-trip, never a 200 health check. `/api/health` 200 means a container is serving — not the container you just shipped. Bake commit SHA into the deploy artifact at build time, verify at smoke-test time.
+
 ## Files — Planned
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
