@@ -1,0 +1,45 @@
+# Schemathesis configuration.
+# Consumed by .github/workflows/contract-tests.yml and
+# .github/workflows/contract-tests-nightly.yml.
+#
+# Per docs/plans/SESSION-13-api-typing-audit.md §5.5.
+
+endpoints:
+  # Endpoints excluded from contract fuzzing.
+  # See audit §3.5 for the rationale per endpoint.
+  exclude:
+    # Health probe -- contract is just {"status": "ready"}; not a published surface.
+    - /api/health
+    # Prometheus scrape -- not a JSON contract.
+    - /api/metrics
+    - /api/metrics/.*
+    # SSE stream -- not a JSON response shape.
+    - /api/agents/.*/listen
+    # Binary PDF downloads -- not JSON; out of Schemathesis scope.
+    - /api/reports/.*/download
+    # UI routes.
+    - /static/.*
+    - /login
+    - /
+    # Page routes (FastAPI mounts static-page handlers on /ai-systems, /findings etc.)
+    - /ai-systems
+    - /ai-systems/.*
+    - /findings
+    - /release-gates
+    - /evidence
+    - /governance
+    - /assessment
+    - /evals
+    - /policies
+    - /reports
+    - /connectors
+    - /assurance-providers
+    - /framework-sop
+    - /analytics
+    - /demo
+    - /demo-aws-analyzer
+    - /agent-library
+    - /memory
+    - /right-to-forget
+    - /audit-events
+    - /frameworks

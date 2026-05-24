@@ -6,6 +6,11 @@ GET  /api/ai-systems/{id}/revisions          full revision history
 GET  /api/ai-systems/revisions/{rev_id}      single revision detail
 POST /api/ai-systems/{id}/edit               submit an edit (auto-detects tier)
 POST /api/ai-systems/revisions/{rev_id}/decide   approve | reject | override
+
+Typed per docs/plans/SESSION-13-api-typing-audit.md §3.2.
+decide_revision: validation failures return 409 ConflictDetail
+(STATE_TRANSITION conflict_type) per audit §1.2 + CISO Console requirement.
+Edit submission validation failures stay 400 with structured detail.
 """
 
 from __future__ import annotations
@@ -15,13 +20,19 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from domain import ai_system_edit as ase
 from domain import repository as repo
 
+from api._models import ConflictDetail
+
 
 router = APIRouter(prefix="/api/ai-systems", tags=["ai-system-edit"])
+
+
+def _strict() -> ConfigDict:
+    return ConfigDict(extra="forbid")
 
 
 # ---------- helpers --------------------------------------------------------
@@ -62,7 +73,7 @@ def _base_dict(system_id: str) -> Optional[dict]:
     return s.model_dump(mode="json")
 
 
-# ---------- payloads -------------------------------------------------------
+# ---------- request payloads ----------------------------------------------
 
 class EditPayload(BaseModel):
     changes: dict[str, Any] = Field(default_factory=dict)
@@ -76,54 +87,171 @@ class DecidePayload(BaseModel):
     role: Optional[str] = None  # optional override; otherwise derived from session user
 
 
+# ---------- response models ------------------------------------------------
+
+class EditStatusOut(BaseModel):
+    """Pending-edit status for one AI system."""
+    model_config = _strict()
+
+    has_pending_material: bool
+    release_blocked_by_revision: bool
+    pending_revision_id: str | None = None
+    revision_count: int
+    last_revision_at: str | None = None
+    last_revision_tier: str | None = None
+
+
+class EditInfoOut(BaseModel):
+    """Field tiers + rerun matrix + approval rules + current pending status."""
+    model_config = _strict()
+
+    ai_system_id: str
+    field_tiers: dict[str, list[str]] = Field(
+        description="Map of tier name (soft/material/critical) -> list of field names.",
+    )
+    rerun_matrix: dict[str, list[str]] = Field(
+        description="Map of field name -> downstream steps that must re-run on change.",
+    )
+    approval_roles_by_level: dict[str, list[str]] = Field(
+        description="Map of risk level (LOW/MEDIUM/.../CRITICAL) -> required approver roles.",
+    )
+    valid_change_categories: list[str]
+    status: EditStatusOut
+
+
+class EffectiveStateOut(BaseModel):
+    """AI system with approved revisions folded in + the base + status.
+
+    `ai_system` and `base` are typed as opaque dicts because the AI system
+    model has 22+ fields and is re-typed in api.grc.AiSystemDetailOut;
+    duplicating that here would create drift. Phase 1.5 can unify these.
+    """
+    model_config = _strict()
+
+    ai_system: dict[str, Any]
+    base: dict[str, Any]
+    status: EditStatusOut
+
+
+class FieldChangeOut(BaseModel):
+    """One field's before/after in a revision."""
+    model_config = ConfigDict(extra="allow")
+    field: str
+
+
+class RevisionOut(BaseModel):
+    """One revision (edit submission) record.
+
+    Loosely typed -- revisions carry arbitrary domain-specific fields
+    (approval_status, fields_changed[], rerun_steps[], etc.) that vary by tier
+    and approval state. Phase 1.5 can tighten.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    revision_id: str
+    ai_system_id: str
+    created_at: str
+    created_by: str
+    tier: str
+    fields_changed: list[FieldChangeOut]
+
+
+class RevisionsListOut(BaseModel):
+    model_config = _strict()
+    revisions: list[RevisionOut]
+    count: int
+
+
+class SubmitEditOut(BaseModel):
+    """Response to POST /api/ai-systems/{id}/edit."""
+    model_config = _strict()
+
+    revision: RevisionOut
+    status: EditStatusOut
+    next_step: str = Field(description="pending_approval | applied")
+
+
+class DecideRevisionOut(BaseModel):
+    """Response to POST /api/ai-systems/revisions/{rev_id}/decide."""
+    model_config = _strict()
+
+    revision: RevisionOut
+    status: EditStatusOut
+
+
 # ---------- read endpoints -------------------------------------------------
 
-@router.get("/{system_id}/edit-info")
-async def get_edit_info(system_id: str) -> dict:
+@router.get(
+    "/{system_id}/edit-info",
+    response_model=EditInfoOut,
+    operation_id="ai_systems_edit_info",
+)
+async def get_edit_info(system_id: str) -> EditInfoOut:
     if _base_dict(system_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown AI system: {system_id}")
-    return {
-        "ai_system_id": system_id,
-        "field_tiers": ase.field_tiers(),
-        "rerun_matrix": {f: list(steps) for f, steps in ase.RERUN_MATRIX.items()},
-        "approval_roles_by_level": {k: list(v) for k, v in ase.APPROVAL_ROLES_BY_LEVEL.items()},
-        "valid_change_categories": list(ase.VALID_CHANGE_CATEGORIES),
-        "status": ase.status_for_system(system_id),
-    }
+    return EditInfoOut(
+        ai_system_id=system_id,
+        field_tiers=ase.field_tiers(),
+        rerun_matrix={f: list(steps) for f, steps in ase.RERUN_MATRIX.items()},
+        approval_roles_by_level={k: list(v) for k, v in ase.APPROVAL_ROLES_BY_LEVEL.items()},
+        valid_change_categories=list(ase.VALID_CHANGE_CATEGORIES),
+        status=EditStatusOut(**ase.status_for_system(system_id)),
+    )
 
 
-@router.get("/{system_id}/effective")
-async def get_effective(system_id: str) -> dict:
+@router.get(
+    "/{system_id}/effective",
+    response_model=EffectiveStateOut,
+    operation_id="ai_systems_effective_get",
+)
+async def get_effective(system_id: str) -> EffectiveStateOut:
     base = _base_dict(system_id)
     if base is None:
         raise HTTPException(status_code=404, detail=f"Unknown AI system: {system_id}")
-    return {
-        "ai_system": ase.effective_state(system_id, base),
-        "base": base,
-        "status": ase.status_for_system(system_id),
-    }
+    return EffectiveStateOut(
+        ai_system=ase.effective_state(system_id, base),
+        base=base,
+        status=EditStatusOut(**ase.status_for_system(system_id)),
+    )
 
 
-@router.get("/{system_id}/revisions")
-async def list_revisions(system_id: str) -> dict:
+@router.get(
+    "/{system_id}/revisions",
+    response_model=RevisionsListOut,
+    operation_id="ai_systems_revisions_list",
+)
+async def list_revisions(system_id: str) -> RevisionsListOut:
     if _base_dict(system_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown AI system: {system_id}")
     revs = ase.revisions_for_system(system_id)
-    return {"revisions": list(reversed(revs)), "count": len(revs)}
+    return RevisionsListOut(
+        revisions=[RevisionOut(**r) for r in reversed(revs)],
+        count=len(revs),
+    )
 
 
-@router.get("/revisions/{revision_id}")
-async def get_revision(revision_id: str) -> dict:
+@router.get(
+    "/revisions/{revision_id}",
+    response_model=RevisionOut,
+    operation_id="ai_systems_revision_get",
+)
+async def get_revision(revision_id: str) -> RevisionOut:
     rev = ase.get_revision(revision_id)
     if rev is None:
         raise HTTPException(status_code=404, detail=f"Unknown revision: {revision_id}")
-    return rev
+    return RevisionOut(**rev)
 
 
 # ---------- write endpoints ------------------------------------------------
 
-@router.post("/{system_id}/edit")
-async def submit_edit(system_id: str, payload: EditPayload, request: Request) -> dict:
+@router.post(
+    "/{system_id}/edit",
+    response_model=SubmitEditOut,
+    operation_id="ai_systems_edit_submit",
+)
+async def submit_edit(
+    system_id: str, payload: EditPayload, request: Request,
+) -> SubmitEditOut:
     base = _base_dict(system_id)
     if base is None:
         raise HTTPException(status_code=404, detail=f"Unknown AI system: {system_id}")
@@ -143,18 +271,32 @@ async def submit_edit(system_id: str, payload: EditPayload, request: Request) ->
     if rev is None:
         raise HTTPException(status_code=400, detail={"errors": errors})
 
-    return {
-        "revision": rev,
-        "status": ase.status_for_system(system_id),
-        "next_step": (
-            "pending_approval" if rev.get("approval_status") == "pending"
-            else "applied"
+    return SubmitEditOut(
+        revision=RevisionOut(**rev),
+        status=EditStatusOut(**ase.status_for_system(system_id)),
+        next_step=(
+            "pending_approval" if rev.get("approval_status") == "pending" else "applied"
         ),
-    }
+    )
 
 
-@router.post("/revisions/{revision_id}/decide")
-async def decide_revision(revision_id: str, payload: DecidePayload, request: Request) -> dict:
+@router.post(
+    "/revisions/{revision_id}/decide",
+    response_model=DecideRevisionOut,
+    operation_id="ai_systems_revision_decide",
+    responses={
+        409: {"model": ConflictDetail, "description": "Decision rejected by state transition or policy."},
+    },
+)
+async def decide_revision(
+    revision_id: str, payload: DecidePayload, request: Request,
+) -> DecideRevisionOut:
+    """Approve / reject / override a revision.
+
+    On state-transition or policy rejection returns 409 with ConflictDetail
+    carrying the structured reason (required by CISO Console for audit-artifact
+    rendering per audit doc §1.2).
+    """
     user = _current_user(request)
     role = payload.role or _user_role(user)
 
@@ -166,9 +308,16 @@ async def decide_revision(revision_id: str, payload: DecidePayload, request: Req
         note=payload.note,
     )
     if updated is None:
-        raise HTTPException(status_code=400, detail={"errors": errors})
+        raise HTTPException(
+            status_code=409,
+            detail=ConflictDetail(
+                reason="; ".join(errors) if errors else "Decision rejected",
+                conflict_type="STATE_TRANSITION",
+                existing_id=revision_id,
+            ).model_dump(),
+        )
 
-    return {
-        "revision": updated,
-        "status": ase.status_for_system(updated["ai_system_id"]),
-    }
+    return DecideRevisionOut(
+        revision=RevisionOut(**updated),
+        status=EditStatusOut(**ase.status_for_system(updated["ai_system_id"])),
+    )

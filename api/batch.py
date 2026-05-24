@@ -19,11 +19,15 @@ import json
 from pathlib import Path
 from typing import Optional
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from dotenv import load_dotenv
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
+
+from api._models import GovernanceMetadata
 
 from tracer import trace_call
 from evaluator import evaluate_response
@@ -273,11 +277,77 @@ async def _run_single(
         }
 
 
-@router.post("/run")
-async def run_batch(request: BatchRequest) -> dict:
+# ---------------------------------------------------------------------------
+# Response models (Session 13 typing pass)
+#
+# NOTE: run_batch was tagged JobResponse in audit doc §3.2; on review it's
+# fully synchronous (asyncio.gather completes inline before return). Typed
+# as BatchResultOut (synchronous result envelope) -- audit doc correction.
+# ---------------------------------------------------------------------------
+
+
+class BatchRunResultOut(BaseModel):
+    """One (test_case, model) run result.
+
+    Loosely typed -- the original V1 UI introspects many sub-fields
+    (eval_scores per-metric, guardrails sub-dict) that vary by config.
+    Phase 1.5 can tighten if V2 SPA needs strict types.
+    """
+    model_config = ConfigDict(extra="allow")
+
+
+class BatchResultOut(BaseModel):
+    """Synchronous result of /api/batch/run or /api/batch/run-domain/{id}.
+
+    Returned 200 even on partial errors -- individual runs surface their
+    error in the per-run dict (BatchRunResultOut). The top-level `error`
+    field is set ONLY when the entire batch couldn't start (e.g. no prompts).
+    Preserves V1 batch.html contract.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str | None = None
+    name: str | None = None
+    total_runs: int | None = None
+    success_count: int | None = None
+    error_count: int | None = None
+    pass_count: int | None = None
+    duration_ms: int | None = None
+    results: list[BatchRunResultOut] | None = None
+    error: str | None = Field(
+        default=None,
+        description="Top-level error -- batch did not run. None on success.",
+    )
+    governance: GovernanceMetadata | None = None
+
+
+class BatchHistoryRowOut(BaseModel):
+    """One row in the batch history list."""
+    model_config = ConfigDict(extra="forbid")
+
+    batch_id: str
+    name: str
+    total_runs: int
+    pass_count: int
+    fail_count: int
+    duration_ms: int
+    timestamp: str
+
+
+class BatchHistoryOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    batches: list[BatchHistoryRowOut]
+
+
+@router.post(
+    "/run",
+    response_model=BatchResultOut,
+    operation_id="batch_run",
+)
+async def run_batch(request: BatchRequest) -> BatchResultOut:
     """Run a batch evaluation — all model calls dispatched in parallel."""
     if not request.prompts:
-        return {"error": "No prompts provided"}
+        return BatchResultOut(error="No prompts provided")
 
     batch_id = str(uuid.uuid4())[:8]
     batch_name = request.name or f"Batch {batch_id}"
@@ -306,17 +376,6 @@ async def run_batch(request: BatchRequest) -> dict:
             if all(m.get("passed") is True or m.get("skipped", False) for m in scores.values()):
                 pass_count += 1
 
-    batch_summary = {
-        "batch_id": batch_id,
-        "name": batch_name,
-        "total_runs": len(results),
-        "success_count": success_count,
-        "error_count": fail_count,
-        "pass_count": pass_count,
-        "duration_ms": total_time,
-        "results": results,
-    }
-
     save_batch({
         "batch_id": batch_id,
         "name": batch_name,
@@ -326,20 +385,33 @@ async def run_batch(request: BatchRequest) -> dict:
         "duration_ms": total_time,
     })
 
-    return batch_summary
+    return BatchResultOut(
+        batch_id=batch_id,
+        name=batch_name,
+        total_runs=len(results),
+        success_count=success_count,
+        error_count=fail_count,
+        pass_count=pass_count,
+        duration_ms=total_time,
+        results=[BatchRunResultOut(**r) for r in results],
+    )
 
 
 _DOMAIN_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
 
 
-@router.post("/run-domain/{domain_id}")
-async def run_domain_test_suite(domain_id: str) -> dict:
+@router.post(
+    "/run-domain/{domain_id}",
+    response_model=BatchResultOut,
+    operation_id="batch_run_domain",
+)
+async def run_domain_test_suite(domain_id: str) -> BatchResultOut:
     """Run all test cases for a specific domain."""
     if not _DOMAIN_ID_RE.match(domain_id):
         raise HTTPException(status_code=400, detail="Invalid domain_id — must be 1-64 alphanumeric/underscore/hyphen characters")
     file_path = DOMAINS_DIR / f"{domain_id}.json"
     if not file_path.exists():
-        return {"error": f"Domain '{domain_id}' not found"}
+        return BatchResultOut(error=f"Domain '{domain_id}' not found")
 
     with open(file_path) as f:
         domain = json.load(f)
@@ -350,7 +422,7 @@ async def run_domain_test_suite(domain_id: str) -> dict:
         if domain.get("prompt"):
             test_cases = [{"name": "default", "prompt": domain["prompt"]}]
         else:
-            return {"error": "No test cases or prompt defined in domain"}
+            return BatchResultOut(error="No test cases or prompt defined in domain")
 
     context = domain.get("regulatory_context") or domain.get("context") or []
 
@@ -371,7 +443,13 @@ async def run_domain_test_suite(domain_id: str) -> dict:
     return await run_batch(request)
 
 
-@router.get("/history")
-async def batch_history(limit: int = Query(50, ge=1, le=200)) -> dict:
+@router.get(
+    "/history",
+    response_model=BatchHistoryOut,
+    operation_id="batch_history",
+)
+async def batch_history(limit: int = Query(50, ge=1, le=200)) -> BatchHistoryOut:
     """Get batch run history."""
-    return {"batches": get_batches(limit=limit)}
+    return BatchHistoryOut(
+        batches=[BatchHistoryRowOut(**b) for b in get_batches(limit=limit)],
+    )

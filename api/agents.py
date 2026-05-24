@@ -19,6 +19,40 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, field_validator
 
+# Session 13 typing: loosely-typed Agent/Version/Subscriber response models.
+# Underlying domain models (domain.agents.Agent etc.) carry the authoritative
+# field list; duplicating here creates drift. extra='allow' so domain field
+# additions don't break the API surface immediately -- tighten in Phase 1.5.
+
+
+class AgentOut(BaseModel):
+    """Agent record. Loosely typed; underlying shape from domain.agents.Agent."""
+    model_config = ConfigDict(extra="allow")
+    id: str
+    name: str
+    team: str
+
+
+class AgentVersionOut(BaseModel):
+    """AgentVersion record. Loosely typed; underlying shape from domain.agents.AgentVersion."""
+    model_config = ConfigDict(extra="allow")
+    id: str
+    agent_id: str
+    semver: str
+
+
+class AgentSubscriberOut(BaseModel):
+    """AgentSubscriber record. Loosely typed; underlying shape from domain.agent_subscribers."""
+    model_config = ConfigDict(extra="allow")
+    agent_id: str
+    system_id: str
+
+
+class AgentDetailOut(AgentOut):
+    """Agent + versions + subscribers (nested)."""
+    versions: list[AgentVersionOut] = []
+    subscribers: list[AgentSubscriberOut] = []
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agents"])
@@ -125,7 +159,11 @@ def _to_iso(val: object) -> str | None:
 # GET /api/agents
 # ---------------------------------------------------------------------------
 
-@router.get("/api/agents")
+@router.get(
+    "/api/agents",
+    response_model=list[AgentOut],
+    operation_id="agents_list",
+)
 async def list_agents(
     team: str | None = Query(None, description="Filter by team"),
     owner_type: str | None = Query(None, description="Filter by owner_type (CUSTOM|REUSABLE)"),
@@ -156,7 +194,12 @@ async def list_agents(
 # POST /api/agents
 # ---------------------------------------------------------------------------
 
-@router.post("/api/agents", status_code=201)
+@router.post(
+    "/api/agents",
+    status_code=201,
+    response_model=AgentOut,
+    operation_id="agents_create",
+)
 async def create_agent(body: CreateAgentRequest) -> dict[str, object]:
     """Create a new agent in the registry.
 
@@ -198,7 +241,11 @@ async def create_agent(body: CreateAgentRequest) -> dict[str, object]:
 # GET /api/agents/{agent_id}
 # ---------------------------------------------------------------------------
 
-@router.get("/api/agents/{agent_id}")
+@router.get(
+    "/api/agents/{agent_id}",
+    response_model=AgentDetailOut,
+    operation_id="agents_get",
+)
 async def get_agent(agent_id: str) -> dict[str, object]:
     """Return a single agent with its version history and subscriber list.
 
@@ -246,7 +293,12 @@ async def get_agent(agent_id: str) -> dict[str, object]:
 # POST /api/agents/{agent_id}/publish
 # ---------------------------------------------------------------------------
 
-@router.post("/api/agents/{agent_id}/publish", status_code=201)
+@router.post(
+    "/api/agents/{agent_id}/publish",
+    status_code=201,
+    response_model=AgentVersionOut,
+    operation_id="agents_publish_version",
+)
 async def publish_version(agent_id: str, body: PublishVersionRequest) -> dict[str, object]:
     """Create and publish a new version for the given agent.
 
@@ -336,7 +388,11 @@ async def publish_version(agent_id: str, body: PublishVersionRequest) -> dict[st
 # GET /api/agents/{agent_id}/subscribers
 # ---------------------------------------------------------------------------
 
-@router.get("/api/agents/{agent_id}/subscribers")
+@router.get(
+    "/api/agents/{agent_id}/subscribers",
+    response_model=list[AgentSubscriberOut],
+    operation_id="agents_subscribers_list",
+)
 async def list_agent_subscribers(agent_id: str) -> list[dict[str, object]]:
     """Return the list of AgentSubscribers with their binding state.
 

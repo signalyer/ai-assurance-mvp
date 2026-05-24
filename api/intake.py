@@ -12,7 +12,74 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+# ---------------------------------------------------------------------------
+# Session 13 response models
+# ---------------------------------------------------------------------------
+
+class RequiredControlOut(BaseModel):
+    """One required control in the intake preview."""
+    model_config = ConfigDict(extra="forbid")
+
+    control_id: str
+    title: str
+    domain: str
+    priority: str
+    frameworks: dict[str, list[str]] = Field(
+        description="Map of framework name -> list of clause IDs covered by this control.",
+    )
+    recommended_owner: str
+
+
+class ControlsBreakdownOut(BaseModel):
+    """Breakdown of controls by priority + domain."""
+    model_config = ConfigDict(extra="forbid")
+
+    applicable_total: int
+    required_total: int
+    by_priority: dict[str, int]
+    by_domain: dict[str, int]
+    required: list[RequiredControlOut]
+
+
+class IntakePreviewOut(BaseModel):
+    """Live preview: classified risk + applicable controls (not persisted)."""
+    model_config = ConfigDict(extra="forbid")
+
+    risk_level: str
+    rules_fired: list[str]
+    rationale: list[str] = Field(
+        description="Multi-line rationale; each entry is one rule outcome explanation.",
+    )
+    signals: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    controls: ControlsBreakdownOut
+    regulatory_exposure: list[str]
+
+
+class IntakeSubmitOut(BaseModel):
+    """Result of POST /api/grc/intake/submit -- the new system_id + redirect."""
+    model_config = ConfigDict(extra="forbid")
+
+    ai_system_id: str
+    assessment_id: str
+    gate_count: int
+    inherent_risk: str
+    rules_fired: list[str]
+    redirect_to: str
+
+
+class IntakeSystemsListOut(BaseModel):
+    """Intake-created systems (read from JSONL).
+
+    `systems` is list[dict] -- the AISystem domain model has 30+ fields and
+    is already typed in api.grc.AiSystemDetailOut. Phase 1.5 can unify.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    systems: list[dict] = Field(default_factory=list)
+    total: int | None = None
 
 from domain.models import (
     AISystem, Assessment, ReleaseGate, RAGSource, AgentTool,
@@ -219,8 +286,12 @@ def _build_ai_system(p: IntakePayload, *, system_id: str, risk: RiskLevel) -> AI
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/preview")
-async def preview_intake(payload: IntakePayload) -> dict:
+@router.post(
+    "/preview",
+    response_model=IntakePreviewOut,
+    operation_id="intake_preview",
+)
+async def preview_intake(payload: IntakePayload) -> IntakePreviewOut:
     """Live classification: returns inherent risk + required-control set
     without persisting anything. Called by the wizard on every change.
     """
@@ -250,20 +321,20 @@ async def preview_intake(payload: IntakePayload) -> dict:
         for c in required
     ]
 
-    return {
-        "risk_level": rc.risk_level.value,
-        "rules_fired": rc.rules_fired,
-        "rationale": rc.rationale,
-        "signals": rc.signals,
-        "controls": {
-            "applicable_total": len(applicable),
-            "required_total": len(required),
-            "by_priority": by_priority,
-            "by_domain": by_domain,
-            "required": required_summary,
-        },
-        "regulatory_exposure": [r.value for r in preview_system.regulatory_exposure],
-    }
+    return IntakePreviewOut(
+        risk_level=rc.risk_level.value,
+        rules_fired=rc.rules_fired,
+        rationale=rc.rationale,
+        signals=rc.signals,
+        controls=ControlsBreakdownOut(
+            applicable_total=len(applicable),
+            required_total=len(required),
+            by_priority=by_priority,
+            by_domain=by_domain,
+            required=[RequiredControlOut(**c) for c in required_summary],
+        ),
+        regulatory_exposure=[r.value for r in preview_system.regulatory_exposure],
+    )
 
 
 def _append_jsonl(path: Path, record: dict) -> None:
@@ -271,8 +342,12 @@ def _append_jsonl(path: Path, record: dict) -> None:
         f.write(json.dumps(record, default=str) + "\n")
 
 
-@router.post("/submit")
-async def submit_intake(payload: IntakePayload) -> dict:
+@router.post(
+    "/submit",
+    response_model=IntakeSubmitOut,
+    operation_id="intake_submit",
+)
+async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
     """Persist the AI System, create initial assessment + release gate checks.
 
     Pipeline:
@@ -342,25 +417,29 @@ async def submit_intake(payload: IntakePayload) -> dict:
     for g in gates:
         _append_jsonl(GATES_FILE, g.model_dump(mode="json"))
 
-    return {
-        "ai_system_id": system_id,
-        "assessment_id": assessment.id,
-        "gate_count": len(gates),
-        "inherent_risk": rc.risk_level.value,
-        "rules_fired": rc.rules_fired,
-        "redirect_to": f"/ai-systems?id={system_id}",
-    }
+    return IntakeSubmitOut(
+        ai_system_id=system_id,
+        assessment_id=assessment.id,
+        gate_count=len(gates),
+        inherent_risk=rc.risk_level.value,
+        rules_fired=rc.rules_fired,
+        redirect_to=f"/ai-systems?id={system_id}",
+    )
 
 
-@router.get("/systems")
-async def list_intake_systems() -> dict:
+@router.get(
+    "/systems",
+    response_model=IntakeSystemsListOut,
+    operation_id="intake_systems_list",
+)
+async def list_intake_systems() -> IntakeSystemsListOut:
     """List intake-created systems (read from JSONL — separate from mock systems)."""
     if not SYSTEMS_FILE.exists():
-        return {"systems": []}
+        return IntakeSystemsListOut(systems=[])
     out = []
     with SYSTEMS_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 out.append(json.loads(line))
-    return {"systems": out, "total": len(out)}
+    return IntakeSystemsListOut(systems=out, total=len(out))

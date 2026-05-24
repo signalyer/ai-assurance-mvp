@@ -1,0 +1,20 @@
+# Pre-commit hooks for the AI Assurance Platform.
+# Install with:  pip install pre-commit && pre-commit install
+#
+# Per docs/plans/SESSION-13-api-typing-audit.md §6.
+
+repos:
+  - repo: local
+    hooks:
+      - id: export-openapi
+        name: Regenerate docs/openapi-v1.json on API changes
+        # --check exits 1 if the artifact would change; the dev must then
+        # run `python scripts/export_openapi.py` and `git add` the diff.
+        # We don't auto-regenerate-and-add because the user CLAUDE.md rule
+        # is "never auto-commit" -- artifact changes should be a deliberate
+        # PR-reviewable diff.
+        entry: python scripts/export_openapi.py --check
+        language: system
+        pass_filenames: false
+        files: ^(api/|dashboard\.py$|providers/|middleware/|__version__\.py$)
+        stages: [pre-commit]

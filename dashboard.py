@@ -63,8 +63,11 @@ from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
 from api.projection import router as projection_router
 from api.demo_control import router as demo_control_router
+from api._errors import register_error_handlers
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
+from middleware.api_version_alias import ApiVersionAliasMiddleware
+from __version__ import __version__
 
 # Metrics router -- 404 when METRICS_ENABLED != "true"
 try:
@@ -135,7 +138,83 @@ def print_startup_status() -> bool:
     return all_required
 
 
-app = FastAPI(title="AI Assurance Dashboard")
+app = FastAPI(
+    title="AI Assurance Platform",
+    version=__version__,
+    description=(
+        "Governance substrate for enterprise AI. Six-layer architecture "
+        "(see docs/target-architecture.md). Consumed by Team Workspace SPA, "
+        "CISO Console SPA, signallayer Python SDK, and `sl` CLI."
+    ),
+    servers=[
+        {"url": "https://api.aigovern.sandboxhub.co", "description": "Production engine"},
+        {"url": "http://localhost:9007", "description": "Local dev"},
+    ],
+)
+
+# Global exception handlers -- typed 500 ServerErrorDetail with trace_id correlation.
+# Per docs/plans/SESSION-13-api-typing-audit.md §1.2.
+register_error_handlers(app)
+
+
+def _validate_openapi_artifact() -> None:
+    """Compare generated OpenAPI to committed docs/openapi-v1.json.
+
+    Per docs/plans/SESSION-13-api-typing-audit.md §10 resolution #2 + §6.3a:
+        - Dev/local: fail-closed (raise RuntimeError, refuse to start) so
+          local devs catch drift before pushing.
+        - Production (App Service): warn-only -- logs to App Insights so a
+          legitimate hotfix doesn't crash-loop the container.
+
+    Toggles:
+        SL_OPENAPI_STRICT  "true"/"false" -- explicit override
+        SL_OPENAPI_SKIP_STARTUP_CHECK  "true" -- skip entirely (used by the
+                                       export script to avoid circular dep)
+    Production default: strict=false. Local default: strict=true.
+    """
+    import json as _json
+    import logging as _logging
+
+    _logger = _logging.getLogger(__name__)
+
+    if os.environ.get("SL_OPENAPI_SKIP_STARTUP_CHECK", "").lower() == "true":
+        return
+
+    artifact_path = Path(__file__).parent / "docs" / "openapi-v1.json"
+    if not artifact_path.exists():
+        _logger.warning("openapi.artifact_missing path=%s", artifact_path)
+        return
+
+    is_prod = os.environ.get("WEBSITE_SITE_NAME", "").startswith("app-aigovern")
+    strict_default = "false" if is_prod else "true"
+    strict = os.environ.get("SL_OPENAPI_STRICT", strict_default).lower() == "true"
+
+    try:
+        committed = _json.loads(artifact_path.read_text(encoding="utf-8"))
+        generated = app.openapi()
+    except Exception as exc:                                  # noqa: BLE001
+        _logger.warning("openapi.check_failed err=%s", exc)
+        return
+
+    # Ignore info.version drift so local devs don't trip on version bumps
+    # between PRs; the version bump itself is reviewed in the artifact diff.
+    def _strip_version(spec: dict) -> dict:
+        info = {**spec.get("info", {}), "version": "<ignored>"}
+        return {**spec, "info": info}
+
+    if _strip_version(committed) == _strip_version(generated):
+        return
+
+    msg = (
+        "openapi.drift: committed docs/openapi-v1.json does not match generated "
+        "spec. Run `python scripts/export_openapi.py` and commit the diff."
+    )
+    if strict:
+        raise RuntimeError(msg)
+    _logger.error("openapi.drift.production_warn %s", msg)
+
+
+_validate_openapi_artifact()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
@@ -163,6 +242,12 @@ app.add_middleware(SessionAuthMiddleware)
 
 # HMAC auth for /api/sdk/* -- outermost, executes first on every request
 app.add_middleware(HMACAuthMiddleware)
+
+# API version alias -- rewrites /api/v1/* -> /api/* BEFORE auth so the auth
+# middleware sees the canonical path. Added LAST so it's outermost and
+# executes FIRST per Starlette ordering. See middleware/api_version_alias.py.
+app.add_middleware(ApiVersionAliasMiddleware)
+
 app.include_router(auth_router)
 
 # Include API routers
