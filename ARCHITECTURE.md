@@ -415,16 +415,20 @@ Compound rules earned this session:
 - **Session 24b:** When a multi-file sweep is technically straightforward but blasts past the per-session file-count rule, do the survey, document the count, defer to a per-unit series. The Session 24 OpenAPI sweep is a 66-route change across 25 files — mechanically possible in one session, but the SESSION-13 §6 risk register explicitly warns "do one router at a time" because pinned response models surface latent shape inconsistencies that would break V1 UI consumers. A 25-router parallel sweep would amortize the risk into one giant unreviewable commit; per-router sessions keep each diff small enough to read and each smoke test cheap enough to run.
 
 ## Files — Built (2026-05-24, Session 25)
-### Session 25 (Track A first router + drift gate fix)
-First per-router OpenAPI sweep + the openapi.drift gate fix carried from
-the Session 24 spawned-task chip. Track C (DNS + cookie activation) deferred
-— remains as a half-session whenever Azure DNS ops are scheduled.
+### Session 25 (Track A first router + drift gate fix + Track C activation)
+First per-router OpenAPI sweep, the openapi.drift gate fix carried from
+the Session 24 spawned-task chip, AND Track C (parent-domain cookie
+activation) — all three landed in one session because discovery showed
+Track C's hostname+TLS bind had already been provisioned out-of-band,
+collapsing Track C to a one-command env-var flip.
 
 | # | File | Purpose |
 |---|---|---|
 | #1 | [api/security.py](api/security.py) | Added 6 Pydantic v2 response models (3 strict — `ProbeCategory`, `AdversarialCategoriesResponse`, `AdversarialHistoryResponse`; 3 permissive with `ConfigDict(extra="allow")` — `AdversarialRunResponse`, `GuardrailsSummaryResponse`, `GuardrailCheckResponse`). All 5 routes now carry `response_model=` + `operation_id="security_<resource>_<verb>"`. Permissive models pin only the stable contract fields (e.g. `error`, `guardrail_version`) and surface the rest via `extra="allow"` — deliberate tradeoff to avoid freezing internal shapes of `run_adversarial_suite()` on the first sweep. Zero UI consumers verified via grep across `static/` + `team-portal/` before changes. |
 | #2 | [dashboard.py](dashboard.py) | `_validate_openapi_artifact()` strict mode flipped from "any non-prod = strict" to opt-in via `CI=true` (GitHub Actions default). Local `import dashboard` now warns rather than raises on routine spec drift — unblocks per-router OpenAPI verification ergonomics for Sessions 25+. Prod warn-only (unchanged). CI still strict — drift in PR validation still fails the build. Closes the spawned-task chip from Session 24. |
 | #3 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. +260/-20: 6 new component schemas + 5 cleaned-up operationIds (replacing FastAPI's auto-generated `get_categories_api_security_adversarial_categories_get` style). |
+| #4 (Track C) | App Service config | `az webapp config appsettings set --name app-aigovern-dev --resource-group rg-aigovern-dev --settings "SESSION_COOKIE_DOMAIN=.aigovern.sandboxhub.co"`. Activates the dormant Session 24 code path. Verified live: `az ... --query "[?name=='SESSION_COOKIE_DOMAIN']"` returns the leading-dot value with `slotSetting:false`. App restart clean; `/api/health` 200 on both `aigovern.sandboxhub.co` + `api.aigovern.sandboxhub.co` post-flip. |
+| #5 (Track C discovery) | Pre-existing custom-domain bind | `api.aigovern.sandboxhub.co` was already bound to `app-aigovern-dev` with SNI SSL (thumbprint `9287FDA19B72D6C48EA82B9EA2618DA027DB9D8A`) — discovered via `az webapp config hostname list`. Session 24's deferred A4 item was effectively closed out-of-band between sessions. No new hostname add or cert bind was needed in Session 25. |
 
 **Sweep progress:** 1/25 routers done (api/security.py — 5/66 routes). Order
 for Sessions 26+: leave high-traffic UI consumers (`api/guide.py` — 9 routes,
@@ -480,12 +484,12 @@ risk UI coupling. Pattern locked by Session 25:
 ### Sessions 25-26 — Garak Deep Scan implementation (now unblocked)
 ADR-001 accepted this session. Six-step plan per ADR §7: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Independent of V2 critical path.
 
-### Session 24b — DNS + custom domain (V2 Phase 1 item A4)
-Add CNAME `api.aigovern.sandboxhub.co` → `app-aigovern-dev.azurewebsites.net`, bind custom domain + TLS cert in App Service. DNS zone access confirmed in hand; deferred this session to keep cookie-change blast radius isolated.
+### ~~Session 24b — DNS + custom domain (V2 Phase 1 item A4)~~ ✓ Session 25
+Closed in Session 25: `api.aigovern.sandboxhub.co` was already bound with SNI SSL active when discovery ran. Only the `SESSION_COOKIE_DOMAIN` env-var flip was needed to fully activate the parent-domain cookie path. Final manual step pending: one real-login DevTools verification of cookie `Domain` attribute.
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
-- Track A: A1 OpenAPI hardening (deferred to per-router series), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24, A4 CNAME (deferred to Session 24b)
+- Track A: A1 OpenAPI hardening (per-router series, 1/25 done Session 25), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
 - Track B: ~~B1 `tests/test_deploy_completeness.py`~~ ✓ Session 23, B2 ARCHITECTURE.md backfill ✓ Sessions 11-24 inline, ~~B3 SESSION-12B §6 update~~ ✓ Session 24
 - Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy ✓ Session 19
 

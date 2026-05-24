@@ -5,7 +5,9 @@
 **Carry-over from Session 25:**
 - ✓ Track A router #1 (`api/security.py`) — 5/66 routes done
 - ✓ Drift gate fix (dashboard.py) — closed spawned-task chip
-- ⏸ Track C (DNS + parent-domain cookie activation) — still pending
+- ✓ Track C (parent-domain cookie activation) — `SESSION_COOKIE_DOMAIN`
+  flipped on `app-aigovern-dev`; custom hostname + TLS bind was already
+  provisioned out-of-band. One real-login DevTools verification pending.
 - ⏸ Track A routers #2-25 — 24 routers / 61 routes remaining
 
 ---
@@ -36,24 +38,19 @@ Pattern locked by Session 25. Pick from the remaining list by risk-coupling:
 7. Commit. Deploy auto-fires (code change in `api/`).
 8. Post-deploy: smoke against prod if UI consumers exist.
 
-### B — Track C: DNS + parent-domain cookie activation
+### ~~B — Track C: DNS + parent-domain cookie activation~~ ✓ Closed Session 25
 
-Half-session. Out-of-band Azure + DNS ops; the code path is dormant in
-`middleware/auth.py` since Session 24.
+Platform side complete. Only remaining work is the one-real-login DevTools
+verification — not a full session, just a single sanity check on next login:
 
-1. Add CNAME `api.aigovern.sandboxhub.co` → `app-aigovern-dev.azurewebsites.net`
-   in sandboxhub.co DNS zone (zone access confirmed in Session 24).
-2. `az webapp config hostname add` + managed-cert + ssl bind for the new hostname.
-3. `az webapp config appsettings set ... SESSION_COOKIE_DOMAIN=.aigovern.sandboxhub.co`
-   on `app-aigovern-dev`.
-4. Login flow on `https://aigovern.sandboxhub.co` → DevTools shows
-   `Set-Cookie: session=...; Domain=.aigovern.sandboxhub.co` (not host-only).
-5. Logout → verify cookie is deleted (Session 24a rule: parent-domain set
-   pairs with parent-domain delete).
-6. Update SESSION-12B §6 row 2 status → ✓ activated.
-
-**This is the test that proves Session 24's auth change actually works
-end-to-end.**
+1. Open `https://aigovern.sandboxhub.co/login`, log in as any demo user.
+2. DevTools → Application → Cookies → confirm `session` shows
+   `Domain=.aigovern.sandboxhub.co` (NOT host-only / NOT `aigovern.sandboxhub.co`
+   without leading dot).
+3. Click logout → confirm the `session` cookie is removed (Session 24a:
+   parent-domain set must be paired with parent-domain delete).
+4. If anything diverges, the env var to roll back is
+   `az webapp config appsettings delete --name app-aigovern-dev --resource-group rg-aigovern-dev --setting-names SESSION_COOKIE_DOMAIN`.
 
 ### C — Garak sidecar first cut (ADR-001 §7 steps 1-3)
 
