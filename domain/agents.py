@@ -40,6 +40,9 @@ _engine = None  # type: ignore[assignment]
 # dict bridges the two so seed_agents() at startup is actually visible to the
 # /api/agents endpoint. Lives for the lifetime of the worker process.
 _inmem_agents: dict[str, Agent] = {}
+# Session 16 #18 extension of Session 12B pattern: versions also need an
+# in-memory fallback so the publish workflow works in dev (no DATABASE_URL).
+_inmem_versions: dict[str, AgentVersion] = {}
 
 if _DATABASE_URL:
     try:
@@ -267,8 +270,7 @@ def get_agent(agent_id: str) -> Optional[Agent]:
     logger.info("get_agent: entry", extra={"agent_id": agent_id})
 
     if _engine is None:
-        logger.warning("get_agent: engine unavailable — returning None")
-        return None
+        return _inmem_agents.get(agent_id)
 
     try:
         from sqlalchemy import text
@@ -430,7 +432,8 @@ def create_version(
             logger.error(f"create_version: DB insert failed: {exc}", exc_info=True)
             raise
     else:
-        logger.warning("create_version: engine unavailable — in-memory only")
+        logger.warning("create_version: engine unavailable — storing in _inmem_versions")
+        _inmem_versions[version.id] = version
 
     from domain.repository import append_agent_event
 
@@ -479,7 +482,45 @@ def publish_version(version_id: str, published_by: str) -> AgentVersion:
     )
 
     if _engine is None:
-        raise RuntimeError("publish_version: database engine unavailable")
+        # In-memory fallback — mirrors Session 12B pattern for agents.
+        v = _inmem_versions.get(version_id)
+        if v is None:
+            raise ValueError(f"publish_version: version_id='{version_id}' not found")
+        if v.status != AgentStatus.DRAFT:
+            raise ValueError(
+                f"publish_version: version '{version_id}' is {v.status.value}, "
+                "only DRAFT versions can be published"
+            )
+        now = datetime.now(timezone.utc)
+        published_version = v.model_copy(update={
+            "status": AgentStatus.PUBLISHED,
+            "published_at": now,
+            "published_by": published_by,
+        })
+        _inmem_versions[version_id] = published_version
+        agent = _inmem_agents.get(v.agent_id)
+        if agent is not None:
+            _inmem_agents[v.agent_id] = agent.model_copy(update={
+                "latest_version_id": version_id,
+                "updated_at": now,
+            })
+        # Best-effort audit + subscriber notify (same as DB path, outside transaction).
+        try:
+            from domain.repository import append_agent_event
+            append_agent_event("AGENT_PUBLISHED", {
+                "agent_id": published_version.agent_id,
+                "version_id": version_id,
+                "semver": published_version.semver,
+                "published_by": published_by,
+            })
+        except Exception as audit_exc:
+            logger.warning(f"publish_version: audit event write failed (non-fatal): {audit_exc}")
+        try:
+            from domain.agent_subscribers import notify_subscribers_on_publish
+            notify_subscribers_on_publish(published_version.agent_id, version_id)
+        except Exception as sub_exc:
+            logger.warning(f"publish_version: subscriber notification failed (non-fatal): {sub_exc}")
+        return published_version
 
     try:
         from sqlalchemy import text
@@ -620,8 +661,7 @@ def get_version(version_id: str) -> Optional[AgentVersion]:
     logger.info("get_version: entry", extra={"version_id": version_id})
 
     if _engine is None:
-        logger.warning("get_version: engine unavailable — returning None")
-        return None
+        return _inmem_versions.get(version_id)
 
     try:
         from sqlalchemy import text
@@ -660,8 +700,10 @@ def list_versions(agent_id: str) -> list[AgentVersion]:
     logger.info("list_versions: entry", extra={"agent_id": agent_id})
 
     if _engine is None:
-        logger.warning("list_versions: engine unavailable — returning empty list")
-        return []
+        return sorted(
+            [v for v in _inmem_versions.values() if v.agent_id == agent_id],
+            key=lambda v: v.id,
+        )
 
     try:
         from sqlalchemy import text

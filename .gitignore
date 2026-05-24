@@ -74,3 +74,6 @@ data/
 cli/dist/
 sdk/dist/
 _pytest_tmp/
+
+# Session-produced data exports (timestamped, regenerable)
+ai-systems-inventory-*.csv

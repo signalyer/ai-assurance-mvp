@@ -1,0 +1,229 @@
+import { signal, computed } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
+import { apiGet } from '../../shared/api/client';
+import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/components/Badges';
+import { AiSystemDrawer, openSystem } from './AiSystemDrawer';
+import { AiSystemEditModal } from './AiSystemEditModal';
+import { AiSystemRevisionsPanel } from './AiSystemRevisionsPanel';
+import { AiSystemFrameworksPanel } from './AiSystemFrameworksPanel';
+import { AiSystemBoundAgentsPanel } from './AiSystemBoundAgentsPanel';
+import type { AiSystemSummary, AiSystemsListResponse } from './types';
+
+// Page state — module-level signals so URL?id= deep-link survives navigation.
+const allSystems = signal<AiSystemSummary[]>([]);
+const loading = signal<boolean>(true);
+const loadError = signal<string | null>(null);
+const searchTerm = signal<string>('');
+const riskFilter = signal<string>('');
+const decisionFilter = signal<string>('');
+const statusFilter = signal<string>('');
+
+const filtered = computed<AiSystemSummary[]>(() => {
+  const term = searchTerm.value.toLowerCase();
+  const risk = riskFilter.value;
+  const decision = decisionFilter.value;
+  const status = statusFilter.value;
+  return allSystems.value.filter((s) => {
+    if (term && !s.name.toLowerCase().includes(term) && !s.domain.toLowerCase().includes(term)) {
+      return false;
+    }
+    if (risk && s.risk_level !== risk) return false;
+    if (decision && s.release_decision !== decision) return false;
+    if (status && s.runtime_status !== status) return false;
+    return true;
+  });
+});
+
+// Export currently-filtered inventory as CSV. Pure client-side — no API
+// call, no server round-trip. Honours the active filters so the file matches
+// what the user sees on screen.
+const EXPORT_COLUMNS: ReadonlyArray<{ key: keyof AiSystemSummary; header: string }> = [
+  { key: 'id', header: 'ID' },
+  { key: 'name', header: 'Name' },
+  { key: 'business_owner', header: 'Business Owner' },
+  { key: 'technical_owner', header: 'Technical Owner' },
+  { key: 'domain', header: 'Domain' },
+  { key: 'risk_level', header: 'Risk Level' },
+  { key: 'autonomy_level', header: 'Autonomy' },
+  { key: 'data_classes', header: 'Data Classes' },
+  { key: 'runtime_status', header: 'Runtime Status' },
+  { key: 'release_decision', header: 'Release Decision' },
+  { key: 'open_findings', header: 'Open Findings' },
+  { key: 'critical_findings', header: 'Critical Findings' },
+  { key: 'last_assessment', header: 'Last Assessment' },
+];
+
+function csvEscape(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const s = Array.isArray(v) ? v.join('; ') : String(v);
+  // RFC 4180 — quote if comma, quote, CR, or LF; double internal quotes.
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function exportInventoryCsv(rows: AiSystemSummary[]): void {
+  const header = EXPORT_COLUMNS.map((c) => c.header).join(',');
+  const lines = rows.map((r) =>
+    EXPORT_COLUMNS.map((c) => csvEscape(r[c.key])).join(','),
+  );
+  // BOM so Excel opens the file in UTF-8 instead of cp1252.
+  const csv = '﻿' + [header, ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  a.href = url;
+  a.download = `ai-systems-inventory-${ts}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function loadSystems(): Promise<void> {
+  loading.value = true;
+  loadError.value = null;
+  const r = await apiGet<AiSystemsListResponse>('/grc/ai-systems');
+  if (r.ok) {
+    allSystems.value = r.data.systems ?? [];
+  } else {
+    loadError.value = r.detail;
+  }
+  loading.value = false;
+}
+
+export function AiSystemsPage() {
+  useEffect(() => {
+    void loadSystems();
+    // Honour ?id= deep link (V1 parity — static/ai-systems.html load())
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (id) openSystem(id);
+  }, []);
+
+  const rows = filtered.value;
+
+  return (
+    <div>
+      <div class="page-header">
+        <div>
+          <div class="page-title">AI System Inventory</div>
+          <div class="page-subtitle">Production and pre-production AI systems under governance</div>
+        </div>
+        <div class="page-actions">
+          <button
+            class="btn btn-sm"
+            disabled={filtered.value.length === 0}
+            onClick={() => exportInventoryCsv(filtered.value)}
+            title="Download the filtered inventory as CSV"
+          >Export Inventory ({filtered.value.length})</button>
+          <a class="btn btn-sm btn-primary" href="/ai-systems/new">+ Register System</a>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input
+          class="filter-input"
+          type="text"
+          placeholder="Search systems…"
+          value={searchTerm.value}
+          onInput={(e) => (searchTerm.value = (e.currentTarget as HTMLInputElement).value)}
+        />
+        <select
+          class="filter-select"
+          value={riskFilter.value}
+          onChange={(e) => (riskFilter.value = (e.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">All risk levels</option>
+          <option value="CRITICAL">Critical</option>
+          <option value="HIGH">High</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="LOW">Low</option>
+        </select>
+        <select
+          class="filter-select"
+          value={decisionFilter.value}
+          onChange={(e) => (decisionFilter.value = (e.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">All decisions</option>
+          <option value="APPROVED">Approved</option>
+          <option value="CONDITIONAL_PILOT">Conditional Pilot</option>
+          <option value="HOLD">Hold</option>
+          <option value="REJECT">Reject</option>
+        </select>
+        <select
+          class="filter-select"
+          value={statusFilter.value}
+          onChange={(e) => (statusFilter.value = (e.currentTarget as HTMLSelectElement).value)}
+        >
+          <option value="">All statuses</option>
+          <option value="PRODUCTION">Production</option>
+          <option value="PILOT">Pilot</option>
+          <option value="STAGED">Staged</option>
+        </select>
+      </div>
+
+      {loadError.value && <div class="error-banner">Failed to load systems: {loadError.value}</div>}
+
+      <div class="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>System Name</th>
+              <th>Business Owner</th>
+              <th>Domain</th>
+              <th>Risk Level</th>
+              <th>Autonomy</th>
+              <th>Data Classes</th>
+              <th>Runtime</th>
+              <th>Decision</th>
+              <th style={{ textAlign: 'right' }}>Open Findings</th>
+              <th>Last Assessment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading.value && (
+              <tr><td colSpan={10} class="loading">Loading…</td></tr>
+            )}
+            {!loading.value && rows.length === 0 && (
+              <tr><td colSpan={10} class="empty-state">No systems match filters.</td></tr>
+            )}
+            {!loading.value && rows.map((s) => (
+              <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => openSystem(s.id)}>
+                <td>
+                  <div class="cell-primary">{s.name}</div>
+                  <div class="cell-secondary">{s.id}</div>
+                </td>
+                <td class="text-sm">{(s.business_owner ?? '').split(',')[0]}</td>
+                <td class="text-sm text-secondary">{s.domain}</td>
+                <td><SeverityBadge value={s.risk_level} /></td>
+                <td class="text-sm text-secondary">
+                  {(s.autonomy_level ?? '').split(' ').slice(0, 3).join(' ')}
+                  {(s.autonomy_level ?? '').split(' ').length > 3 ? '…' : ''}
+                </td>
+                <td class="text-xs text-tertiary">
+                  {s.data_classes.slice(0, 3).join(', ')}{s.data_classes.length > 3 ? '…' : ''}
+                </td>
+                <td class="text-sm"><RuntimeStatusDot value={s.runtime_status} /></td>
+                <td><DecisionBadge value={s.release_decision} /></td>
+                <td style={{ textAlign: 'right' }}>
+                  <span class="font-bold">{s.open_findings}</span>
+                  {s.critical_findings > 0 && (
+                    <span class="text-critical text-xs"> ({s.critical_findings} P0)</span>
+                  )}
+                </td>
+                <td class="text-sm text-secondary">{s.last_assessment}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <AiSystemDrawer />
+      <AiSystemEditModal />
+      <AiSystemRevisionsPanel />
+      <AiSystemFrameworksPanel />
+      <AiSystemBoundAgentsPanel />
+    </div>
+  );
+}
