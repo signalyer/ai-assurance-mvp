@@ -399,13 +399,38 @@ Compound rules earned this session:
 - **Session 23a:** ADRs live at `docs/adr/ADR-NNN-{slug}.md`, numbered sequentially, status header at top. The repo had no ADR convention before this session because every prior decision was small enough to capture in ARCHITECTURE.md `## Architectural decisions`. Integrations with persistent operational footprint (a sidecar Container App, a new Docker image, a new SSE surface) deserve their own document with rejected-options and revisit triggers.
 - **Session 23b:** A deploy-completeness test must honestly distinguish "zip is incomplete" from "test runner is missing third-party deps." Failing on a missing dev `dotenv` would have trained future maintainers to ignore the test; skipping with an explicit "does NOT validate" message keeps the failure mode load-bearing. CI installs the real requirements file, so the test runs for real exactly where it matters.
 
+## Files — Built (2026-05-24, Session 24)
+### Session 24 (V2 Phase 1 closeout — parent-domain cookie + SESSION-12B §6 + ADR-001 acceptance)
+Three working artifacts, all V2 Phase 1 carry-over from `docs/plans/SESSION-13-v2-engine-hardening.md`. Closes Track A item A3 (parent-domain cookie), Track B item B3 (SESSION-12B §6 backend pins), and flips ADR-001 from Proposed to Accepted. OpenAPI response-model sweep (Track A item A1) deliberately deferred — a survey counted **66 routes across ~25 files** lacking `response_model=`, which exceeds the project's ≤3-file-per-session rule and conflicts with the SESSION-13 §6 risk register's "one router at a time" mitigation. Will land as a per-router series in Sessions 25+. DNS work (item A4) deferred to a follow-up despite zone access being in hand, to keep this session focused on the auth change's blast radius.
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [middleware/auth.py](middleware/auth.py) | Added `_cookie_domain()` reading new `SESSION_COOKIE_DOMAIN` env var. `_set_session_cookie()` now conditionally passes `domain=` only when env var is set — unset → host-only cookie (V1 behaviour, byte-identical). Logout's `delete_cookie` mirrors the same domain via the same helper, closing a logout-bypass class bug where a parent-domain cookie would survive logout if the delete call were host-only. Code path is dormant on V1 today; flip the env var at V2 SPA cutover. |
+| #2 | [docs/plans/SESSION-12B-PROD-RECOVERY.md](docs/plans/SESSION-12B-PROD-RECOVERY.md) | §6 carry-over table gains two rows. **Row 1: backend env pins as fresh-deploy requirement** — captures `EVAL_BACKEND=noop` plus the full Session 21 `ci`-profile set (`SCRUBBER_BACKEND=regex`, `TRACER_BACKEND=noop`, `MEMORY_BACKEND=noop`, `RAG_BACKEND=noop`, `POLICY_BACKEND=noop`). Without these, a Bicep rebuild on a fresh App Service would re-detonate the deepeval cold-start crash and pull in heavy transitives not in `requirements-deploy.txt`. Bicep parameterisation deliberately deferred to the staging-slot session — encoding into `appsettings.bicep` without a staging slot to verify against repeats the Session 12 risk pattern. **Row 2: `SESSION_COOKIE_DOMAIN` activation procedure** for V2 cutover (DevTools verification + logout mirror). |
+| #3 | [docs/adr/ADR-001-garak.md](docs/adr/ADR-001-garak.md) | Status flipped from Proposed → Accepted. Acceptance unblocks Sessions 25-26 (sidecar implementation per ADR §7) but does not schedule them — they remain independent of the V2 critical path. No code change accompanies this; first Garak code lands in a dedicated session that opens with the ADR §7 6-step plan. |
+
+**Verification.** `python -c "import middleware.auth; print(hasattr(middleware.auth, '_cookie_domain'))"` → `True`. Auth route signatures unchanged, so OpenAPI shape is unaffected by this session. `test_session09_integration.py::test_dashboard_mounts_session09_routers` fails locally with `openapi.drift` from `dashboard.py:215` — confirmed pre-existing on clean main (`git stash` round-trip reproduced); spawned as separate task. Smoke test against prod deferred to the deploy that ships this commit; the change is dormant on V1 (env unset) so the worst case is "behaves identically to before."
+
+Compound rules earned this session:
+- **Session 24a:** A `set_cookie` with `domain=` MUST be paired with a `delete_cookie` carrying the same `domain=`. The browser treats host-only and parent-domain cookies as distinct entries with the same name; deleting one does not delete the other. Logout that calls host-only `delete_cookie` against a parent-domain session leaves the cookie alive — a silent auth-bypass-on-logout. Pattern: route both calls through a single `_cookie_domain()` helper so the two paths can't drift.
+- **Session 24b:** When a multi-file sweep is technically straightforward but blasts past the per-session file-count rule, do the survey, document the count, defer to a per-unit series. The Session 24 OpenAPI sweep is a 66-route change across 25 files — mechanically possible in one session, but the SESSION-13 §6 risk register explicitly warns "do one router at a time" because pinned response models surface latent shape inconsistencies that would break V1 UI consumers. A 25-router parallel sweep would amortize the risk into one giant unreviewable commit; per-router sessions keep each diff small enough to read and each smoke test cheap enough to run.
+
 ## Files — Planned
 
-### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
-See `docs/plans/SESSION-13-v2-engine-hardening.md`. Two parallel tracks:
-- Track A (V2 prep): OpenAPI hardening, contract tests, parent-domain cookie, `api.aigovern.sandboxhub.co` CNAME
-- Track B (V1 debt): ~~`tests/test_deploy_completeness.py`~~ ✓ Session 23, ARCHITECTURE.md backfill, SESSION-12B §6 update
-- Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy
+### Sessions 25+ — OpenAPI response-model sweep (Track A item A1, per-router)
+Survey result this session: 66 routes across ~25 files lack `response_model=`. Top offenders: `guide.py` (9), `reports.py` (6), `analytics.py` (5), `domains_api.py` (5), `security.py` (5), `connectors.py` (4), `evidence.py` (4). Plan: one PR per `api/*.py` file, drafted Pydantic v2 BaseModel in the same file (or shared `api/contracts/` if duplication emerges per SESSION-13 §6 default), `smoke_e2e.ps1` after each. Acceptance unchanged from SESSION-13 §3.A1.
+
+### Sessions 25-26 — Garak Deep Scan implementation (now unblocked)
+ADR-001 accepted this session. Six-step plan per ADR §7: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Independent of V2 critical path.
+
+### Session 24b — DNS + custom domain (V2 Phase 1 item A4)
+Add CNAME `api.aigovern.sandboxhub.co` → `app-aigovern-dev.azurewebsites.net`, bind custom domain + TLS cert in App Service. DNS zone access confirmed in hand; deferred this session to keep cookie-change blast radius isolated.
+
+### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
+See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
+- Track A: A1 OpenAPI hardening (deferred to per-router series), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24, A4 CNAME (deferred to Session 24b)
+- Track B: ~~B1 `tests/test_deploy_completeness.py`~~ ✓ Session 23, B2 ARCHITECTURE.md backfill ✓ Sessions 11-24 inline, ~~B3 SESSION-12B §6 update~~ ✓ Session 24
+- Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy ✓ Session 19
 
 ### Garak Deep Scan — implementation (per ADR-001 §7)
 Six-step plan deferred to a future session pending ADR-001 acceptance: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Estimated 2 sessions.

@@ -1,6 +1,6 @@
 # ADR-001 — Garak integration shape
 
-- **Status:** Proposed (Session 23, 2026-05-24)
+- **Status:** Accepted (Session 24, 2026-05-24). Originally Proposed in Session 23. Acceptance unblocks Sessions 25-26 (sidecar implementation) but does not schedule them — they remain independent of the V2 critical path per §7.
 - **Deciders:** Praveen Kosuri
 - **Supersedes:** none
 - **Related:** Session 18 (`api/adversarial.py` SSE), Session 20 (`adversarial.py` parallelization), Session 12 (deploy-zip slim-down rule)

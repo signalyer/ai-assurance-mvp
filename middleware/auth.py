@@ -95,16 +95,28 @@ def _ip_and_ua(request: Request) -> tuple[str, str]:
     return ip, headers.get("user-agent", "")
 
 
+def _cookie_domain() -> str | None:
+    """Optional parent-domain attribute for cross-subdomain SSO.
+
+    Unset → host-only cookie (V1 single-host behaviour, unchanged).
+    Set to e.g. ".aigovern.sandboxhub.co" → portal.* and gov.* share the session.
+    """
+    d = os.getenv("SESSION_COOKIE_DOMAIN", "").strip()
+    return d or None
+
+
 def _set_session_cookie(resp, token: str) -> None:
-    resp.set_cookie(
-        SESSION_COOKIE,
-        token,
+    kwargs: dict = dict(
         max_age=SESSION_MAX_AGE,
         httponly=True,
         secure=True,
         samesite="lax",
         path="/",
     )
+    domain = _cookie_domain()
+    if domain:
+        kwargs["domain"] = domain
+    resp.set_cookie(SESSION_COOKIE, token, **kwargs)
 
 
 class SessionAuthMiddleware(BaseHTTPMiddleware):
@@ -196,7 +208,13 @@ async def logout(request: Request):
                      ip=ip, user_agent=agent)
         ua.session_end(sid)
     resp = JSONResponse({"ok": True})
-    resp.delete_cookie(SESSION_COOKIE, path="/")
+    # Must mirror the domain= used at set time, or the browser keeps the
+    # parent-domain cookie alive across subdomains after logout.
+    domain = _cookie_domain()
+    if domain:
+        resp.delete_cookie(SESSION_COOKIE, path="/", domain=domain)
+    else:
+        resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
 
 
