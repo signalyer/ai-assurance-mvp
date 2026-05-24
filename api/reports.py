@@ -23,12 +23,57 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse, Response
+from pydantic import BaseModel, ConfigDict
 
 from domain import repository
 from domain.reports import build_report, to_csv_table, BUILDERS
 
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+
+# ===========================================================================
+# Response models (Session 26 — Track A OpenAPI sweep, per-router #2)
+# ===========================================================================
+
+class ReportCatalogItem(BaseModel):
+    """One entry in the report-type catalog. Stable shape — UI keys off `type`/`title`/`scope`."""
+    type: str
+    title: str
+    scope: str
+    requires_system: bool
+    audience: list[str]
+    description: str
+
+
+class ReportCatalogResponse(BaseModel):
+    reports: list[ReportCatalogItem]
+
+
+class ReportSystemItem(BaseModel):
+    """One AI system entry for the per-system selector dropdown."""
+    id: str
+    name: str
+    domain: str
+    runtime_status: str
+    release_decision: str
+
+
+class ReportSystemsResponse(BaseModel):
+    systems: list[ReportSystemItem]
+
+
+class ReportDataResponse(BaseModel):
+    """Permissive — the report payload shape diverges across the six report
+    types (executive / assessment / release_gate / framework_coverage /
+    findings / evidence). Pin only the three discriminators that every
+    builder populates; surface the rest via `extra="allow"` rather than
+    freezing internal builder shapes on the first sweep (compound rule 25a).
+    """
+    model_config = ConfigDict(extra="allow")
+    report_title: str | None = None
+    generated_at: str | None = None
+    audience: list[str] | None = None
 
 
 _PER_SYSTEM_TYPES = {"assessment", "release_gate", "findings", "evidence"}
@@ -52,7 +97,7 @@ def _safe_build(report_type: str, system_id: str | None) -> dict:
 # Catalog + JSON
 # ===========================================================================
 
-@router.get("/catalog")
+@router.get("/catalog", response_model=ReportCatalogResponse, operation_id="reports_catalog_list")
 async def catalog() -> dict:
     """List the six report types with metadata for the UI."""
     return {"reports": [
@@ -96,7 +141,7 @@ async def catalog() -> dict:
     ]}
 
 
-@router.get("/systems")
+@router.get("/systems", response_model=ReportSystemsResponse, operation_id="reports_systems_list")
 async def systems() -> dict:
     """List AI systems for the per-system selector."""
     return {"systems": [
@@ -107,7 +152,7 @@ async def systems() -> dict:
     ]}
 
 
-@router.get("/{report_type}")
+@router.get("/{report_type}", response_model=ReportDataResponse, operation_id="reports_report_get")
 async def get_report(report_type: str, system_id: str | None = Query(None)) -> JSONResponse:
     _validate(report_type, system_id)
     return JSONResponse(_safe_build(report_type, system_id))
@@ -117,7 +162,7 @@ async def get_report(report_type: str, system_id: str | None = Query(None)) -> J
 # Exports
 # ===========================================================================
 
-@router.get("/{report_type}/export.json")
+@router.get("/{report_type}/export.json", operation_id="reports_report_export_json")
 async def export_json(report_type: str, system_id: str | None = Query(None)) -> Response:
     _validate(report_type, system_id)
     data = _safe_build(report_type, system_id)
@@ -129,7 +174,7 @@ async def export_json(report_type: str, system_id: str | None = Query(None)) -> 
     )
 
 
-@router.get("/{report_type}/export.csv")
+@router.get("/{report_type}/export.csv", operation_id="reports_report_export_csv")
 async def export_csv(report_type: str, system_id: str | None = Query(None)) -> Response:
     _validate(report_type, system_id)
     data = _safe_build(report_type, system_id)
@@ -152,7 +197,7 @@ async def export_csv(report_type: str, system_id: str | None = Query(None)) -> R
     )
 
 
-@router.get("/{report_type}/export.pdf")
+@router.get("/{report_type}/export.pdf", operation_id="reports_report_export_pdf")
 async def export_pdf(report_type: str, system_id: str | None = Query(None)) -> HTMLResponse:
     """Print-ready HTML view. Browser print → Save as PDF.
     A native PDF generator is not wired in this build; this matches the

@@ -6567,6 +6567,158 @@
         "title": "ReplayRequest",
         "type": "object"
       },
+      "ReportCatalogItem": {
+        "description": "One entry in the report-type catalog. Stable shape \u2014 UI keys off `type`/`title`/`scope`.",
+        "properties": {
+          "audience": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Audience",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "requires_system": {
+            "title": "Requires System",
+            "type": "boolean"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "scope",
+          "requires_system",
+          "audience",
+          "description"
+        ],
+        "title": "ReportCatalogItem",
+        "type": "object"
+      },
+      "ReportCatalogResponse": {
+        "properties": {
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ReportCatalogItem"
+            },
+            "title": "Reports",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reports"
+        ],
+        "title": "ReportCatalogResponse",
+        "type": "object"
+      },
+      "ReportDataResponse": {
+        "additionalProperties": true,
+        "description": "Permissive \u2014 the report payload shape diverges across the six report\ntypes (executive / assessment / release_gate / framework_coverage /\nfindings / evidence). Pin only the three discriminators that every\nbuilder populates; surface the rest via `extra=\"allow\"` rather than\nfreezing internal builder shapes on the first sweep (compound rule 25a).",
+        "properties": {
+          "audience": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audience"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "report_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Title"
+          }
+        },
+        "title": "ReportDataResponse",
+        "type": "object"
+      },
+      "ReportSystemItem": {
+        "description": "One AI system entry for the per-system selector dropdown.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "release_decision": {
+            "title": "Release Decision",
+            "type": "string"
+          },
+          "runtime_status": {
+            "title": "Runtime Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "runtime_status",
+          "release_decision"
+        ],
+        "title": "ReportSystemItem",
+        "type": "object"
+      },
+      "ReportSystemsResponse": {
+        "properties": {
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSystemItem"
+            },
+            "title": "Systems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "systems"
+        ],
+        "title": "ReportSystemsResponse",
+        "type": "object"
+      },
       "RequiredControlOut": {
         "additionalProperties": false,
         "description": "One required control in the intake preview.",
@@ -14224,15 +14376,13 @@
     "/api/reports/catalog": {
       "get": {
         "description": "List the six report types with metadata for the UI.",
-        "operationId": "catalog_api_reports_catalog_get",
+        "operationId": "reports_catalog_list",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Catalog Api Reports Catalog Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ReportCatalogResponse"
                 }
               }
             },
@@ -14248,15 +14398,13 @@
     "/api/reports/systems": {
       "get": {
         "description": "List AI systems for the per-system selector.",
-        "operationId": "systems_api_reports_systems_get",
+        "operationId": "reports_systems_list",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Systems Api Reports Systems Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ReportSystemsResponse"
                 }
               }
             },
@@ -14271,7 +14419,7 @@
     },
     "/api/reports/{report_type}": {
       "get": {
-        "operationId": "get_report_api_reports__report_type__get",
+        "operationId": "reports_report_get",
         "parameters": [
           {
             "in": "path",
@@ -14303,7 +14451,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDataResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14327,7 +14477,7 @@
     },
     "/api/reports/{report_type}/export.csv": {
       "get": {
-        "operationId": "export_csv_api_reports__report_type__export_csv_get",
+        "operationId": "reports_report_export_csv",
         "parameters": [
           {
             "in": "path",
@@ -14383,7 +14533,7 @@
     },
     "/api/reports/{report_type}/export.json": {
       "get": {
-        "operationId": "export_json_api_reports__report_type__export_json_get",
+        "operationId": "reports_report_export_json",
         "parameters": [
           {
             "in": "path",
@@ -14440,7 +14590,7 @@
     "/api/reports/{report_type}/export.pdf": {
       "get": {
         "description": "Print-ready HTML view. Browser print \u2192 Save as PDF.\nA native PDF generator is not wired in this build; this matches the\nexisting /api/report/compliance pattern.",
-        "operationId": "export_pdf_api_reports__report_type__export_pdf_get",
+        "operationId": "reports_report_export_pdf",
         "parameters": [
           {
             "in": "path",
