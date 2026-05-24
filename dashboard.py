@@ -63,8 +63,10 @@ from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
 from api.projection import router as projection_router
 from api.demo_control import router as demo_control_router
+from api._errors import register_error_handlers
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
+from __version__ import __version__
 
 # Metrics router -- 404 when METRICS_ENABLED != "true"
 try:
@@ -135,7 +137,23 @@ def print_startup_status() -> bool:
     return all_required
 
 
-app = FastAPI(title="AI Assurance Dashboard")
+app = FastAPI(
+    title="AI Assurance Platform",
+    version=__version__,
+    description=(
+        "Governance substrate for enterprise AI. Six-layer architecture "
+        "(see docs/target-architecture.md). Consumed by Team Workspace SPA, "
+        "CISO Console SPA, signallayer Python SDK, and `sl` CLI."
+    ),
+    servers=[
+        {"url": "https://api.aigovern.sandboxhub.co", "description": "Production engine"},
+        {"url": "http://localhost:9007", "description": "Local dev"},
+    ],
+)
+
+# Global exception handlers -- typed 500 ServerErrorDetail with trace_id correlation.
+# Per docs/plans/SESSION-13-api-typing-audit.md §1.2.
+register_error_handlers(app)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
