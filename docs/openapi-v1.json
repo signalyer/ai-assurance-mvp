@@ -1819,6 +1819,73 @@
         "title": "ConflictDetail",
         "type": "object"
       },
+      "ConnectorListResponse": {
+        "description": "Envelope for GET /list.",
+        "properties": {
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorSummary"
+            },
+            "title": "Connectors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connectors"
+        ],
+        "title": "ConnectorListResponse",
+        "type": "object"
+      },
+      "ConnectorResultsResponse": {
+        "description": "Cumulative outputs for a single connector across all syncs.\n\nEach list contains domain-model dumps (EvalResult / Finding /\nRuntimeEvent / Evidence). Typed as list[dict] \u2014 see module docstring\nfor why we don't bind to the full domain Pydantic models here.",
+        "properties": {
+          "evals": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evals",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "runtime_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Runtime Events",
+            "type": "array"
+          },
+          "sync_count": {
+            "title": "Sync Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evals",
+          "findings",
+          "runtime_events",
+          "evidence",
+          "sync_count"
+        ],
+        "title": "ConnectorResultsResponse",
+        "type": "object"
+      },
       "ConnectorStatusOut": {
         "additionalProperties": false,
         "description": "Status of one runtime connector (Langfuse / AWS CloudTrail / Datadog).",
@@ -1858,6 +1925,79 @@
           "implementation"
         ],
         "title": "ConnectorStatusOut",
+        "type": "object"
+      },
+      "ConnectorSummary": {
+        "description": "Per-connector status + cumulative output counts.\n\nShape produced by domain.connectors.list_connectors_summary().\nAll 11 fields always present \u2014 strict (no extra=\"allow\").",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "config_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Config Keys",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "evals_produced": {
+            "title": "Evals Produced",
+            "type": "integer"
+          },
+          "evidence_produced": {
+            "title": "Evidence Produced",
+            "type": "integer"
+          },
+          "findings_produced": {
+            "title": "Findings Produced",
+            "type": "integer"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "runtime_events_produced": {
+            "title": "Runtime Events Produced",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "sync_count": {
+            "title": "Sync Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "description",
+          "status",
+          "sync_count",
+          "evals_produced",
+          "findings_produced",
+          "runtime_events_produced",
+          "evidence_produced",
+          "config_keys"
+        ],
+        "title": "ConnectorSummary",
         "type": "object"
       },
       "ConnectorsOut": {
@@ -7459,6 +7599,127 @@
         "title": "SubmitEditOut",
         "type": "object"
       },
+      "SyncAllResponse": {
+        "description": "Envelope for POST /sync-all.",
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SyncResultModel"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/SyncAllTotals"
+          }
+        },
+        "required": [
+          "results",
+          "totals"
+        ],
+        "title": "SyncAllResponse",
+        "type": "object"
+      },
+      "SyncAllTotals": {
+        "description": "Cross-connector totals from POST /sync-all.",
+        "properties": {
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "evals": {
+            "title": "Evals",
+            "type": "integer"
+          },
+          "evidence": {
+            "title": "Evidence",
+            "type": "integer"
+          },
+          "findings": {
+            "title": "Findings",
+            "type": "integer"
+          },
+          "runtime_events": {
+            "title": "Runtime Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evals",
+          "findings",
+          "runtime_events",
+          "evidence",
+          "errors"
+        ],
+        "title": "SyncAllTotals",
+        "type": "object"
+      },
+      "SyncResultModel": {
+        "description": "Single connector sync outcome.\n\nMirrors domain.connectors.SyncResult (dataclass). `error` is None on\nsuccess. `sample_ids` carries up to 3 ids per produced category and\nis keyed on the four fixed category names (evals/findings/\nruntime_events/evidence) \u2014 typed as dict[str, list[str]].",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "evals_produced": {
+            "title": "Evals Produced",
+            "type": "integer"
+          },
+          "evidence_produced": {
+            "title": "Evidence Produced",
+            "type": "integer"
+          },
+          "findings_produced": {
+            "title": "Findings Produced",
+            "type": "integer"
+          },
+          "ran_at": {
+            "title": "Ran At",
+            "type": "string"
+          },
+          "runtime_events_produced": {
+            "title": "Runtime Events Produced",
+            "type": "integer"
+          },
+          "sample_ids": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Sample Ids",
+            "type": "object"
+          }
+        },
+        "required": [
+          "connector",
+          "category",
+          "ran_at",
+          "evals_produced",
+          "findings_produced",
+          "runtime_events_produced",
+          "evidence_produced"
+        ],
+        "title": "SyncResultModel",
+        "type": "object"
+      },
       "SystemEvalsOut": {
         "additionalProperties": false,
         "properties": {
@@ -11032,15 +11293,13 @@
     },
     "/api/grc/connectors/v2/list": {
       "get": {
-        "operationId": "list__api_grc_connectors_v2_list_get",
+        "operationId": "connectors_list_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List  Api Grc Connectors V2 List Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConnectorListResponse"
                 }
               }
             },
@@ -11056,15 +11315,13 @@
     "/api/grc/connectors/v2/sync-all": {
       "post": {
         "description": "Run every connector once. Useful for a single demo button.",
-        "operationId": "sync_all_api_grc_connectors_v2_sync_all_post",
+        "operationId": "connectors_sync_all_run",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Sync All Api Grc Connectors V2 Sync All Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SyncAllResponse"
                 }
               }
             },
@@ -11079,7 +11336,7 @@
     },
     "/api/grc/connectors/v2/{name}/results": {
       "get": {
-        "operationId": "results_api_grc_connectors_v2__name__results_get",
+        "operationId": "connectors_results_get",
         "parameters": [
           {
             "in": "path",
@@ -11096,9 +11353,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Results Api Grc Connectors V2  Name  Results Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConnectorResultsResponse"
                 }
               }
             },
@@ -11123,7 +11378,7 @@
     },
     "/api/grc/connectors/v2/{name}/sync": {
       "post": {
-        "operationId": "sync_api_grc_connectors_v2__name__sync_post",
+        "operationId": "connectors_sync_run",
         "parameters": [
           {
             "in": "path",
@@ -11140,9 +11395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Sync Api Grc Connectors V2  Name  Sync Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SyncResultModel"
                 }
               }
             },
