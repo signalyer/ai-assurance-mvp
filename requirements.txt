@@ -57,6 +57,9 @@ PyYAML>=6.0.0
 # as PyYAML (S12) and pydantic-settings (S12B): runtime deps must live here,
 # not only in requirements-deploy.txt.
 itsdangerous>=2.1.2
+# python-multipart: required by FastAPI when any endpoint uses Form() / File().
+# Same drift class as itsdangerous — transitively present in dev, missing in CI.
+python-multipart>=0.0.7
 
 # Observability — Session 10
 opentelemetry-sdk>=1.27
