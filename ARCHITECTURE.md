@@ -174,6 +174,22 @@ App Service config (not in git): `EVAL_BACKEND=noop` set on `app-aigovern-dev`. 
 
 Verification: `pwsh deploy/smoke_e2e.ps1` returns **6/6 PASSED** against `https://aigovern.sandboxhub.co`. Tag `day-12-complete` pushed to origin.
 
+## Files — Built (2026-05-24, Session 16)
+### Session 16 (Phase 2 Week 2 follow-ups #14–#20 — Team Workspace SPA)
+Three commits on `phase/14-team-workspace-scaffold`, closing all remaining disabled-button gaps from Session 15.
+
+`7e35900` (#17 Evals): `team-portal/src/pages/evals/types.ts` (added `SimulatedRunResponse` + `RefreshedEval` + `AssessmentSummary` + `GateRollup` mirroring `api.evals_v2.SimulatedRunOut`), `team-portal/src/pages/evals/EvalsPage.tsx` (export `reloadEvalsOverview` so the card can refresh parent KPIs), `team-portal/src/pages/evals/SystemEvalCard.tsx` (wired the previously-disabled "Run Simulated Eval Suite" button → `POST /grc/evals/v2/run/{ai_system_id}`; module-level `running` / `lastRun` / `actionError` signals; cache-bust + detail re-fetch on success; "Last run … · N evals · gates {decision}" chip).
+
+`ca74efd` (#14 + #15 + #16 Runtime bundle): new `team-portal/src/pages/runtime/RuntimeModals.tsx` colocating three signal-driven modals (state-change, request-approval, create-incident) + shared `runtimeActionError` signal + `registerRuntimeReload` callback (avoids circular imports without registering through a parent). `team-portal/src/pages/runtime/SystemStates.tsx` (3 buttons wired to `openStateChange` — kill-switch reason required, monitoring picks STANDARD|HEIGHTENED|INCIDENT, enable/disable toggles via the same modal). `team-portal/src/pages/runtime/RuntimePage.tsx` (+ Request on the Approval Queue card → `openRequestApproval`; mount `<RuntimeModals />`; render `runtimeActionError` above KpiRow). `team-portal/src/pages/runtime/EventStream.tsx` (row click → `openCreateIncident(event)` pre-fills `from_event_id` + `ai_system_id` + severity-mapped). Engine endpoints: `POST /grc/runtime/v2/state/{id}/{kill-switch|reset-kill-switch|monitoring|enabled}`, `POST /grc/runtime/v2/approvals`, `POST /grc/runtime/v2/incidents`. Actor hardcoded to `demo-engineer`.
+
+`79c8486` (#18 + #19 + #20 Agent Library bundle): new `team-portal/src/pages/agent-library/AgentCreateModal.tsx` (name / team / description / owner_type / inherent_risk; `POST /agents`; `registerAgentsReload` callback). `team-portal/src/pages/agent-library/AgentModal.tsx` rewritten: `PublishTab` replaces `PublishTabStub` (semver MAJOR.MINOR.PATCH + changelog → `POST /agents/{id}/publish`; success badge; reloads agent detail). `useAgentSse(id)` hook opens `EventSource` to `GET /agents/{id}/listen` on modal open; `sseState` signal cycles connecting → open → closed; `agent_update` event → reload detail; cleanup on close; footer dot turns green/amber/gray. `team-portal/src/pages/agent-library/AgentLibraryPage.tsx` (+ Register button enabled, registers reload callback, mounts `<AgentCreateModal />`).
+
+Engine fixes uncovered during smoke verification (folded into the Agent Library commit since they were prerequisites):
+- `api/agents.py` `POST /api/agents`: Pydantic `Literal` validates the string but `domain.agents.create_agent` calls `.value` on it. Coerce to `AgentOwnerType` / `RiskLevel` enums at the boundary before delegating.
+- `domain/agents.py`: extended Session 12B's `_inmem_agents` pattern to versions. New `_inmem_versions: dict[str, AgentVersion]` + in-memory paths for `create_version` (store), `publish_version` (validate DRAFT, mutate status, update `agent.latest_version_id`, best-effort audit + subscriber-notify matching DB-path semantics), `get_version`, `list_versions`. Without this, publish raised `RuntimeError` in dev (no `DATABASE_URL`). This is a depth gap from Session 12B that surfaced only when the publish UI got wired — the read paths were covered, the write path wasn't.
+
+Verification: all 7 endpoints reached end-to-end through the Vite proxy (200/201), all UI flows driven via `preview_eval` (modals open/submit/close, state refreshes, no console errors). No PR opened per user direction — branch accumulates for now.
+
 ## Files — Planned
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt)
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Two parallel tracks:
