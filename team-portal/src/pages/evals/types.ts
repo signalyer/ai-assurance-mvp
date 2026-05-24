@@ -41,3 +41,42 @@ export interface EvalRecord {
 
 export interface OverviewResponse { systems: EvalsSystemOverview[] }
 export interface SystemDetailResponse { evals: EvalRecord[] }
+
+// POST /grc/evals/v2/run/{ai_system_id} — synchronous SimulatedRunOut envelope.
+export interface RefreshedEval {
+  eval_id: string;
+  eval_type: string;
+  new_score: number;
+  status: EvalStatus;
+}
+
+export interface AssessmentSummary {
+  overall_score: number;
+  inherent_risk: string;
+  residual_risk: string;
+  residual_score: number;
+  release_recommendation: string;
+  rule_fired?: string | null;
+  rationale?: string | null;
+  failed_controls: string[];
+  findings_generated: number;
+  evidence_completeness: number;
+}
+
+export interface GateRollup {
+  decision: string;
+  rationale: string;
+  pass_count: number;
+  fail_count: number;
+  warning_count: number;
+  blocking_failures: number;
+}
+
+export interface SimulatedRunResponse {
+  ai_system_id: string;
+  ran_at: string;
+  eval_count: number;
+  evals: RefreshedEval[];
+  assessment: AssessmentSummary;
+  release_gates: GateRollup;
+}

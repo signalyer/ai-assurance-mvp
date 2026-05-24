@@ -1,12 +1,21 @@
 import { signal } from '@preact/signals';
-import { apiGet } from '../../shared/api/client';
-import type { EvalsSystemOverview, EvalRecord, SystemDetailResponse } from './types';
+import { apiGet, apiPost } from '../../shared/api/client';
+import type {
+  EvalsSystemOverview,
+  EvalRecord,
+  SystemDetailResponse,
+  SimulatedRunResponse,
+} from './types';
+import { reloadEvalsOverview } from './EvalsPage';
 
 // Module-level signal state — two levels of expansion.
 const expandedSystems = signal<Set<string>>(new Set());
 const openEvals = signal<Set<string>>(new Set());
 const detailCache = signal<Map<string, EvalRecord[]>>(new Map());
 const detailLoading = signal<Set<string>>(new Set());
+const running = signal<Set<string>>(new Set());
+const actionError = signal<string | null>(null);
+const lastRun = signal<Map<string, SimulatedRunResponse>>(new Map());
 
 function toggleSet(sig: typeof expandedSystems, key: string): void {
   const next = new Set(sig.value);
@@ -36,6 +45,36 @@ function toggleSystem(systemId: string): void {
   if (expandedSystems.value.has(systemId)) void loadDetail(systemId);
 }
 
+async function runSimulatedSuite(systemId: string): Promise<void> {
+  if (running.value.has(systemId)) return;
+  actionError.value = null;
+  const next = new Set(running.value);
+  next.add(systemId);
+  running.value = next;
+
+  const r = await apiPost<SimulatedRunResponse>(
+    `/grc/evals/v2/run/${encodeURIComponent(systemId)}`,
+  );
+
+  if (r.ok) {
+    const lr = new Map(lastRun.value);
+    lr.set(systemId, r.data);
+    lastRun.value = lr;
+    // Invalidate cached detail so the next expand re-fetches refreshed run_at.
+    const dc = new Map(detailCache.value);
+    dc.delete(systemId);
+    detailCache.value = dc;
+    if (expandedSystems.value.has(systemId)) void loadDetail(systemId);
+    void reloadEvalsOverview();
+  } else {
+    actionError.value = `Run failed: ${r.detail}`;
+  }
+
+  const done = new Set(running.value);
+  done.delete(systemId);
+  running.value = done;
+}
+
 const pct = (x: number | null | undefined): number => Math.round((x ?? 0) * 100);
 
 const STATUS_BADGE: Record<string, string> = {
@@ -48,6 +87,8 @@ export function SystemEvalCard({ system: s }: { system: EvalsSystemOverview }) {
   const isOpen = expandedSystems.value.has(s.ai_system_id);
   const evals = detailCache.value.get(s.ai_system_id);
   const isLoadingDetail = detailLoading.value.has(s.ai_system_id);
+  const isRunning = running.value.has(s.ai_system_id);
+  const lr = lastRun.value.get(s.ai_system_id);
 
   return (
     <div class={`sys-eval-card ${isOpen ? 'expanded' : ''}`}>
@@ -81,14 +122,25 @@ export function SystemEvalCard({ system: s }: { system: EvalsSystemOverview }) {
         <div style={{ textAlign: 'right' }}>
           <button
             class="btn btn-sm btn-primary"
-            disabled
-            title="Pending Phase 2 follow-up"
-            onClick={(e) => e.stopPropagation()}
+            disabled={isRunning}
+            onClick={(e) => {
+              e.stopPropagation();
+              void runSimulatedSuite(s.ai_system_id);
+            }}
           >
-            Run Simulated Eval Suite
+            {isRunning ? 'Running…' : 'Run Simulated Eval Suite'}
           </button>
+          {lr && !isRunning && (
+            <div class="text-xs text-tertiary" style={{ marginTop: 4 }}>
+              Last run {lr.ran_at.slice(0, 19).replace('T', ' ')} · {lr.eval_count} evals · gates {lr.release_gates.decision}
+            </div>
+          )}
         </div>
       </div>
+
+      {actionError.value && (
+        <div class="error-banner" style={{ margin: '6px 12px' }}>{actionError.value}</div>
+      )}
 
       {isOpen && (
         <div>

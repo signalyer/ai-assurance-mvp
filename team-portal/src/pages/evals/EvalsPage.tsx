@@ -29,6 +29,10 @@ const sortedSystems = computed(() => {
   );
 });
 
+export async function reloadEvalsOverview(): Promise<void> {
+  return loadOverview();
+}
+
 async function loadOverview(): Promise<void> {
   loading.value = true;
   loadError.value = null;
