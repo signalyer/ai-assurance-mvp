@@ -864,21 +864,112 @@ inspection via `router.routes` confirms all 3 op_ids stamped
 (`projection_status`, `projection_replay`, `projection_view`).
 Canonical exporter spec round-trip clean.
 
+### Session 34 (Track A tenth router — api/memory.py + sweep recount)
+First action per S34 plan: empirical recount across all `api/*.py`.
+The "20/36 fully typed" estimate carried S31→S32→S33 was off — actual
+floor is **18/40 fully clean** (40 = total non-stub api routers).
+Recount loop captured per-file `routes/response_model/operation_id`
+counts; results stored verbatim in the S35 carry-over below.
+
+Target picked: `api/memory.py` (5 routes, 5 response_model, **0
+operation_id**) — cleanest possible sweep shape. All response models
+already present from Session 04; only OpenAPI metadata missing.
+
+5 op_ids stamped following the locked `<prefix>_<verb>` convention:
+`memory_write_episode`, `memory_list_episodes`, `memory_recall`,
+`memory_get_stats`, `memory_get_context`. No response model changes,
+no domain logic touched, no consumer surface impact.
+
+Compound 24c probe post-edit: `api/memory.py` 5/5/5. Import smoke
+clean (`python -c "import api.memory"`).
+
+Spec regenerated via `python scripts/export_openapi.py` (compound 24d
+applied first try — no raw-`app.openapi()` detour this session): exactly
+10-line diff, 5 operationIds replaced. The "before" form
+(`write_episode_api_memory_episodes_post`) is FastAPI's auto-generated
+`<funcname>_<path>_<method>` — unstable across renames; the "after"
+form survives rename. Zero key-reorder noise — clean diff proves the
+canonical exporter is doing its job.
+
+**Sweep progress:** 10 routers shipped by this initiative (security +
+reports + analytics + connectors + evidence + domains_api + adversarial
++ frameworks + projection + memory). **Sweep counter: 19/40 fully typed**
+(18 carried in from prior sessions + memory.py this session).
+
+**Compound 28a regression — 4/4 confirmed.** All four prior doc-only
+closeout commits triggered deploy: S29 (26377047211, 1m14s), S30
+(26377787295, 56s), S31 (26378101370, 58s), S32 (26378408453, 59s),
+S33 (26378651826, 56s). Five total observations with the same shape
+(`.md` modify + delete `SESSION-N-*.md` + add `SESSION-N+1-*.md`).
+Pattern fully characterized — **S35 promoted to dedicated fix session**.
+This closeout commit will be a 6th data point against the existing
+broken globs before the fix lands.
+
+Verification: `python -c "import api.memory"` passes, route inspection
+via 24c grep returns 5/5/5, canonical exporter spec round-trip clean.
+
 ## Files — Planned
 
-### Sessions 34+ — OpenAPI response-model sweep continuation
-Post-S33 state: **9 routers shipped by this initiative** (security,
-reports, analytics, connectors, evidence, domains_api, adversarial,
-frameworks, projection). The "20/36 fully typed; ≤4 partial + 12
-untyped" estimate carried from S31→S32→S33 is now itself two sessions
-stale — **first action in S34 should be an empirical recount across
-all `api/*.py`** before committing to a target. Compound 24c probe
-on the chosen target as usual.
+### Session 35 — Dedicated compound 28a fix (deploy.yml paths-ignore)
+**Promoted from open carry-over.** 5/5 doc-only closeout commits
+have triggered the deploy workflow despite paths-ignore globs in
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) intended
+to suppress them. Pattern is fully characterized; root cause is
+almost certainly the modify+delete+add shape — GitHub evaluates
+paths-ignore against the diff set, and the added file
+(`SESSION-N+1-*.md`) may match a path *outside* the ignore globs
+even though the deleted + modified files are within them. Fix likely:
+broaden globs OR switch to a `paths:` allowlist for code-only files.
 
-Recommended S34 candidates (apply 24c before committing):
-- `api/traces.py` (1 route, untyped) — smallest possible delta, but
-  tracer-adjacent so deserves its own focused window given audit-surface
-  coupling
+S35 scope:
+1. Reproduce: inspect the actual diff filesets for one of the 5
+   triggering runs (`gh run view <run-id> --json`) to confirm which
+   path bypassed the ignore.
+2. Decide: broaden `paths-ignore` (e.g. add `**/docs/plans/**`,
+   `**/ARCHITECTURE.md`) vs flip to `paths` allowlist scoped to
+   `api/**`, `domain/**`, `middleware/**`, `static/**`, `team-portal/**`,
+   `dashboard.py`, `requirements*.txt`, `deploy/**`.
+3. Implement minimal change; smoke against the S34 closeout commit
+   (the 6th data point — confirm it triggered) then push S35 closeout
+   as the verification commit (should NOT trigger if fix works).
+
+Track A in S35 is the deploy fix itself. Closeout/Track B is the
+ARCHITECTURE entry + SESSION-36 plan (which returns to the OpenAPI
+sweep — recommended target `api/rag.py`, identical 4/4/0 shape to
+this session's memory.py — pure op_id stamping).
+
+### Sessions 36+ — OpenAPI sweep continuation (resumes after S35)
+Post-S34 sweep state: **19/40 routers fully typed.** Empirical recount
+output (preserve verbatim for next-session carry-over):
+
+```
+Fully clean (18 prior + memory this session = 19):
+  agents, ai_system_edit, audit_verify, batch, connectors,
+  domains_api, evals_v2, evidence, findings_v2, grc, intake,
+  projection, release_gates, right_to_forget, runtime_v2,
+  security, frameworks, adversarial, memory
+
+Partial (5 candidates — apply 24c before committing):
+  api/rag.py             4 / 4 / 0   (identical shape to memory — cleanest)
+  api/agent_bindings.py  4 / 3 / 4   (1 missing response_model)
+  api/analytics.py       5 / 3 / 5   (2 missing response_model)
+  api/reports.py         6 / 3 / 6   (3 missing response_model)
+  api/assurance_model.py 5 / 12 / 12 (grep over-counting — needs visual check)
+
+Untouched (0 / 0 — 10 routers):
+  assessment, aws_demo, demo, demo_control, demo_run, evaluate,
+  framework, guide, traces, usage
+
+Special-shape (already documented exceptions):
+  api/agent_notifications.py — SSE only, op_id deferrable per S31 rule
+  api/metrics.py             — Prometheus exposition, response_model n/a
+```
+
+Recommended S36 target: `api/rag.py` (4 routes, response_models present,
+0 op_ids) — direct sibling of memory.py; same delta size; one-commit
+sweep.
+
+Defer to its own session: `api/guide.py` (9 routes, high SPA coupling).
 - `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
 - `api/metrics.py` (1)
 - `api/evaluate.py` (1)
