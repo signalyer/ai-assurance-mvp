@@ -184,7 +184,7 @@ def _recall_row_to_item(row: dict[str, object]) -> RecallItem:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/episodes", response_model=WriteEpisodeResponse)
+@router.post("/episodes", response_model=WriteEpisodeResponse, operation_id="memory_write_episode")
 async def write_episode(body: WriteEpisodeRequest) -> WriteEpisodeResponse:
     """Write a new episodic memory entry.
 
@@ -221,7 +221,7 @@ async def write_episode(body: WriteEpisodeRequest) -> WriteEpisodeResponse:
         raise HTTPException(status_code=500, detail="Failed to write episode")
 
 
-@router.get("/episodes", response_model=EpisodesResponse)
+@router.get("/episodes", response_model=EpisodesResponse, operation_id="memory_list_episodes")
 async def list_episodes(
     workload_id: str = Query(..., description="Workload identifier"),
     limit: int = Query(20, ge=1, le=200, description="Max episodes to return"),
@@ -269,7 +269,7 @@ async def list_episodes(
         raise HTTPException(status_code=500, detail="Failed to retrieve episodes")
 
 
-@router.get("/recall", response_model=RecallResponse)
+@router.get("/recall", response_model=RecallResponse, operation_id="memory_recall")
 async def recall(
     workload_id: str = Query(..., description="Workload identifier"),
     query: str = Query(..., description="Semantic search query"),
@@ -321,7 +321,7 @@ async def recall(
         raise HTTPException(status_code=500, detail="Semantic recall failed")
 
 
-@router.get("/stats", response_model=StatsResponse)
+@router.get("/stats", response_model=StatsResponse, operation_id="memory_get_stats")
 async def get_stats() -> StatsResponse:
     """Return combined memory and RAG statistics.
 
@@ -363,7 +363,7 @@ async def get_stats() -> StatsResponse:
     return StatsResponse(memory=mem_data, rag=rag_data)
 
 
-@router.get("/context", response_model=ContextResponse)
+@router.get("/context", response_model=ContextResponse, operation_id="memory_get_context")
 async def get_context(
     workload_id: str = Query(..., description="Workload identifier"),
     lookback_days: int = Query(7, ge=1, le=365, description="Days to look back"),

@@ -14704,7 +14704,7 @@
     "/api/memory/context": {
       "get": {
         "description": "Assemble multi-tier context for a workload.\n\nDelegates to domain.agent_memory.build_context() which handles T1\u2013T4 tiers.\nReturns the assembled context string ready for LLM injection.",
-        "operationId": "get_context_api_memory_context_get",
+        "operationId": "memory_get_context",
         "parameters": [
           {
             "description": "Workload identifier",
@@ -14801,7 +14801,7 @@
     "/api/memory/episodes": {
       "get": {
         "description": "List recent episodes for a workload.\n\nCalls domain.agent_memory.build_context() internally \u2014 the domain layer\nhandles filtering and ordering.",
-        "operationId": "list_episodes_api_memory_episodes_get",
+        "operationId": "memory_list_episodes",
         "parameters": [
           {
             "description": "Workload identifier",
@@ -14872,7 +14872,7 @@
       },
       "post": {
         "description": "Write a new episodic memory entry.\n\nValidates workload_id and outcome at the boundary via the Pydantic model.\nDelegates persistence to domain.agent_memory.write_episode().",
-        "operationId": "write_episode_api_memory_episodes_post",
+        "operationId": "memory_write_episode",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14914,7 +14914,7 @@
     "/api/memory/recall": {
       "get": {
         "description": "Semantic search over episodic memory for a workload.\n\nDelegates to domain.agent_memory.selective_recall().",
-        "operationId": "recall_api_memory_recall_get",
+        "operationId": "memory_recall",
         "parameters": [
           {
             "description": "Workload identifier",
@@ -14998,7 +14998,7 @@
     "/api/memory/stats": {
       "get": {
         "description": "Return combined memory and RAG statistics.\n\nCalls domain.agent_memory.memory_stats() and domain.rag_engine.rag_stats()\nconcurrently and merges the results.",
-        "operationId": "get_stats_api_memory_stats_get",
+        "operationId": "memory_get_stats",
         "responses": {
           "200": {
             "content": {
