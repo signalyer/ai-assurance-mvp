@@ -1,0 +1,28 @@
+{
+  "name": "ciso-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CISO Console SPA — governance/audit-facing client for the AI Assurance engine. Consumes /api/v1/*.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "codegen": "openapi-typescript ../docs/openapi-v1.json -o src/shared/api/schema.ts"
+  },
+  "dependencies": {
+    "preact": "^10.22.0",
+    "@preact/signals": "^1.3.0",
+    "wouter-preact": "^3.3.5"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.9.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "openapi-typescript": "^7.4.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
