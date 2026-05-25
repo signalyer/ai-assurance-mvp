@@ -22,6 +22,15 @@ at load time, ``_METRICS_TOKEN`` is ``None`` and ``_token_valid`` returns ``Fals
 for any input, denying all access.  Post-load env var changes have no effect on
 the cached value, eliminating per-request ``os.environ`` access and the
 associated TOCTOU window.
+
+OpenAPI contract (Session 38 sweep):
+  ``GET /api/metrics`` emits raw ``text/plain`` in the Prometheus exposition
+  wire format — not JSON.  Because the response is a plain-text byte stream
+  with no structured schema, no Pydantic response model is registered for this
+  endpoint.  A stable machine-readable identifier is attached so generated
+  clients and Schemathesis can address the operation by name.  This is the
+  canonical bare-by-design treatment: zero SPA consumers, monitoring scrapers
+  only, content type is ``text/plain; version=0.0.4``.
 """
 from __future__ import annotations
 
@@ -81,7 +90,7 @@ def _token_valid(provided: str) -> bool:
     )
 
 
-@router.get("/api/metrics")
+@router.get("/api/metrics", operation_id="metrics_prometheus_get")
 async def get_metrics(request: Request) -> Response:
     """Return Prometheus exposition format metrics.
 

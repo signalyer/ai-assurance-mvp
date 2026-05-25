@@ -2358,6 +2358,36 @@
         "title": "DeleteDocumentResponse",
         "type": "object"
       },
+      "DemoRunResponse": {
+        "additionalProperties": true,
+        "description": "Response from demo run.\n\nPermissive: each run record contains nested eval_scores and guardrail\nresults whose key sets vary by model, domain, and guardrail pipeline\nversion. extra=\"allow\" lets those dynamic payloads flow through unchanged.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "runs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "DemoRunResponse",
+        "type": "object"
+      },
       "DomainConfig": {
         "description": "Schema for creating/updating a domain (request body).",
         "properties": {
@@ -3279,6 +3309,75 @@
         "title": "EvalResultOut",
         "type": "object"
       },
+      "EvalScore": {
+        "description": "Per-metric evaluation result.\n\nscore and passed may be None when the evaluator cannot produce a\nvalue (e.g. missing reference). details is always a string.",
+        "properties": {
+          "details": {
+            "default": "",
+            "title": "Details",
+            "type": "string"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "title": "EvalScore",
+        "type": "object"
+      },
+      "EvalScoreEntry": {
+        "additionalProperties": true,
+        "description": "One metric result inside eval_scores.\n\nKeys beyond score/passed/details are permitted via extra=\"allow\" because\nsome evaluators attach supplemental fields (e.g. \"details\", \"rationale\").",
+        "properties": {
+          "details": {
+            "default": "",
+            "title": "Details",
+            "type": "string"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "title": "EvalScoreEntry",
+        "type": "object"
+      },
       "EvalsOverviewOut": {
         "additionalProperties": false,
         "properties": {
@@ -3308,6 +3407,51 @@
           "trace_id"
         ],
         "title": "EvaluateRequest",
+        "type": "object"
+      },
+      "EvaluateResponse": {
+        "additionalProperties": true,
+        "description": "Envelope returned by POST /evaluate.\n\neval_scores is keyed on dynamic metric names supplied by the\nevaluator, so the envelope carries ConfigDict(extra=\"allow\").\nThe inner EvalScore shape is strict.\nOn error eval_scores is None and error carries a short message.",
+        "properties": {
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "eval_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/EvalScore"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Scores"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "cached"
+        ],
+        "title": "EvaluateResponse",
         "type": "object"
       },
       "EventRequest": {
@@ -8637,6 +8781,93 @@
         "title": "ToggleProviderOut",
         "type": "object"
       },
+      "TraceItemOut": {
+        "additionalProperties": true,
+        "description": "Single trace record as returned in the recent-traces list.\n\neval_scores is typed as a dict keyed on metric name (e.g. \"coherence\")\nbecause the set of active metrics is runtime-configured and not fixed at\nschema definition time \u2014 per compound 27a asymmetric/polymorphic carve-out.\nWhen a trace has not been evaluated the field is None.",
+        "properties": {
+          "eval_scores": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/EvalScoreEntry"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Scores"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "prompt_preview": {
+            "title": "Prompt Preview",
+            "type": "string"
+          },
+          "response_preview": {
+            "title": "Response Preview",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "tokens_used": {
+            "title": "Tokens Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "prompt_preview",
+          "response_preview",
+          "latency_ms",
+          "tokens_used",
+          "timestamp"
+        ],
+        "title": "TraceItemOut",
+        "type": "object"
+      },
+      "TracesResponse": {
+        "description": "Envelope for GET /traces.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "traces": {
+            "items": {
+              "$ref": "#/components/schemas/TraceItemOut"
+            },
+            "title": "Traces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "traces"
+        ],
+        "title": "TracesResponse",
+        "type": "object"
+      },
       "UpdateBindingRequest": {
         "description": "Body for PATCH /api/systems/{system_id}/bindings/{binding_id}.",
         "properties": {
@@ -9491,7 +9722,7 @@
     "/api/agents/{agent_id}/listen": {
       "get": {
         "description": "Open a Server-Sent Events stream for real-time agent version notifications.\n\nLISTENs on Postgres channel `agent_update_{agent_id}`.\nYields `event: agent_update` when a NOTIFY is received from the domain layer.\nYields `: keepalive` every 25s to prevent proxy timeout.\n\nClient disconnect cancels the stream and closes the Postgres connection.",
-        "operationId": "listen_agent_updates_api_agents__agent_id__listen_get",
+        "operationId": "agent_notifications_listen",
         "parameters": [
           {
             "in": "path",
@@ -11102,7 +11333,7 @@
     "/api/demo/run": {
       "post": {
         "description": "Run the adversarial demo: call Claude and GPT-4o, trace both, evaluate both.\n\nArgs:\n    domain: Domain name to use (e.g., \"finance\", \"healthcare\"). If None, uses default.\n\nReturns list of run results with trace_id and eval_scores.",
-        "operationId": "run_live_demo_api_demo_run_post",
+        "operationId": "demo_run_post_run",
         "parameters": [
           {
             "in": "query",
@@ -11118,7 +11349,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRunResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -11211,7 +11444,7 @@
     "/api/domains": {
       "get": {
         "description": "Get list of available domains.",
-        "operationId": "get_domains_api_domains_get",
+        "operationId": "demo_run_get_domains",
         "responses": {
           "200": {
             "content": {
@@ -11441,7 +11674,7 @@
     "/api/evaluate": {
       "post": {
         "description": "Evaluate a trace by ID (or fetch and evaluate if not cached).\n\nReturns cached result if available.\nReturns eval_scores dict: metric_name -> {score, passed, details}",
-        "operationId": "evaluate_trace_api_evaluate_post",
+        "operationId": "evaluate_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11456,7 +11689,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluateResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15020,7 +15255,7 @@
     "/api/metrics": {
       "get": {
         "description": "Return Prometheus exposition format metrics.\n\nGate 1: ``METRICS_ENABLED=true`` must be set.\nGate 2: ``X-Metrics-Token`` header must match the cached ``_METRICS_TOKEN``\n        value (constant-time compare, read once at module load).\n\nReturns:\n    - ``404`` when metrics are disabled.\n    - ``401`` when the token is absent or wrong.\n    - ``503`` when ``prometheus_client`` is not installed.\n    - ``200`` with ``text/plain; version=0.0.4`` body when all gates pass.",
-        "operationId": "get_metrics_api_metrics_get",
+        "operationId": "metrics_prometheus_get",
         "responses": {
           "200": {
             "content": {
@@ -16220,13 +16455,15 @@
     },
     "/api/traces": {
       "get": {
-        "description": "Fetch recent traces from cache with eval scores.\n\nReturns:\n    {\n      \"traces\": [\n        {\n          \"id\": str,\n          \"model\": str,\n          \"prompt_preview\": str (first 100 chars),\n          \"response_preview\": str (first 100 chars),\n          \"latency_ms\": int,\n          \"tokens_used\": int,\n          \"timestamp\": str (ISO8601),\n          \"eval_scores\": { metric_name: {score, passed} } or null if not evaluated\n        }\n      ],\n      \"error\": str (if any)\n    }",
-        "operationId": "fetch_traces_api_traces_get",
+        "description": "Fetch recent traces from cache with eval scores.\n\nReturns up to 20 of the most recently recorded runs. Each item carries\na prompt/response preview (first 100 chars), timing and token metadata,\nand the eval_scores dict when the trace has been evaluated.",
+        "operationId": "traces_list_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TracesResponse"
+                }
               }
             },
             "description": "Successful Response"

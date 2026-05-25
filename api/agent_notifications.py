@@ -12,6 +12,15 @@ Client disconnect: connection cancels cleanly; Postgres connection is closed.
 
 Postgres connection reuse: uses a dedicated psycopg2 connection in poll mode
 (not from the SQLAlchemy pool) so LISTEN does not hold the shared pool.
+
+OpenAPI typing — Session 38 (sweep router 14/40):
+    The single GET route is an SSE stream returning StreamingResponse. Because
+    the wire format is a never-ending text/event-stream (not a discrete JSON
+    body), attaching a JSON response schema would be misleading and incorrect.
+    The route therefore carries only an operation identifier and is intentionally
+    left bare per the project's compound 26a rule for streaming responses.
+    No SPA consumers query this route's schema — confirmed via grep of static/
+    and team-portal/src/.
 """
 from __future__ import annotations
 
@@ -190,7 +199,7 @@ def _sanitise_agent_id_for_channel(agent_id: str) -> str:
 # GET /api/agents/{agent_id}/listen
 # ---------------------------------------------------------------------------
 
-@router.get("/api/agents/{agent_id}/listen")
+@router.get("/api/agents/{agent_id}/listen", operation_id="agent_notifications_listen")
 async def listen_agent_updates(agent_id: str) -> StreamingResponse:
     """Open a Server-Sent Events stream for real-time agent version notifications.
 

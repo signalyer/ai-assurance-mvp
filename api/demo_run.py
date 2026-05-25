@@ -9,6 +9,14 @@ DECORATOR CHAIN (Session 03):
 Session 05: guardrail integration updated. apply_guardrails and filter_output now sourced
 from api.security (which delegates to middleware.injection and
 guardrails.llama_guard_adapter respectively).
+
+Session 38 — Track A OpenAPI sweep, per-router #18.
+Both routes carry stable SDK operation names and typed response contracts.
+The domain-list endpoint uses a strict model (fixed 3-key shape per domain entry).
+The demo-run endpoint uses a permissive model with extra="allow": each run record
+contains nested eval_scores and guardrail results whose key sets vary by model,
+domain, and guardrail pipeline version — a closed schema would reject valid payloads.
+The bare-by-design choice mirrors AnalyticsResponse (Session 27, compound 27a).
 """
 from __future__ import annotations
 
@@ -18,7 +26,7 @@ import time
 import os
 from pathlib import Path
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from dotenv import load_dotenv
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
@@ -52,10 +60,17 @@ DEMO_CONTEXT = [
 
 
 class DemoRunResponse(BaseModel):
-    """Response from demo run."""
+    """Response from demo run.
+
+    Permissive: each run record contains nested eval_scores and guardrail
+    results whose key sets vary by model, domain, and guardrail pipeline
+    version. extra="allow" lets those dynamic payloads flow through unchanged.
+    """
 
     runs: list[dict]
     error: str | None = None
+
+    model_config = ConfigDict(extra="allow")
 
 
 def _build_run(
@@ -173,7 +188,7 @@ class DomainsResponse(BaseModel):
     domains: list[dict]
 
 
-@router.get("/domains")
+@router.get("/domains", response_model=DomainsResponse, operation_id="demo_run_get_domains")
 async def get_domains() -> DomainsResponse:
     """Get list of available domains."""
     domain_names = list_domains()
@@ -193,7 +208,7 @@ async def get_domains() -> DomainsResponse:
     return {"domains": domains_info}
 
 
-@router.post("/demo/run")
+@router.post("/demo/run", response_model=DemoRunResponse, operation_id="demo_run_post_run")
 async def run_live_demo(domain: str = Query(None)):
     """Run the adversarial demo: call Claude and GPT-4o, trace both, evaluate both.
 

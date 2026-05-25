@@ -1,7 +1,20 @@
-"""API route for evaluating traces."""
+"""API route for evaluating traces.
+
+Session 38 — Track A OpenAPI sweep, per-router #17.
+One JSON-returning endpoint gets a strict Pydantic v2 response model
+and a stable operation_id. The eval_scores field uses a plain dict
+keyed on dynamic metric names, so ConfigDict(extra="allow") is applied
+to the envelope — the inner score shape (EvalScore) is fully strict.
+No Response-subclass or SSE routes exist in this router, so the
+bare-by-design exemption per compound rule 26a does not apply here.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from tracer import get_recent_traces
 from evaluator import evaluate_response
 
@@ -14,29 +27,76 @@ eval_cache: dict[str, dict] = {}
 runs_cache: list[dict] = []
 
 
+# ===========================================================================
+# Response models (Session 38 — Track A OpenAPI sweep, per-router #17)
+# ===========================================================================
+
+class EvalScore(BaseModel):
+    """Per-metric evaluation result.
+
+    score and passed may be None when the evaluator cannot produce a
+    value (e.g. missing reference). details is always a string.
+    """
+    score: Optional[float] = None
+    passed: Optional[bool] = None
+    details: str = ""
+
+
+class EvaluateResponse(BaseModel):
+    """Envelope returned by POST /evaluate.
+
+    eval_scores is keyed on dynamic metric names supplied by the
+    evaluator, so the envelope carries ConfigDict(extra="allow").
+    The inner EvalScore shape is strict.
+    On error eval_scores is None and error carries a short message.
+    """
+    trace_id: str
+    eval_scores: Optional[dict[str, EvalScore]] = None
+    cached: bool
+    error: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+# ===========================================================================
+# Request models
+# ===========================================================================
+
 class EvaluateRequest(BaseModel):
     """Request to evaluate a trace."""
     trace_id: str
 
 
-def _normalize_eval_scores(raw_results: dict) -> dict:
+# ===========================================================================
+# Helpers
+# ===========================================================================
+
+def _normalize_eval_scores(raw_results: dict) -> dict[str, EvalScore]:
     """Convert evaluator results to API format."""
-    normalized = {}
+    normalized: dict[str, EvalScore] = {}
     for metric_name, result in raw_results.items():
         score = result.get("score")
         passed = result.get("passed")
 
-        normalized[metric_name] = {
-            "score": float(score) if score is not None else None,
-            "passed": passed if isinstance(passed, bool) else None,
-            "details": result.get("details", ""),
-        }
+        normalized[metric_name] = EvalScore(
+            score=float(score) if score is not None else None,
+            passed=passed if isinstance(passed, bool) else None,
+            details=result.get("details", ""),
+        )
 
     return normalized
 
 
-@router.post("/evaluate")
-async def evaluate_trace(request: EvaluateRequest):
+# ===========================================================================
+# Routes
+# ===========================================================================
+
+@router.post(
+    "/evaluate",
+    response_model=EvaluateResponse,
+    operation_id="evaluate_post",
+)
+async def evaluate_trace(request: EvaluateRequest) -> dict:
     """
     Evaluate a trace by ID (or fetch and evaluate if not cached).
 
