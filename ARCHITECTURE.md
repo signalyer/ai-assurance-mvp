@@ -613,6 +613,27 @@ will likely also deploy (unwanted but harmless). **Recommend dedicated
 workflow-fix session before Session 30 starts** so the SESSION-30
 domains_api work isn't muddied by a second spurious deploy.
 
+### Session 30 prep (2026-05-25) — paths-ignore root cause fixed
+Workflow file is `.github/workflows/deploy.yml` (not `azure-deploy.yml`;
+the Session 28 + 29 handoffs misnamed it). Hypothesis from Session 28
+("paths-ignore is silently misbehaving") confirmed empirically across
+1d77d4f, 241991b, 069e923, b40d90c — every doc-only closeout commit
+since Session 26 triggered a deploy. Root cause was glob syntax, not
+workflow logic. Commit `2589dbd`:
+```
+- 'docs/**'   ->  'docs/**/*'
+- '**.md'     ->  '**/*.md'
+```
+
+**Compound rule 28a (GitHub Actions path-filter globs).** In GitHub's
+minimatch evaluator, `**` only behaves as the "any depth" recursive
+segment when it stands alone between path separators. Glued forms
+(`docs/**`, `**.md`) degrade to single-segment matches and silently
+miss nested paths. Canonical safe forms: `prefix/**/*` and `**/*.ext`.
+This commit itself is a doc-only change to ARCHITECTURE.md — if
+paths-ignore is now working, this push should NOT trigger a deploy.
+The presence/absence of a deploy run on commit verifies the fix.
+
 ## Files — Planned
 
 ### Sessions 30+ — OpenAPI response-model sweep continuation (20/25 routers remaining)
