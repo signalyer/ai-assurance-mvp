@@ -1262,6 +1262,37 @@ S41 obs #8 confirmed CSM-2 commit `e40fccd` (pure ciso-console SPA, zero engine)
 
 **Remaining V2 critical path:** A1 Tier 3 = guide.py (S42) + 4 unspecified routers (suspected Tier 1, batch via parallel implementers in S42-43). A5 CISO Console = Policies + Reports (CSM-4 in S42 → 10/10). A6/A7 role-aware redirect + cutover (S43+).
 
+### Session 42 (Track A Tier 3 sweep api/guide.py + 28a action validated + CSM-4 → A5 10/10 ✅)
+Two-track parallel push. Track A landed at [`be71444`](https://github.com/signalyer/ai-assurance-mvp/commit/be71444); CSM-4 (Track B) landed at [`5d8ae2c`](https://github.com/signalyer/ai-assurance-mvp/commit/5d8ae2c).
+
+**Track A — A1 OpenAPI sweep 35/40 → 36/40 (90%):**
+- [api/guide.py](api/guide.py): Heaviest Tier 3 sweep to date — 8 of 9 endpoints consumed by `static/shared.js` (the Governance Assistant panel, shared across every V1 page). All shapes were bounded (no event-type polymorphism); strict envelopes + `extra="forbid"` per 27a default. 9 strict response models added (PageGuideOut, GlossaryOut, ControlsListOut, ControlDetailOut, FrameworksListOut, FrameworkItemDetailOut, SearchOut, TipsRegistryOut + per-row models). Two 27a polymorphic-sub-rule exceptions: `TipsRegistryOut.tips` is `dict[str, dict[str, Any]]` (tip records vary by type, consumed as map); `TipOut` single-tip endpoint uses `extra="allow"`. Operation_ids prefixed `guide_*`.
+- `docs/openapi-v1.json` regenerated ONCE per 24d. **All KNOWN Tier 3 routers now complete.**
+
+**Track B — A5 CISO Console 9/10 → 10/10 ✅:**
+- [ciso-console/src/pages/policies/](ciso-console/src/pages/policies/) — read-only policy browser (list + click-drill modal with full text, last-eval, bound systems). Consumes GET /api/grc/policies. Deviation: dropped redundant detail-endpoint round-trip (list response is full shape).
+- [ciso-console/src/pages/reports/](ciso-console/src/pages/reports/) — catalog + per-system Generate/Download (PDF/JSON/CSV). Consumes GET /api/reports/catalog, /systems, /{type}, /{type}/export.{pdf,json,csv}. Two deviations driven by engine reality: (a) PDF export opens new tab — engine returns print-ready HTML per /api/report/compliance pattern, user Ctrl+Ps; (b) Generate button validates via JSON data endpoint then unlocks downloads — engine has no separate job endpoint (exports are sync server-side builders).
+- Build: tsc --noEmit PASS; vite build PASS (index 79.70 kB / 18.85 kB gzip).
+- app.tsx + Sidebar.tsx unchanged (stubs overwritten in place).
+
+**Compound 28a action VALIDATED (closed):**
+First post-action SPA-only commit was CSM-4 (`5d8ae2c`). CI evidence:
+- `be71444` (engine code — api/guide.py): fired contract-tests + deploy ✓
+- `5d8ae2c` (pure ciso-console SPA): fired contract-tests **only — NO deploy** ✓
+
+The S41 `paths-ignore` extension to `team-portal/**` + `ciso-console/**` works as designed. 28a closes from observation → decision-gate → action → validation across 8 sessions (S35-S42). Workflow_dispatch escape valve retained per S22b for the edge case.
+
+**V2 acceptance state after S42:**
+- A1 OpenAPI: **36/40 (90%)** — 4 routers remaining, all suspected Tier 1 (pre-flight 38a grep in S43 to confirm)
+- A5 CISO Console: **10/10 ✅ DONE** (+ 1 bonus RTF Forensics depth-surface)
+- A2/A3/A4/A8/A10/A14/A16: ✓ (prior sessions)
+- A6/A7: blockers — role-aware login redirect (S43-44)
+- A12/A13: blockers — cutover work (S44-45)
+- A15: 🟡 Bicep ✓; P1v3 + staging slot independent infra track
+- A9, A11 (Garak): locked-deferred / out-of-scope V2
+
+**Trajectory:** A1 likely closes 40/40 in S43 (fan-out 4 Tier 1 routers via parallel implementers per 24b). S44 = role-aware redirect + smoke harnesses. S45 = V1→V2 302 + DNS rehearsal. V2 live in ~3 more sessions.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
