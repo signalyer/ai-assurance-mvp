@@ -168,7 +168,7 @@ def _rag_enabled_flag() -> bool:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/stats", response_model=RagStatsResponse)
+@router.get("/stats", response_model=RagStatsResponse, operation_id="rag_get_stats")
 async def get_stats() -> RagStatsResponse:
     """Return statistics about the RAG corpus.
 
@@ -202,7 +202,7 @@ async def get_stats() -> RagStatsResponse:
         raise HTTPException(status_code=500, detail="Failed to fetch RAG stats")
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post("/search", response_model=SearchResponse, operation_id="rag_search")
 async def search(body: SearchRequest) -> SearchResponse:
     """Hybrid (BM25 + semantic vector) search over the RAG corpus.
 
@@ -243,7 +243,7 @@ async def search(body: SearchRequest) -> SearchResponse:
         raise HTTPException(status_code=500, detail="Corpus search failed")
 
 
-@router.post("/documents", response_model=IndexDocumentResponse)
+@router.post("/documents", response_model=IndexDocumentResponse, operation_id="rag_index_document")
 async def index_document(body: IndexDocumentRequest) -> IndexDocumentResponse:
     """Index a document with optional PII scrubbing.
 
@@ -291,7 +291,7 @@ async def index_document(body: IndexDocumentRequest) -> IndexDocumentResponse:
         raise HTTPException(status_code=500, detail="Failed to index document")
 
 
-@router.delete("/documents/{doc_id}", response_model=DeleteDocumentResponse)
+@router.delete("/documents/{doc_id}", response_model=DeleteDocumentResponse, operation_id="rag_delete_document")
 async def delete_document(
     doc_id: str = Path(..., min_length=1, max_length=256, description="Document ID to remove"),
 ) -> DeleteDocumentResponse:

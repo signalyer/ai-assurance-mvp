@@ -15170,7 +15170,7 @@
     "/api/rag/documents": {
       "post": {
         "description": "Index a document with optional PII scrubbing.\n\nThe engine returns False (not an exception) for two distinct cases:\n  1. RAG disabled \u2014 no Azure creds.\n  2. PII confidence > 0.7 \u2014 document rejected and logged.\nWe can't distinguish them from the engine's return value alone, so the\nresponse uses indexed=False with a generic 'rejected_or_disabled' reason.\nEngineers can correlate with data/rag_rejections.jsonl or stats.rag_enabled\nif they need specifics \u2014 both surfaces already exist.",
-        "operationId": "index_document_api_rag_documents_post",
+        "operationId": "rag_index_document",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15212,7 +15212,7 @@
     "/api/rag/documents/{doc_id}": {
       "delete": {
         "description": "Remove a single document from the Azure AI Search index.\n\nReturns deleted=False when RAG is disabled \u2014 same fail-soft contract as\nthe engine. 404 is NOT used: Azure Search delete is idempotent and the\nengine has no read-before-delete, so we can't distinguish 'didn't exist'\nfrom 'deleted successfully' without an extra round trip we don't want.",
-        "operationId": "delete_document_api_rag_documents__doc_id__delete",
+        "operationId": "rag_delete_document",
         "parameters": [
           {
             "description": "Document ID to remove",
@@ -15259,7 +15259,7 @@
     "/api/rag/search": {
       "post": {
         "description": "Hybrid (BM25 + semantic vector) search over the RAG corpus.\n\nWhen RAG is disabled the engine returns an empty list \u2014 we surface that\nas results=[] / total=0 (200 OK), not as an error.",
-        "operationId": "search_api_rag_search_post",
+        "operationId": "rag_search",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15301,7 +15301,7 @@
     "/api/rag/stats": {
       "get": {
         "description": "Return statistics about the RAG corpus.\n\nWhen RAG is disabled (no Azure creds or RAG_ENABLED=false), returns zeroed\ncounters with rag_enabled=false \u2014 never raises. This is the same fail-soft\ncontract domain.rag_engine.rag_stats() honors.",
-        "operationId": "get_stats_api_rag_stats_get",
+        "operationId": "rag_get_stats",
         "responses": {
           "200": {
             "content": {
