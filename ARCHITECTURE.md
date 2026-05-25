@@ -731,22 +731,84 @@ Verification: `python -c "import api.adversarial"` + `python -c
 operation_ids on `adversarial.router.routes`; spec round-trip
 clean.
 
+### Session 32 (Track A eighth router — api/frameworks.py)
+**Originally planned S32 target `api/agent_bindings.py` was already
+fully swept** (4/4 routes carry `response_model` + `operation_id`;
+DELETE correctly response_model-less for 204). Second consecutive
+session where the partial-router list was stale on read — same
+pattern as S31's `findings_v2.py` no-op pivot. Recount of the partial
+list is overdue.
+
+Pivoted to `api/frameworks.py` per handoff alternative. 4 routes:
+- `GET /matrix` — typed since S06, op_id stamped `frameworks_matrix_get`
+- `GET /{slug}` — typed since S06, op_id stamped `frameworks_overview_get`
+- `GET /{slug}/system/{system_id}` — typed since S06, op_id stamped `frameworks_drilldown_get`
+- `POST /{slug}/export` — returns `application/pdf` bytes; op_id only
+  (`frameworks_export`), no `response_model` per S31 binary-response
+  rule (mirrors the SSE precedent).
+
+Strict pass per compound 27a: 10 response models + `ExportRequest`
+all promoted to `extra="forbid"` (`MatrixCellOut`, `MatrixRowOut`,
+`MatrixOut`, `ControlRollupOut`, `FindingSummaryOut`, `ItemCoverageOut`,
+`FrameworkOverviewOut`, `EvidenceOut`, `DrillDownItemOut`,
+`DrillDownOut`).
+
+Consumer surface: only `static/frameworks.html` + `static/ai-systems.html`
+(no team-portal SPA route). Both use the operation paths directly,
+not the FastAPI auto-generated operationIds — safe to rename.
+
+**Finding: `EvidenceOut` name-collides with `api/grc.py:491`.** The
+non-strict `grc.py` definition wins in the merged OpenAPI schema
+(EvidenceOut shows `additionalProperties: null` in components, not
+`false`), even though the frameworks.py version is strict. Both
+routers reference their own local class — runtime behavior is
+unaffected — but the OpenAPI artifact under-represents the
+strictness of `/api/frameworks/{slug}/system/{id}` responses. Out
+of sweep scope per compound 24b (per-router only). Carried to a
+future session that touches `api/grc.py` — fix is rename to
+`FrameworksEvidenceOut` + regen artifact, ~3 lines.
+
+Also-noted (not fixed): `MatrixCellOut` at `api/frameworks.py:83`
+is dead code — `MatrixRowOut.cells` is typed `dict[str, float]`,
+not `dict[str, MatrixCellOut]`. Leave as-is per scope discipline.
+
+`docs/openapi-v1.json` regenerated: +13/-4 lines (10 strict markers
++ 4 op_id renames). `openapi.drift.production_warn` fires on local
+`import dashboard` as expected per compound 25b.
+
+Compound rule **24c (NEW — earned this session):** Before targeting
+a "partial" router from the planned-target list, grep the actual
+file for `response_model=` + `operation_id=` and recount routes —
+the planned-target list goes stale fast as sibling sweeps stamp
+files. Two consecutive sessions (S31, S32) burned a context-load
+pivot on a target that turned out already done. Add a one-line
+state-check to the session-start ritual: `grep -c 'response_model=\|operation_id=' api/<target>.py`.
+
+Verification: `python -c "import api.frameworks"` passes,
+`python -c "import dashboard; dashboard.app.openapi_schema=None; spec=dashboard.app.openapi(); ..."`
+confirms all 4 op_ids stamped and 10 strict models present (modulo
+the EvidenceOut collision above). /verify all PASS.
+
 ## Files — Planned
 
-### Sessions 32+ — OpenAPI response-model sweep continuation (17 routers remaining)
-Post-S31 state: **19/36 routers fully typed; 5 partial + 12 untyped
-remain.** Recommended next target: `api/agent_bindings.py`
-(4 routes, 3 already typed — same one-route-finish pattern as S31
-adversarial). Alternative small targets: `api/frameworks.py` (4/3),
-`api/projection.py` (3/1), `api/traces.py` (1 route, fully untyped
-— but tracer-adjacent, deserves its own focused session given
-audit-surface coupling). Defer `api/guide.py` (9 routes, high SPA
-coupling).
+### Sessions 33+ — OpenAPI response-model sweep continuation
+Post-S32 state: **20/36 routers fully typed; ≤4 partial + 12 untyped
+remain** (the 5-partial estimate from S31 was based on the same stale
+list now being corrected). A full empirical recount is overdue —
+recommended for the front of S33.
 
-Partially-typed (finish-the-half) candidates:
-- `api/agent_bindings.py` 4/3, `api/frameworks.py` 4/3 — 1 untyped route each
-- `api/analytics.py` 5/3, `api/reports.py` 6/3 — 2-3 untyped routes each
-- `api/projection.py` 3/1 — 2 untyped routes
+Recommended S33 target: `api/projection.py` (3 routes, 1 typed) —
+genuinely small, needs 2 new response_models for `/replay` and
+`/views/{view}` plus 3 op_ids. Higher delta than frameworks.py but
+unambiguously still-partial. Alternative: `api/traces.py` (1 route,
+untyped) — smallest possible delta but tracer-adjacent so deserves
+its own focused window given audit-surface coupling.
+
+Defer: `api/guide.py` (9 routes, high SPA coupling).
+
+Carryover candidates (apply 24c before committing to any):
+- `api/projection.py` 3/1, `api/analytics.py` 5/3, `api/reports.py` 6/3
+- `api/traces.py` 1/0 (focused session)
 
 Fully-untyped candidates (small first): `agent_notifications.py` (1),
 `metrics.py` (1), `traces.py` (1), `evaluate.py` (1), `assessment.py`
