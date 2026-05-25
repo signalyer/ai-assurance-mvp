@@ -576,13 +576,53 @@ runtime impact; wastes deploy cycles and risks masking a real deploy
 failure. Recommend dedicated single-file workflow-fix session with a
 doc-only test commit to confirm filter.
 
+## Files — Built (2026-05-24, Session 29)
+### Session 29 (Track A fifth router — api/evidence.py)
+Fifth per-router OpenAPI sweep. UI-consumer grep found exactly one
+live consumer — `static/evidence.html` — which reads only the
+`sectioned` and `completeness` payloads (specifically the section
+roll-up `items[]` rows and the completeness `rows[]`). Every shape
+upstream of these routes is a deterministic dataclass
+(`EvidenceRow`, `CompletenessRow`) or the `Evidence` Pydantic v2
+domain model; no asymmetric/polymorphic payloads in the surface.
+Per compound rule 27a, all four routes get **strict** response
+models (no `extra="allow"` anywhere).
+
+| # | File | Purpose |
+|---|---|---|
+| #1 | [api/evidence.py](api/evidence.py) | Added 6 Pydantic v2 response models — `SectionCatalogItem` + `SectionsResponse` envelope; `EvidenceRowOut` (18 fields mirroring `domain.evidence_repository.EvidenceRow` dataclass; Optionals reflect source: `assessment_id`/`hash`/`uri` may be None); `SectionedSection` + `SectionedResponse` envelope; `CompletenessRowOut` (5 fields mirroring `CompletenessRow` dataclass) + `CompletenessResponse` envelope; `EvidenceDetailResponse` (14 fields mirroring `domain.models.Evidence` field-by-field plus joined `ai_system_name`). All 4 routes carry `operation_id` (`evidence_v2_sections_get`, `evidence_v2_sectioned_get`, `evidence_v2_completeness_get`, `evidence_v2_record_get`). The single-record endpoint mirrors `Evidence` strict rather than typing as `dict` — chosen because `Evidence` is a stable domain model and audit clients fetching by id genuinely benefit from a typed shape (departs from the connectors pattern, where domain-payload **lists** stayed `list[dict]` to avoid coupling to every domain schema bump; single-record fetch of a stable model is a different trade). Module docstring documents the strict choice and the consumer-surface verification. |
+| #2 | [docs/openapi-v1.json](docs/openapi-v1.json) | Regenerated under `SL_OPENAPI_EXPORT_PROFILE=ci`. 458589 bytes. New component schemas: `SectionCatalogItem`, `SectionsResponse`, `EvidenceRowOut`, `SectionedSection`, `SectionedResponse`, `CompletenessRowOut`, `CompletenessResponse`, `EvidenceDetailResponse`. 4 new operationIds on `/api/grc/evidence/v2/*`. No removed routes; no shape changes to prior schemas. |
+
+**Sweep progress:** 5/25 routers done (24/66 routes — security 5 +
+reports 6 + analytics 5 + connectors 4 + evidence 4). Next candidate
+per SESSION-30 plan: `api/domains_api.py` (5 routes, 6 live UI
+consumers — higher coupling than evidence; list endpoints likely
+need `list[dict]` decoupling per the connectors pattern).
+`api/guide.py` (9, high SPA coupling) still deferred to late in sweep.
+
+**Verification.** `python -c "import api.evidence"` → ok (4 routes
+registered). OpenAPI export wrote 458589 bytes. Worktree diff stat
++549/-20 (148 router + 421 spec). No `data/*.jsonl` pollution. Local
+`import dashboard` still logs `openapi.drift.production_warn` —
+expected per compound rule 25b.
+
+**Open issue carried from Session 28:** `paths-ignore` regression in
+`.github/workflows/azure-deploy.yml` still uncorrected. The Session 29
+code commit will deploy (expected); the Session 29 doc closeout commit
+will likely also deploy (unwanted but harmless). **Recommend dedicated
+workflow-fix session before Session 30 starts** so the SESSION-30
+domains_api work isn't muddied by a second spurious deploy.
+
 ## Files — Planned
 
-### Sessions 29+ — OpenAPI response-model sweep continuation (21/25 routers remaining)
-Session 28 closed `api/connectors.py` (4/66 routes). Remaining top offenders:
-`guide.py` (9 — defer; high SPA coupling), `domains_api.py` (5),
-`evidence.py` (4). Recommended next target: `api/evidence.py`. Pattern locked
-by Sessions 25-28:
+### Sessions 30+ — OpenAPI response-model sweep continuation (20/25 routers remaining)
+Session 29 closed `api/evidence.py` (4/66 routes; 24/66 cumulative).
+Remaining top offenders: `guide.py` (9 — defer; high SPA coupling),
+`domains_api.py` (5), `findings_v2.py`, `runtime_v2.py`. Recommended
+next target: `api/domains_api.py` (5 routes; 6 live consumers — list
+endpoints likely need `list[dict]` per connectors pattern, single-
+record endpoint a strict-vs-dict judgement call). Pattern locked
+by Sessions 25-29:
 1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
 2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
    crosses three routers).
@@ -598,7 +638,7 @@ Closed in Session 25: `api.aigovern.sandboxhub.co` was already bound with SNI SS
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
-- Track A: A1 OpenAPI hardening (per-router series, 2/25 done Sessions 25-26), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
+- Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
 - Track B: ~~B1 `tests/test_deploy_completeness.py`~~ ✓ Session 23, B2 ARCHITECTURE.md backfill ✓ Sessions 11-24 inline, ~~B3 SESSION-12B §6 update~~ ✓ Session 24
 - Deferred: App Insights staging, P1v3 + staging slot, CI-on-merge deploy ✓ Session 19
 
