@@ -35,7 +35,7 @@ export async function apiRequest<T>(path: string, req: ApiRequest = {}): Promise
   const url = buildUrl(path, query);
   const init: RequestInit = {
     method,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: { Accept: 'application/json' },
   };
   if (signal) init.signal = signal;
