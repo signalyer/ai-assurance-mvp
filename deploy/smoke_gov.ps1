@@ -73,8 +73,8 @@ Invoke-Probe -Name "1. Index HTML reachable (GET /)" -ScriptBlock {
         throw "Expected HTTP 200; got $($resp.StatusCode)"
     }
     $script:indexHtml = "$($resp.Content)"
-    if ($script:indexHtml -notmatch '<div\s+id="root"') {
-        throw "index.html does not contain the Vite root element ('<div id=\"root\">') — SPA shell missing"
+    if ($script:indexHtml -notmatch '<div\s+id="app"') {
+        throw "index.html does not contain the SPA root element ('<div id=\"app\">') — SPA shell missing"
     }
 }
 

@@ -11,7 +11,7 @@
 
     Probes (intentionally minimal — Vite SPAs are single-bundle, so a successful
     index.html + assets fetch is strong evidence the SPA is reachable):
-      1. Index HTML reachable — GET / returns 200 + contains '<div id="root"></div>' (Vite convention)
+      1. Index HTML reachable — GET / returns 200 + contains '<div id="app"></div>' (this repo's Vite convention; see team-portal/index.html / ciso-console/index.html)
       2. JS bundle reachable  — first <script> referenced from index returns 200
       3. CSS reachable        — first <link rel="stylesheet"> returns 200 (or SKIP if inline)
 
@@ -75,8 +75,8 @@ Invoke-Probe -Name "1. Index HTML reachable (GET /)" -ScriptBlock {
         throw "Expected HTTP 200; got $($resp.StatusCode)"
     }
     $script:indexHtml = "$($resp.Content)"
-    if ($script:indexHtml -notmatch '<div\s+id="root"') {
-        throw "index.html does not contain the Vite root element ('<div id=\"root\">') — SPA shell missing"
+    if ($script:indexHtml -notmatch '<div\s+id="app"') {
+        throw "index.html does not contain the SPA root element ('<div id=\"app\">') — SPA shell missing"
     }
 }
 

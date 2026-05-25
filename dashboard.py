@@ -28,7 +28,7 @@ except ImportError:
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.traces import router as traces_router
 from api.evaluate import router as evaluate_router
@@ -393,6 +393,16 @@ def _page(filename: str) -> FileResponse:
 # === Primary navigation pages ===
 @app.get("/")
 async def page_overview():
+    # Session 45 — V2 LIVE cutover (A12): when V2_APEX_REDIRECT=true, the
+    # apex 302s to the V2 Team Workspace (PORTAL_URL). Env-var-gated so
+    # rollback is a single App Service setting flip — symmetric with
+    # PORTAL_URL/GOV_URL (S43) and V1→V2 staging precedents. Env is read
+    # per-request (not module load) so the flag is flippable without
+    # restart. Falsy / unset → existing V1 Command Center behavior.
+    if os.environ.get("V2_APEX_REDIRECT", "").lower() == "true":
+        portal = os.environ.get("PORTAL_URL", "").rstrip("/")
+        if portal:
+            return RedirectResponse(url=portal + "/", status_code=302)
     return _page("index.html")
 
 
