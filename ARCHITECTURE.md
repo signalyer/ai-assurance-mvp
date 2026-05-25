@@ -1423,10 +1423,13 @@ S46 closed all four planned steps in one session, including the optional A15 tra
 
 **V2 acceptance state after S46:**
 - A1/A5/A6/A7/A12/A13/A4/Bicep/A2/A3/A8/A10/A14/A16: ✓ (carried)
-- A15: **P1v3 ✓ (P2v3 already), staging slot ✓, CI swap wiring ✓** — A15 closes once the first push to main exercises the new path and reports green
+- A15: **✅ closed in canary push of `11e7f29` (2026-05-25)** — CI green across all 4 gates (deploy→staging, sha-match, swap, verify-prod) in 6m7s. Production sha promoted atomically from `fe0b005` to `11e7f29`. Slot+swap is now the canonical deploy path.
 - A9, A11 (Garak): locked-deferred
 
-**Trajectory:** V2 stable. First S46 push to main is the canary for the slot+swap CI path. S47 owns: (1) confirm the canary push (reuse this commit as the deploy), (2) post-deploy live verification of V1 deprecation surface (header + banner + counter), (3) `parameters.dev.json` housekeeping (no `cisoConsoleSwaName` entry exists despite the parameter being declared — currently relies on Bicep default), (4) consider Garak ADR-001 acceptance or close as out-of-scope.
+**V1 deprecation observation signal — live from 2026-05-25:**
+- `/api/health` exposes `v1_surface_hits_24h`. Header `X-V1-Surface-Deprecated: removal-date=2026-07-02` confirmed on `/findings`. Banner rendered (browser verified). Counter increments on V1 attempts including the auth-required 302 path (correct intent-to-use semantics). Deletion criterion: 7 consecutive days `< 5 hits/day`. Day 0 baseline reading: 1 (canary curl).
+
+**Trajectory:** V2 stable, A15 closed, V1 deprecation clock running. S47 STEP 1 fully validated by this commit. Remaining S47 work is non-blocking decision/housekeeping: (1) V1 deprecation watch cadence (manual / Azure Monitor / scheduled-tasks), (2) `parameters.dev.json` exhaustive vs minimal, (3) Garak ADR-001 — accept 2-session implementation or close as out-of-scope via ADR amendment.
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
