@@ -1009,21 +1009,69 @@ Verification: `python -c "import api.agent_bindings"` passes; 24c probe
 returns 4/3/4 (DELETE bare-by-design per 26a); spec regen produced
 identical file.
 
-### Sessions 37+ — OpenAPI sweep continuation
-Post-S36 sweep state: **21/40 routers fully typed.** Empirical recount
+### Session 37 (Track A thirteenth router — api/analytics.py [verification-only] + compound 28a observation #4)
+
+**Compound 28a observation #4.** `gh run list --commit=bb2a520` confirmed
+S36 closeout DID trigger deploy (both `contract-tests` and `deploy`
+workflows ran successfully). Tally now **6 fired / 3 missed** across
+last 9 closeouts (S29-S33 YES, S34/S35-reframe/S35-closeout NO, S36 YES).
+S36 was a mixed modify+delete+add commit, consistent with the suspected
+"add/delete in same push bypasses paths-ignore" pattern flagged in S31.
+State remains "intermittent, observation phase"; workflow unchanged
+through S38. Decision gate at observation point #5 stands.
+
+**Track A — `api/analytics.py` verification-only sweep.** Compound 24c
+probe returned 5/3/5 as the S35 partials list predicted, BUT visual
+inspection confirmed S27 already swept this router to 26a-conformant
+final state. The "2 missing `response_model=`" are the `/api/export/csv`
+and `/api/export/json` endpoints — both return `PlainTextResponse`/
+`Response` subclasses for raw-binary download with
+`Content-Disposition: attachment`. Per compound 26a, response_model
+is intentionally omitted; both carry `operation_id=` for SDK naming.
+The module docstring (lines 1-10) already documents this since S27.
+
+**Outcome: no code change.** This is the third consecutive partial-list
+staleness (S31 `findings_v2.py`, S32 `agent_bindings.py` originally
+planned, S37 `analytics.py`) — the partials count never accounted for
+26a bare-by-design routes. Spec regeneration via `scripts/export_openapi.py`
+produced zero-byte diff (`git diff --stat docs/openapi-v1.json` empty),
+confirming wire-compat unchanged.
+
+**Sweep progress:** 13 routers verified-or-shipped by this initiative
+(prior 12 + analytics confirmed-final). **Sweep counter: 22/40 fully
+typed** (21 carried from S36 + analytics confirmed-final under 26a).
+
+Verification: `python -c "import api.analytics"` passes; 24c probe
+5/3/5 matches S27 final state; spec regen byte-identical;
+SPA-consumer grep returned only `deploy/smoke_e2e.ps1` (HTTP-200
+assertion, no shape coupling) + ARCHITECTURE/plan docs.
+
+**Partials list audit.** Quick 24c on remaining partials revealed
+`api/reports.py` is also 6/3/6 mirroring analytics' exact shape
+(3 JSON routes typed + 3 export endpoints bare-by-design per
+S26 entry — already final). `api/assurance_model.py` is 5/12/12,
+which is grep over-counting (docstrings/comments inflate the
+recount — needs visual check per partials list note). The partials
+bucket has effectively run dry; S38+ should pivot to the untouched
+list (agent_notifications, metrics, traces, evaluate, assessment,
+demo_run, demo, demo_control, aws_demo, framework, usage; defer
+guide.py per high SPA coupling).
+
+### Sessions 38+ — OpenAPI sweep continuation
+Post-S37 sweep state: **22/40 routers fully typed.** Empirical recount
 output (preserve verbatim for next-session carry-over):
 
 ```
-Fully clean (20 prior + agent_bindings this session = 21):
+Fully clean (21 prior + analytics confirmed-final = 22):
   agents, ai_system_edit, audit_verify, batch, connectors,
   domains_api, evals_v2, evidence, findings_v2, grc, intake,
   projection, release_gates, right_to_forget, runtime_v2,
-  security, frameworks, adversarial, memory, rag, agent_bindings
+  security, frameworks, adversarial, memory, rag, agent_bindings,
+  analytics
 
-Partial (3 candidates — apply 24c before committing):
-  api/analytics.py       5 / 3 / 5   (2 missing response_model — S37 target)
-  api/reports.py         6 / 3 / 6   (3 missing response_model)
-  api/assurance_model.py 5 / 12 / 12 (grep over-counting — needs visual check)
+Partial bucket — RECOUNT NEEDED (raw greps misleading per 26a):
+  api/reports.py         6 / 3 / 6   (likely already final — 3 JSON + 3 bare exports per S26 entry; verify with 24c+visual at S38 start)
+  api/assurance_model.py 5 / 12 / 12 (grep over-counting from docstrings/comments — needs visual check)
 
 Untouched (0 / 0 — 10 routers):
   assessment, aws_demo, demo, demo_control, demo_run, evaluate,
@@ -1034,8 +1082,11 @@ Special-shape (already documented exceptions):
   api/metrics.py             — Prometheus exposition, response_model n/a
 ```
 
-Recommended S37 target: `api/analytics.py` (5/3/5 — 2 response_model
-additions; smallest remaining delta in partials list).
+Recommended S38 target: verify `api/reports.py` first (likely confirmed-
+final under 26a, mirroring S37 analytics outcome); if so, pivot to
+visual check of `api/assurance_model.py` or start the untouched list
+with smallest router (`api/agent_notifications.py` 1 SSE route per
+S31 op_id-only rule, or `api/metrics.py` 1 route).
 
 Defer to its own session: `api/guide.py` (9 routes, high SPA coupling).
 - `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
