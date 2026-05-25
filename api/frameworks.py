@@ -5,6 +5,14 @@ Endpoints:
     GET  /api/frameworks/{framework_slug}
     GET  /api/frameworks/{framework_slug}/system/{system_id}
     POST /api/frameworks/{framework_slug}/export
+
+Session 32 (per-router OpenAPI sweep):
+    - All 4 routes carry stable operation_ids (frameworks_*).
+    - POST /export returns application/pdf bytes; intentionally has no
+      response_model (binary response). Mirrors the SSE rule established
+      in Session 31 (api/adversarial.py): streaming/binary routes get
+      operation_id only.
+    - Response models are strict (extra="forbid") per compound rule 27a.
 """
 
 from __future__ import annotations
@@ -18,7 +26,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from domain.framework_coverage import (
     FrameworkItem,
@@ -69,16 +77,19 @@ def _evidence_hash(evidence_id: str, summary: str, collected_at: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Response models
+# Session 32: strict (extra="forbid") per compound 27a.
 # ---------------------------------------------------------------------------
 
 class MatrixCellOut(BaseModel):
     """Coverage cell for one system × one framework."""
+    model_config = ConfigDict(extra="forbid")
     framework_slug: str
     coverage_pct: float
 
 
 class MatrixRowOut(BaseModel):
     """One row in the coverage matrix."""
+    model_config = ConfigDict(extra="forbid")
     system_id: str
     system_name: str
     cells: dict[str, float]
@@ -86,11 +97,13 @@ class MatrixRowOut(BaseModel):
 
 class MatrixOut(BaseModel):
     """Full portfolio matrix response."""
+    model_config = ConfigDict(extra="forbid")
     frameworks: list[dict[str, str]]
     rows: list[MatrixRowOut]
 
 
 class ControlRollupOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     control_id: str
     title: str
     priority: str
@@ -100,6 +113,7 @@ class ControlRollupOut(BaseModel):
 
 
 class FindingSummaryOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: str
     system_id: str
     title: str
@@ -109,6 +123,7 @@ class FindingSummaryOut(BaseModel):
 
 
 class ItemCoverageOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     item_id: str
     framework: str
     display_name: str
@@ -123,12 +138,14 @@ class ItemCoverageOut(BaseModel):
 
 
 class FrameworkOverviewOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     framework_slug: str
     display_name: str
     items: list[ItemCoverageOut]
 
 
 class EvidenceOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: str
     summary: str
     evidence_hash: str
@@ -138,6 +155,7 @@ class EvidenceOut(BaseModel):
 
 
 class DrillDownItemOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: str
     display_name: str
     coverage_pct: float
@@ -147,6 +165,7 @@ class DrillDownItemOut(BaseModel):
 
 
 class DrillDownOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     framework: str
     display_name: str
     system_id: str
@@ -154,7 +173,10 @@ class DrillDownOut(BaseModel):
 
 
 class ExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     system_id: str
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +244,7 @@ def _evidence_for_controls(
 # GET /api/frameworks/matrix
 # ---------------------------------------------------------------------------
 
-@router.get("/matrix", response_model=MatrixOut)
+@router.get("/matrix", response_model=MatrixOut, operation_id="frameworks_matrix_get")
 async def get_matrix(request: Request) -> MatrixOut:
     """Return portfolio-wide coverage matrix (all systems × 6 frameworks).
 
@@ -254,7 +276,7 @@ async def get_matrix(request: Request) -> MatrixOut:
 # GET /api/frameworks/{framework_slug}
 # ---------------------------------------------------------------------------
 
-@router.get("/{framework_slug}", response_model=FrameworkOverviewOut)
+@router.get("/{framework_slug}", response_model=FrameworkOverviewOut, operation_id="frameworks_overview_get")
 async def get_framework_overview(framework_slug: str) -> FrameworkOverviewOut:
     """Return framework catalog + portfolio-wide coverage for every item.
 
@@ -288,7 +310,7 @@ async def get_framework_overview(framework_slug: str) -> FrameworkOverviewOut:
 # GET /api/frameworks/{framework_slug}/system/{system_id}
 # ---------------------------------------------------------------------------
 
-@router.get("/{framework_slug}/system/{system_id}", response_model=DrillDownOut)
+@router.get("/{framework_slug}/system/{system_id}", response_model=DrillDownOut, operation_id="frameworks_drilldown_get")
 async def get_system_drill_down(framework_slug: str, system_id: str) -> DrillDownOut:
     """Per-item coverage for a single AI system within a framework.
 
@@ -376,7 +398,7 @@ async def get_system_drill_down(framework_slug: str, system_id: str) -> DrillDow
 # POST /api/frameworks/{framework_slug}/export
 # ---------------------------------------------------------------------------
 
-@router.post("/{framework_slug}/export")
+@router.post("/{framework_slug}/export", operation_id="frameworks_export")
 async def export_framework_pdf(framework_slug: str, body: ExportRequest, request: Request) -> Response:
     """Generate a PDF Pack for the given framework and AI system.
 

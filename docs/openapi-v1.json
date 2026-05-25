@@ -2136,6 +2136,7 @@
         "type": "object"
       },
       "ControlRollupOut": {
+        "additionalProperties": false,
         "properties": {
           "control_id": {
             "title": "Control Id",
@@ -2668,6 +2669,7 @@
         "type": "object"
       },
       "DrillDownItemOut": {
+        "additionalProperties": false,
         "properties": {
           "controls": {
             "items": {
@@ -2715,6 +2717,7 @@
         "type": "object"
       },
       "DrillDownOut": {
+        "additionalProperties": false,
         "properties": {
           "display_name": {
             "title": "Display Name",
@@ -3656,6 +3659,7 @@
         "type": "object"
       },
       "ExportRequest": {
+        "additionalProperties": false,
         "properties": {
           "system_id": {
             "title": "System Id",
@@ -3850,6 +3854,7 @@
         "type": "object"
       },
       "FindingSummaryOut": {
+        "additionalProperties": false,
         "properties": {
           "control_id": {
             "anyOf": [
@@ -4142,6 +4147,7 @@
         "type": "object"
       },
       "FrameworkOverviewOut": {
+        "additionalProperties": false,
         "properties": {
           "display_name": {
             "title": "Display Name",
@@ -5909,6 +5915,7 @@
         "type": "object"
       },
       "ItemCoverageOut": {
+        "additionalProperties": false,
         "properties": {
           "controls": {
             "items": {
@@ -6148,6 +6155,7 @@
         "type": "object"
       },
       "MatrixOut": {
+        "additionalProperties": false,
         "description": "Full portfolio matrix response.",
         "properties": {
           "frameworks": {
@@ -6176,6 +6184,7 @@
         "type": "object"
       },
       "MatrixRowOut": {
+        "additionalProperties": false,
         "description": "One row in the coverage matrix.",
         "properties": {
           "cells": {
@@ -8730,6 +8739,7 @@
         "type": "object"
       },
       "api__frameworks__EvidenceOut": {
+        "additionalProperties": false,
         "properties": {
           "collected_at": {
             "title": "Collected At",
@@ -11529,7 +11539,7 @@
     "/api/frameworks/matrix": {
       "get": {
         "description": "Return portfolio-wide coverage matrix (all systems \u00d7 6 frameworks).\n\nResponse shape: {frameworks: [{slug, display_name}], rows: [{system_id, system_name, cells}]}",
-        "operationId": "get_matrix_api_frameworks_matrix_get",
+        "operationId": "frameworks_matrix_get",
         "responses": {
           "200": {
             "content": {
@@ -11551,7 +11561,7 @@
     "/api/frameworks/{framework_slug}": {
       "get": {
         "description": "Return framework catalog + portfolio-wide coverage for every item.\n\nReturns 404 for unknown framework_slug.",
-        "operationId": "get_framework_overview_api_frameworks__framework_slug__get",
+        "operationId": "frameworks_overview_get",
         "parameters": [
           {
             "in": "path",
@@ -11594,7 +11604,7 @@
     "/api/frameworks/{framework_slug}/export": {
       "post": {
         "description": "Generate a PDF Pack for the given framework and AI system.\n\nReturns 501 for frameworks planned for Session 11 (iso-42001, sr-11-7, ffiec).\nReturns 404 for unknown framework_slug or system_id.\nReturns application/pdf with the generated PDF bytes.\n\nFinding #2: Content-Disposition filename is sanitised to strip non-safe chars.",
-        "operationId": "export_framework_pdf_api_frameworks__framework_slug__export_post",
+        "operationId": "frameworks_export",
         "parameters": [
           {
             "in": "path",
@@ -11645,7 +11655,7 @@
     "/api/frameworks/{framework_slug}/system/{system_id}": {
       "get": {
         "description": "Per-item coverage for a single AI system within a framework.\n\nEach evidence item includes `evidence_hash` (SHA-256 computed from content).\nReturns 404 for unknown framework_slug or system_id.\n\nFinding #13: item_coverage and evidence calls are now gathered concurrently\nvia asyncio.gather instead of sequential awaits in the loop.",
-        "operationId": "get_system_drill_down_api_frameworks__framework_slug__system__system_id__get",
+        "operationId": "frameworks_drilldown_get",
         "parameters": [
           {
             "in": "path",
