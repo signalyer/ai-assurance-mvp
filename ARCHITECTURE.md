@@ -896,14 +896,18 @@ reports + analytics + connectors + evidence + domains_api + adversarial
 + frameworks + projection + memory). **Sweep counter: 19/40 fully typed**
 (18 carried in from prior sessions + memory.py this session).
 
-**Compound 28a regression — 4/4 confirmed.** All four prior doc-only
-closeout commits triggered deploy: S29 (26377047211, 1m14s), S30
-(26377787295, 56s), S31 (26378101370, 58s), S32 (26378408453, 59s),
-S33 (26378651826, 56s). Five total observations with the same shape
-(`.md` modify + delete `SESSION-N-*.md` + add `SESSION-N+1-*.md`).
-Pattern fully characterized — **S35 promoted to dedicated fix session**.
-This closeout commit will be a 6th data point against the existing
-broken globs before the fix lands.
+**Compound 28a regression — STREAK BROKEN at S34 closeout.** S29-S33
+closeouts (5/5) all triggered deploy: 26377047211, 26377787295,
+26378101370, 26378408453, 26378651826. **The S34 closeout commit
+`d5b36de` did NOT trigger deploy** — only contract-tests fired. Same
+diff shape as the prior 5 (modify ARCHITECTURE.md + delete
+`SESSION-N-*.md` + add `SESSION-N+1-*.md`). Pattern is now
+**intermittent, not consistent**. S35 reframed from "fix session" to
+**"observation session"** — gather 3 more closeout data points before
+attempting any workflow change. Premature fix risks adding complexity
+to a workflow that may already be working. See
+[SESSION-35-deploy-paths-ignore-fix.md](docs/plans/SESSION-35-deploy-paths-ignore-fix.md)
+Step 0 for the decision gate.
 
 Verification: `python -c "import api.memory"` passes, route inspection
 via 24c grep returns 5/5/5, canonical exporter spec round-trip clean.

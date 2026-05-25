@@ -1,27 +1,98 @@
-# SESSION-35 — Dedicated compound 28a fix (deploy.yml paths-ignore)
+# SESSION-35 — Compound 28a observation phase (NOT fix yet)
+
+## Status change at S34 closeout — read this first
+Original plan: dedicated fix session for compound 28a after 5/5 confirmed
+triggers. **The S34 closeout commit `d5b36de` broke the streak — it did
+NOT trigger the deploy workflow**, only contract-tests. Identical diff
+shape to the 5 prior triggering closeouts (modify ARCHITECTURE.md +
+delete `SESSION-N-*.md` + add `SESSION-N+1-*.md`).
+
+This means compound 28a is either **intermittent** (GitHub Actions
+flake, race condition, or undocumented paths-ignore semantics) or my
+pattern recognition on the 5 prior hits was missing a distinguishing
+factor. Either way, **a premature fix is the wrong move** — changing
+the workflow now risks adding complexity to something that may already
+be working, and obscures the diagnosis for the actual root cause.
+
+**S35 is now an observation session, not a fix session.**
 
 ## Why this session exists
-Compound 28a hit 4/4 (effectively 5/5 with S29 baseline) confirmed
-data points through S34. Every doc-only closeout commit since
-Session 29 has triggered the deploy workflow despite paths-ignore
-globs intended to suppress them. Pattern is fully characterized;
-S35 is the dedicated fix per the rule "schedule a fix session when
-the regression has 4 distinct data points."
+Compound 28a hit 5/5 confirmed data points through S33, then broke the
+streak at S34 closeout. Pattern is no longer fully characterized — need
+more data before any fix.
 
 ## Data points (preserve for blame trail)
-| Session | Commit | Run ID | Duration |
+| Session | Commit | Deploy run? | Notes |
 |---|---|---|---|
-| S29 closeout | (see git log) | 26377047211 | 1m14s |
-| S30 closeout | b796494 | 26377787295 | 56s |
-| S31 closeout | 9c6d4c8 | 26378101370 | 58s |
-| S32 closeout | ca20d85 | 26378408453 | 59s |
-| S33 closeout | 37458cd | 26378651826 | 56s |
-| S34 closeout | (this session's commit) | TBD | TBD — 6th data point against broken globs |
+| S29 closeout | (git log) | YES — 26377047211 | 1m14s |
+| S30 closeout | b796494 | YES — 26377787295 | 56s |
+| S31 closeout | 9c6d4c8 | YES — 26378101370 | 58s |
+| S32 closeout | ca20d85 | YES — 26378408453 | 59s |
+| S33 closeout | 37458cd | YES — 26378651826 | 56s |
+| **S34 closeout** | **d5b36de** | **NO** | **Streak broken — only contract-tests fired** |
 
 All six closeout commits share the same diff shape:
 - modify `ARCHITECTURE.md`
 - delete `docs/plans/SESSION-N-*.md`
 - add `docs/plans/SESSION-N+1-*.md`
+
+Yet S34 didn't trigger deploy. Possible explanations to test:
+1. **GitHub Actions flake** — paths-ignore evaluation race / inconsistency
+2. **File-content sensitivity** — `paths-ignore` may interact with
+   added-file *content* in some edge case (unlikely per docs, but
+   undocumented behavior happens)
+3. **Concurrency cancellation** — S34 closeout pushed ~3min after Track A
+   commit; the deploy concurrency group `deploy-app-aigovern-dev` is
+   `cancel-in-progress: false`. But maybe queued-and-dropped semantics
+   differ from cancel semantics.
+4. **My prior pattern recognition was wrong** — one of S29-S33 had a
+   different shape than I cataloged. Worth re-checking the actual
+   `git show --stat` for each.
+
+## Step 0 — Observation only (no code change this session)
+
+Before any fix, gather more data:
+
+1. **Re-verify the 5 prior triggers** — for each of `b796494`, `9c6d4c8`,
+   `ca20d85`, `37458cd`, run `git show --stat` and compare exact file
+   sets. Confirm I cataloged the diff shape correctly. If any one was
+   actually different (e.g. accidentally touched a code file), it
+   wasn't a real 28a hit and the streak was 4, not 5.
+
+2. **Re-verify the S34 closeout non-trigger** — run
+   `gh run list --workflow=deploy.yml --commit=d5b36de`. Confirm it
+   genuinely didn't fire (not just delayed or filtered from default
+   list).
+
+3. **Log the next 3 doc-only commits** through S35 / S36 / S37 closeouts.
+   Track each in a continuation table below.
+
+4. **Decision gate at S37 closeout:**
+   - If 0/3 trigger → 28a self-resolved; close as "GitHub flake,
+     not actionable." Update compound rule to "intermittent, do not fix."
+   - If 1-2/3 trigger → still intermittent; one more session of
+     observation (S38).
+   - If 3/3 trigger → pattern re-confirmed; proceed to Step 1
+     diagnosis below. Now have S29-S33 (5/5) + S34 (broken) +
+     S35-S37 (3/3) = strong intermittent signal worth fixing.
+
+5. **If S34 was a flake, do nothing in S35.** Move directly to Track A
+   sweep for the planned target (`api/rag.py`, identical 4/4/0 shape
+   to S34's memory.py). This file becomes a living observation log,
+   not a fix plan, until the threshold above triggers.
+
+| Session | Closeout commit | Triggered deploy? | Notes |
+|---|---|---|---|
+| S35 | (TBD) | (TBD) | |
+| S36 | (TBD) | (TBD) | |
+| S37 | (TBD) | (TBD) | |
+
+---
+
+## Steps 1-5 — DO NOT EXECUTE UNTIL STEP 0 GATE TRIPS
+
+The original fix plan below is preserved for when (if) the threshold
+in Step 0.4 is met. Skip it until then.
 
 ## Step 1 — Reproduce + diagnose (≤10 min)
 Pick one triggering run and inspect the actual changed-files set:
