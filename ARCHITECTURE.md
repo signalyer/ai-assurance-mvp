@@ -1131,39 +1131,66 @@ Compound rule earned this session:
   rule. Document the gate output in the session entry so future
   reviewers can see which routers were eligible.
 
-### Sessions 39+ — OpenAPI sweep continuation
-Post-S38 sweep state: **29/40 routers fully typed.** Empirical recount
+### Session 39 (second parallel batch + first Tier 3 sequential + CISO Console scaffold kicked off)
+
+**Compound 28a observation #6 = NO** (`gh run list --commit=aaca029`
+empty). Tally last 6: **2/6 fired**. Below gate (3/5 of last 5).
+Observation continues. Workflow unchanged.
+
+**Track A — combined commit `7730d44` (1014/-109 lines):**
+
+Tier 1 batch (3 parallel `implementer` subagents):
+| Router | Routes | Pattern |
+|---|---|---|
+| `api/aws_demo.py` | 3 | 2 JSON permissive (large heterogeneous demo payloads) + 1 HTMLResponse bare per 26a |
+| `api/demo.py` | 3 | `DemoStateResponse` strict + `DemoResetResponse` strict + `DemoStepResponse` permissive (13-step polymorphic) |
+| `api/demo_control.py` | 3 | `ScenariosResponse` strict + `RunAcceptedResponse` strict + `RunStatusResponse` permissive (6-handler polymorphic) |
+
+Tier 3 sequential (main session — has 1 SPA consumer `static/assessment.html`):
+- `api/assessment.py` — 2 routes (POST `/run/{id}` + GET `/{id}` convenience alias). `AssessmentReportResponse` mirrors `domain.assessment_engine.AssessmentReport` dataclass with 6 strict nested models (`_RiskFactorsOut`, `_ResidualRiskScoreOut`, `_ReleaseRecommendationOut`, `_ControlEvaluationOut`, `_GeneratedFindingOut`, `_FrameworkCoverageOut`). Top-level `extra="allow"` for additive evolution; nested models strict because domain shapes anchor the contract. SPA consumer surface (`static/assessment.html`) reads 14 distinct field paths — all preserved by the strict mirror.
+
+**Sweep progress:** 22 routers shipped/verified by this initiative.
+**Sweep counter: 29 → 33/40** in one session (4 routers in one session
+via Tier 1 batch + Tier 3 sequential). Validates the 24b amendment
+holds under mixed-tier sessions.
+
+**CISO Console SPA scaffold (V2 acceptance A5)** kicked off in
+parallel worktree (`isolation: worktree`) — first 3 of 10 surfaces
+(Findings inbox, Audit verification, RTF approval queue) using
+locked Team Workspace pattern. Running in background; results
+fold into S40 closeout if landed by then, otherwise next session.
+
+### Sessions 40+ — OpenAPI sweep continuation
+Post-S39 sweep state: **33/40 routers fully typed.** Empirical recount
 output (preserve verbatim for next-session carry-over):
 
 ```
-Fully clean (22 prior + reports verified + assurance_model verified + 5 Tier 1 batch = 29):
+Fully clean (29 prior + 3 Tier 1 + assessment Tier 3 = 33):
   agents, ai_system_edit, audit_verify, batch, connectors,
   domains_api, evals_v2, evidence, findings_v2, grc, intake,
   projection, release_gates, right_to_forget, runtime_v2,
   security, frameworks, adversarial, memory, rag, agent_bindings,
   analytics, reports, assurance_model,
-  agent_notifications, metrics, traces, evaluate, demo_run
+  agent_notifications, metrics, traces, evaluate, demo_run,
+  aws_demo, demo, demo_control, assessment
 
-Tier 3 (has live SPA consumers — sequential, one per session):
-  api/assessment.py      (1 SPA hit — static/assessment.html)
+Tier 3 remaining (has live SPA consumers — sequential, one per session):
   api/framework.py       (3 SPA hits — static/ai-systems.html, static/frameworks.html)
   api/usage.py           (3 SPA hits — static/analytics-usage.html)
   api/guide.py           (9 routes — high SPA coupling, defer late)
 
-Tier 1 remaining (zero SPA consumers — batch up to 5):
-  api/aws_demo.py, api/demo.py, api/demo_control.py
+Tier 1 remaining (zero SPA consumers):
+  none — bucket emptied at S39
 
 Special-shape (already documented exceptions):
   api/agent_notifications.py — SSE only, op_id deferrable per S31 rule
   api/metrics.py             — Prometheus exposition, response_model n/a
 ```
 
-Recommended S39 plan: (a) Tier 1 batch of remaining 3 zero-coupling
-routers (`aws_demo`, `demo`, `demo_control`) via parallel implementers —
-single Track A commit; (b) start one Tier 3 router (`assessment` is
-smallest, 1 SPA hit) sequentially in same session. Counter target:
-29 → 33/40. After S39, only `framework`, `usage`, `guide` remain — all
-Tier 3.
+Recommended S40+ plan: 3 remaining Tier 3 routers, one per session.
+Order by SPA coupling: `framework` (S40) → `usage` (S41) → `guide`
+(S42, 9 routes, largest). Counter: 33 → 34 → 35 → 40/40 (sweep complete
+at S42). CISO Console SPA work continues in parallel worktree.
 
 Defer to its own session: `api/guide.py` (9 routes, high SPA coupling).
 - `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
