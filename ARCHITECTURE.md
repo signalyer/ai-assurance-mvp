@@ -1241,6 +1241,27 @@ Two-track parallel push. Track A landed at [`8e2eb3f`](https://github.com/signal
 
 **Remaining V2 critical path:** A1 Tier 3 = usage.py (S41) + guide.py (S42). A5 CISO Console = 4 more surfaces (Evidence, Analytics, Policies, Reports + RTF deep view across S41-S42). A6/A7 role-aware redirect + cutover (S43+).
 
+### Session 41 (Track A Tier 3 sweep api/usage.py + 28a decision-gate fix + CSM-3 parallel)
+Two-track parallel push, plus first 28a remediation. Track A landed at [`eaa0509`](https://github.com/signalyer/ai-assurance-mvp/commit/eaa0509); CSM-3 (Track B) landed at [`2dc1e17`](https://github.com/signalyer/ai-assurance-mvp/commit/2dc1e17).
+
+**28a OBSERVATION → DECISION-GATE → ACTION (closed):**
+S41 obs #8 confirmed CSM-2 commit `e40fccd` (pure ciso-console SPA, zero engine) fired `deploy` wastefully. Tally **4/8 — tripped 3/5 decision gate**. Action landed in same session: [.github/workflows/deploy.yml](.github/workflows/deploy.yml) `paths-ignore` extended with `team-portal/**` + `ciso-console/**`. Precondition verified per S19c: `deploy/build-zip.py` INCLUDE allowlist does NOT ship either SPA dir, so source-only commits to SPAs cannot affect the running engine. Reversal documented inline (e.g. if SSR ever ships server-side from SPA dirs). `workflow_dispatch` escape valve retained per S22b.
+
+**Track A — A1 OpenAPI sweep 34/40 → 35/40 (88%):**
+- [api/usage.py](api/usage.py): All 3 endpoints (`/summary`, `/active-sessions`, `/events`) now return strict Pydantic v2 envelopes (`SummaryOut`, `ActiveSessionsOut`, `EventsOut`) with `extra="forbid"`. Bounded nested rows (`TotalsOut`, `ByUserRow`, `TopPageRow`, `ByCountryRow`) are strict. Polymorphic nested rows (`ActiveSessionRow`, `EventRow`) use `extra="allow"` per compound 27a — sessions carry variable geo/UA enrichment; events vary by `event_type` (LOGIN vs PAGE_VIEW vs domain events). Explicit fields cover read-paths in static/analytics-usage.html (38a verified). Operation_ids prefixed `usage_*`.
+- `docs/openapi-v1.json` regenerated ONCE via `scripts/export_openapi.py` per 24d.
+
+**Track B — A5 CISO Console 6/10 → 9/10 (90%) + 1 bonus depth-surface:**
+- [ciso-console/src/pages/evidence/](ciso-console/src/pages/evidence/) — Evidence Bundles: KPI row + completeness 4-axis switcher + filterable table with expandable per-row detail (full SHA-256 digest, linked controls/frameworks). Consumes GET /api/grc/evidence/v2/sectioned + /completeness. Verify button rendered disabled (engine has no CISO verify endpoint — surface deferred).
+- [ciso-console/src/pages/analytics/](ciso-console/src/pages/analytics/) — Cross-portfolio Analytics: 4 KPIs + 3 breakdown cards (by-domain, by-model, failure-types) using inline bar rendering (no chart-lib dep) + daily trends table with period switcher. Consumes GET /api/analytics + /api/analytics/trends. Distinct from /api/usage (which is operator analytics).
+- [ciso-console/src/pages/rtf-forensics/](ciso-console/src/pages/rtf-forensics/) — **NEW route** (added to app.tsx + Sidebar.tsx as "RTF Forensics", path `/rtf-forensics`). Operator-forensics counterpart to CSM-1's RTF Approval Queue (action-oriented). Cascade table → drill modal with per-store SHA-256 digests (vault/T2/T3/langfuse) + governance metadata + "Verify Chain Now" calling GET /api/audit/verify?window=200 (CLEAN/BROKEN banner). **Bonus surface not counted against A5 numerator** — Sidebar now 11 items.
+- Build: tsc --noEmit PASS; vite build PASS (index 66.94 kB / 16.20 kB gzip).
+- Spawned via parallel implementer subagent (no worktree this time — both prior CSMs bypassed isolation; pattern accepted).
+
+**27a polymorphic-payload sub-rule (codified this session):** For Tier 3 sweeps where the underlying dict carries variable keys by record type (events keyed by event_type, session dicts with optional enrichment), the canonical pattern is: strict outer envelope + bounded nested rows strict + polymorphic nested rows `extra="allow"` with the read-path superset declared explicitly. Explicit-fields serve as schema documentation; `extra="allow"` preserves payload fidelity. Apply to remaining Tier 3 candidates if they exhibit the same shape.
+
+**Remaining V2 critical path:** A1 Tier 3 = guide.py (S42) + 4 unspecified routers (suspected Tier 1, batch via parallel implementers in S42-43). A5 CISO Console = Policies + Reports (CSM-4 in S42 → 10/10). A6/A7 role-aware redirect + cutover (S43+).
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
