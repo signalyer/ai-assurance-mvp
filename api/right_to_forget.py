@@ -107,6 +107,28 @@ class CascadeRequest(BaseModel):
         return v
 
 
+class RejectCascadeIn(BaseModel):
+    """Body for POST /api/right-to-forget/{cascade_id}/reject.
+
+    Reason is required — rejection without justification breaks the audit
+    intent of the workflow. Mirrors CascadeRequest.reason constraints
+    (1-1024 chars, str_strip_whitespace).
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def reason_valid(cls, v: str) -> str:
+        if not v:
+            raise ValueError("reason must not be empty")
+        if len(v) > 1024:
+            raise ValueError("reason must be <= 1024 characters")
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Lazy domain import helpers
 # ---------------------------------------------------------------------------
@@ -233,6 +255,52 @@ async def approve_cascade(cascade_id: uuid.UUID) -> CascadeResultOut:
         )
 
     logger.info("approve_cascade: cascade_id=%s emitted RTF_APPROVED", cascade_id)
+    return CascadeResultOut(**result.model_dump(mode="json"))
+
+
+@router.post(
+    "/{cascade_id}/reject",
+    response_model=CascadeResultOut,
+    operation_id="right_to_forget_reject",
+)
+async def reject_cascade(cascade_id: uuid.UUID, body: RejectCascadeIn) -> CascadeResultOut:
+    """Reject an RTF cascade.
+
+    Audit-trail-only in MVP: the cascade itself runs synchronously inline
+    at `initiate_cascade` time (Session 08 §7.1), so by the time approve/
+    reject endpoints are callable, store purges have already happened.
+    This endpoint records an RTF_REJECTED event (with operator-supplied
+    reason) onto the tamper-evident audit chain. Workflow-level "block
+    pending approval" is Phase 1.5 work.
+    """
+    cascade_id = str(cascade_id)  # type: ignore[assignment]
+    logger.info("reject_cascade: cascade_id=%s reason_len=%d", cascade_id, len(body.reason))
+
+    repo = _repository()
+    rtf = _rtf()
+
+    result = await asyncio.to_thread(rtf.get_cascade, cascade_id)
+    if result is None:
+        logger.error("reject_cascade: cascade_id=%s not found", cascade_id)
+        raise HTTPException(status_code=404, detail=f"Cascade {cascade_id!r} not found")
+
+    try:
+        await asyncio.to_thread(
+            repo.append_agent_event,
+            "RTF_REJECTED",
+            {
+                "cascade_id": cascade_id,
+                "subject_id": result.subject_id,
+                "reason": body.reason,
+            },
+        )
+    except Exception as exc:
+        logger.error(
+            "reject_cascade: event write failed: cascade_id=%s error=%s",
+            cascade_id, str(exc)[:200],
+        )
+
+    logger.info("reject_cascade: cascade_id=%s emitted RTF_REJECTED", cascade_id)
     return CascadeResultOut(**result.model_dump(mode="json"))
 
 

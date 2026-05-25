@@ -1829,6 +1829,24 @@
         "title": "CascadeResultOut",
         "type": "object"
       },
+      "CatalogOut": {
+        "additionalProperties": false,
+        "description": "Wrapped list response for GET /{framework}/catalog (audit \u00a71.1).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FrameworkItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CatalogOut",
+        "type": "object"
+      },
       "CategoriesResponse": {
         "additionalProperties": false,
         "description": "Response from GET /api/adversarial/categories.",
@@ -2255,45 +2273,6 @@
           "domain"
         ],
         "title": "ControlMappingOut",
-        "type": "object"
-      },
-      "ControlRollupOut": {
-        "additionalProperties": false,
-        "properties": {
-          "control_id": {
-            "title": "Control Id",
-            "type": "string"
-          },
-          "domain": {
-            "title": "Domain",
-            "type": "string"
-          },
-          "open_findings": {
-            "title": "Open Findings",
-            "type": "integer"
-          },
-          "priority": {
-            "title": "Priority",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "control_id",
-          "title",
-          "priority",
-          "domain",
-          "status",
-          "open_findings"
-        ],
-        "title": "ControlRollupOut",
         "type": "object"
       },
       "ControlsBreakdownOut": {
@@ -2910,7 +2889,7 @@
         "properties": {
           "controls": {
             "items": {
-              "$ref": "#/components/schemas/ControlRollupOut"
+              "$ref": "#/components/schemas/api__frameworks__ControlRollupOut"
             },
             "title": "Controls",
             "type": "array"
@@ -2932,7 +2911,7 @@
           },
           "findings": {
             "items": {
-              "$ref": "#/components/schemas/FindingSummaryOut"
+              "$ref": "#/components/schemas/api__frameworks__FindingSummaryOut"
             },
             "title": "Findings",
             "type": "array"
@@ -4204,52 +4183,6 @@
         "title": "FindingOut",
         "type": "object"
       },
-      "FindingSummaryOut": {
-        "additionalProperties": false,
-        "properties": {
-          "control_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Control Id"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "severity": {
-            "title": "Severity",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "system_id": {
-            "title": "System Id",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "system_id",
-          "title",
-          "severity",
-          "status",
-          "control_id"
-        ],
-        "title": "FindingSummaryOut",
-        "type": "object"
-      },
       "FindingTimelineEventOut": {
         "additionalProperties": false,
         "description": "One event embedded inline in a finding's timeline (no finding_id -- implicit).",
@@ -4478,6 +4411,55 @@
         "title": "FindingV2Out",
         "type": "object"
       },
+      "FrameworkItemOut": {
+        "additionalProperties": false,
+        "description": "One catalog item. Mirrors domain.framework_coverage.FrameworkItem.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "exact_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exact Clauses",
+            "type": "array"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "prefix_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prefix Clauses",
+            "type": "array"
+          },
+          "recommended_owner": {
+            "title": "Recommended Owner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "framework",
+          "display_name",
+          "description",
+          "recommended_owner"
+        ],
+        "title": "FrameworkItemOut",
+        "type": "object"
+      },
       "FrameworkMappingOut": {
         "additionalProperties": false,
         "properties": {
@@ -4510,7 +4492,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ItemCoverageOut"
+              "$ref": "#/components/schemas/api__frameworks__ItemCoverageOut"
             },
             "title": "Items",
             "type": "array"
@@ -6265,82 +6247,6 @@
         "title": "IntakeSystemsListOut",
         "type": "object"
       },
-      "ItemCoverageOut": {
-        "additionalProperties": false,
-        "properties": {
-          "controls": {
-            "items": {
-              "$ref": "#/components/schemas/ControlRollupOut"
-            },
-            "title": "Controls",
-            "type": "array"
-          },
-          "coverage_pct": {
-            "title": "Coverage Pct",
-            "type": "number"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "display_name": {
-            "title": "Display Name",
-            "type": "string"
-          },
-          "evidence_completeness": {
-            "title": "Evidence Completeness",
-            "type": "number"
-          },
-          "findings": {
-            "items": {
-              "$ref": "#/components/schemas/FindingSummaryOut"
-            },
-            "title": "Findings",
-            "type": "array"
-          },
-          "framework": {
-            "title": "Framework",
-            "type": "string"
-          },
-          "item_id": {
-            "title": "Item Id",
-            "type": "string"
-          },
-          "recommended_owner": {
-            "title": "Recommended Owner",
-            "type": "string"
-          },
-          "recommended_remediation": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Recommended Remediation",
-            "type": "array"
-          },
-          "release_gates_affected": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Release Gates Affected",
-            "type": "array"
-          }
-        },
-        "required": [
-          "item_id",
-          "framework",
-          "display_name",
-          "description",
-          "recommended_owner",
-          "coverage_pct",
-          "evidence_completeness",
-          "controls",
-          "findings",
-          "release_gates_affected",
-          "recommended_remediation"
-        ],
-        "title": "ItemCoverageOut",
-        "type": "object"
-      },
       "KillSwitchRequest": {
         "properties": {
           "actor": {
@@ -6952,6 +6858,34 @@
           }
         },
         "title": "OkResponse",
+        "type": "object"
+      },
+      "OverviewOut": {
+        "additionalProperties": false,
+        "description": "Wrapped response for GET /{framework}/overview.",
+        "properties": {
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/api__framework__ItemCoverageOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework",
+          "scope",
+          "items"
+        ],
+        "title": "OverviewOut",
         "type": "object"
       },
       "OwaspItemOut": {
@@ -7676,6 +7610,21 @@
           "status"
         ],
         "title": "RefreshedEvalOut",
+        "type": "object"
+      },
+      "RejectCascadeIn": {
+        "additionalProperties": false,
+        "description": "Body for POST /api/right-to-forget/{cascade_id}/reject.\n\nReason is required \u2014 rejection without justification breaks the audit\nintent of the workflow. Mirrors CascadeRequest.reason constraints\n(1-1024 chars, str_strip_whitespace).",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RejectCascadeIn",
         "type": "object"
       },
       "ReplayRequest": {
@@ -9627,6 +9576,217 @@
         "title": "FindingsListOut",
         "type": "object"
       },
+      "api__framework__ControlRollupOut": {
+        "additionalProperties": false,
+        "description": "Per-control rollup. Mirrors domain.framework_coverage.ControlRollup.",
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "open_findings": {
+            "title": "Open Findings",
+            "type": "integer"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "status": {
+            "description": "PASS | FAIL | NO_EVIDENCE | PARTIAL | NOT_APPLICABLE | NOT_EVALUATED",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "priority",
+          "domain",
+          "status",
+          "open_findings"
+        ],
+        "title": "ControlRollupOut",
+        "type": "object"
+      },
+      "api__framework__FindingSummaryOut": {
+        "additionalProperties": false,
+        "description": "Per-finding summary. Mirrors domain.framework_coverage.FindingSummary.",
+        "properties": {
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "system_id": {
+            "title": "System Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "system_id",
+          "title",
+          "severity",
+          "status"
+        ],
+        "title": "FindingSummaryOut",
+        "type": "object"
+      },
+      "api__framework__ItemCoverageOut": {
+        "additionalProperties": false,
+        "description": "Full coverage payload for one framework item.\n\nMirrors domain.framework_coverage.ItemCoverage. Consumed by\nstatic/governance.html and static/security.html \u2014 every field below is\nread by at least one consumer (see Session 40 sweep notes).",
+        "properties": {
+          "coverage_pct": {
+            "description": "passing / applicable, 0-100",
+            "title": "Coverage Pct",
+            "type": "number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "evidence_completeness": {
+            "description": "0..1 across the item's controls",
+            "title": "Evidence Completeness",
+            "type": "number"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "mapped_controls": {
+            "items": {
+              "$ref": "#/components/schemas/api__framework__ControlRollupOut"
+            },
+            "title": "Mapped Controls",
+            "type": "array"
+          },
+          "recommended_owner": {
+            "title": "Recommended Owner",
+            "type": "string"
+          },
+          "recommended_remediation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Remediation",
+            "type": "array"
+          },
+          "related_findings": {
+            "items": {
+              "$ref": "#/components/schemas/api__framework__FindingSummaryOut"
+            },
+            "title": "Related Findings",
+            "type": "array"
+          },
+          "release_gates_affected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Release Gates Affected",
+            "type": "array"
+          },
+          "scope": {
+            "description": "'ALL' or a specific ai_system_id",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "framework",
+          "display_name",
+          "description",
+          "recommended_owner",
+          "scope",
+          "mapped_controls",
+          "related_findings",
+          "release_gates_affected",
+          "coverage_pct",
+          "evidence_completeness",
+          "recommended_remediation"
+        ],
+        "title": "ItemCoverageOut",
+        "type": "object"
+      },
+      "api__frameworks__ControlRollupOut": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "open_findings": {
+            "title": "Open Findings",
+            "type": "integer"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "priority",
+          "domain",
+          "status",
+          "open_findings"
+        ],
+        "title": "ControlRollupOut",
+        "type": "object"
+      },
       "api__frameworks__EvidenceOut": {
         "additionalProperties": false,
         "properties": {
@@ -9664,6 +9824,128 @@
           "evidence_type"
         ],
         "title": "EvidenceOut",
+        "type": "object"
+      },
+      "api__frameworks__FindingSummaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "system_id": {
+            "title": "System Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "system_id",
+          "title",
+          "severity",
+          "status",
+          "control_id"
+        ],
+        "title": "FindingSummaryOut",
+        "type": "object"
+      },
+      "api__frameworks__ItemCoverageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "controls": {
+            "items": {
+              "$ref": "#/components/schemas/api__frameworks__ControlRollupOut"
+            },
+            "title": "Controls",
+            "type": "array"
+          },
+          "coverage_pct": {
+            "title": "Coverage Pct",
+            "type": "number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "evidence_completeness": {
+            "title": "Evidence Completeness",
+            "type": "number"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/api__frameworks__FindingSummaryOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "recommended_owner": {
+            "title": "Recommended Owner",
+            "type": "string"
+          },
+          "recommended_remediation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Remediation",
+            "type": "array"
+          },
+          "release_gates_affected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Release Gates Affected",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_id",
+          "framework",
+          "display_name",
+          "description",
+          "recommended_owner",
+          "coverage_pct",
+          "evidence_completeness",
+          "controls",
+          "findings",
+          "release_gates_affected",
+          "recommended_remediation"
+        ],
+        "title": "ItemCoverageOut",
         "type": "object"
       },
       "api__grc__EvidenceOut": {
@@ -13491,7 +13773,8 @@
     },
     "/api/grc/framework/{framework}/catalog": {
       "get": {
-        "operationId": "catalog_api_grc_framework__framework__catalog_get",
+        "description": "Return the static catalog for a framework (no system context).",
+        "operationId": "framework_get_catalog",
         "parameters": [
           {
             "in": "path",
@@ -13508,9 +13791,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Catalog Api Grc Framework  Framework  Catalog Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CatalogOut"
                 }
               }
             },
@@ -13535,7 +13816,8 @@
     },
     "/api/grc/framework/{framework}/item/{item_id}": {
       "get": {
-        "operationId": "item_api_grc_framework__framework__item__item_id__get",
+        "description": "Return full coverage payload for a single framework item.",
+        "operationId": "framework_get_item_coverage",
         "parameters": [
           {
             "in": "path",
@@ -13571,9 +13853,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Item Api Grc Framework  Framework  Item  Item Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/api__framework__ItemCoverageOut"
                 }
               }
             },
@@ -13598,7 +13878,8 @@
     },
     "/api/grc/framework/{framework}/overview": {
       "get": {
-        "operationId": "overview_api_grc_framework__framework__overview_get",
+        "description": "Return per-item coverage rollups for a framework under a scope.",
+        "operationId": "framework_get_overview",
         "parameters": [
           {
             "in": "path",
@@ -13625,9 +13906,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Overview Api Grc Framework  Framework  Overview Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/OverviewOut"
                 }
               }
             },
@@ -16625,6 +16904,60 @@
           }
         },
         "summary": "Approve Cascade",
+        "tags": [
+          "right-to-forget"
+        ]
+      }
+    },
+    "/api/right-to-forget/{cascade_id}/reject": {
+      "post": {
+        "description": "Reject an RTF cascade.\n\nAudit-trail-only in MVP: the cascade itself runs synchronously inline\nat `initiate_cascade` time (Session 08 \u00a77.1), so by the time approve/\nreject endpoints are callable, store purges have already happened.\nThis endpoint records an RTF_REJECTED event (with operator-supplied\nreason) onto the tamper-evident audit chain. Workflow-level \"block\npending approval\" is Phase 1.5 work.",
+        "operationId": "right_to_forget_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cascade_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cascade Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCascadeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CascadeResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Cascade",
         "tags": [
           "right-to-forget"
         ]
