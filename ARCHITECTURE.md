@@ -634,16 +634,53 @@ This commit itself is a doc-only change to ARCHITECTURE.md — if
 paths-ignore is now working, this push should NOT trigger a deploy.
 The presence/absence of a deploy run on commit verifies the fix.
 
+## Files — Built (2026-05-25, Session 30)
+### Session 30 (Track A sixth router — api/domains_api.py)
+Sweep advances to **6/25 routers / 29/66 routes**. Compound 28a's
+`paths-ignore` fix (S30 prep) held — doc-only commit 704e743 did not
+deploy, empirically confirming the glob fix.
+
+`api/domains_api.py` — added 4 Pydantic v2 response models
+(`DomainConfig` retained as request body; new `DomainOut`,
+`DomainListResponse`, `DomainDeleteResponse`) + `response_model=` +
+stable `operation_id` on all 5 routes (`domains_list`, `domains_get`,
+`domains_create`, `domains_update`, `domains_delete`). Strict-vs-
+`list[dict]` decision matrix per compound 27a:
+
+| Route | Decision | Reason |
+|---|---|---|
+| `GET /` | `list[dict]` envelope | Domain JSON files carry arbitrary keys (`eval_weights`/`risk_rules`/`test_cases` vary per file); picker consumers (`compare.html`, `memory.html`) read 2-3 fields |
+| `GET /{id}` | strict `DomainOut` + `extra="allow"` | `domains.html` edit modal reads many fields; bounded drift in stored JSON tolerated |
+| `POST /{id}` | strict `DomainOut` + `extra="allow"` | Response echoes stored data |
+| `PUT /{id}` | strict `DomainOut` + `extra="allow"` | Same |
+| `DELETE /{id}` | strict `DomainDeleteResponse` | Trivial 2-field envelope; high audit value |
+
+Live consumer surface (6, unchanged from S29 grep): `static/compare.html:124`,
+`static/domains.html:209/240/414/439`, `static/memory.html:374`. All keep
+working — response shapes are wire-compatible. Bonus modernization:
+deprecated `config.dict()` → `config.model_dump()` (Pydantic v2 API).
+
+`docs/openapi-v1.json` regenerated: +181/-21 lines. Diff is exactly
+{5 new operationIds renamed to convention, 3 new schemas, 5 `$ref`
+wires}. No removed routes, no upstream schema shape changes.
+
+Verification: `python -c "import api.domains_api"` + TestClient
+`GET /api/domains/` → 200 (envelope: `domains`, `count`); `GET
+/api/domains/finance` → 200 with all DomainOut fields + extras
+(`compliance_checks`, `finra_requirements`) tolerated via
+`extra="allow"`. `openapi.drift.production_warn` logs as expected
+on local import (compound 25b).
+
 ## Files — Planned
 
-### Sessions 30+ — OpenAPI response-model sweep continuation (20/25 routers remaining)
-Session 29 closed `api/evidence.py` (4/66 routes; 24/66 cumulative).
+### Sessions 31+ — OpenAPI response-model sweep continuation (19/25 routers remaining)
+Session 30 closed `api/domains_api.py` (5/66 routes; 29/66 cumulative).
 Remaining top offenders: `guide.py` (9 — defer; high SPA coupling),
-`domains_api.py` (5), `findings_v2.py`, `runtime_v2.py`. Recommended
-next target: `api/domains_api.py` (5 routes; 6 live consumers — list
-endpoints likely need `list[dict]` per connectors pattern, single-
-record endpoint a strict-vs-dict judgement call). Pattern locked
-by Sessions 25-29:
+`findings_v2.py`, `runtime_v2.py`. Recommended
+next target: `api/findings_v2.py` — confirm route count + consumer
+surface at S31 start (re-grep `static/` + `team-portal/` for
+`/api/findings`). Pattern locked
+by Sessions 25-30:
 1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
 2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
    crosses three routers).
