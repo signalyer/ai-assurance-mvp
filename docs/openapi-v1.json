@@ -59,6 +59,123 @@
         "title": "AI600_1RiskAreaOut",
         "type": "object"
       },
+      "ActiveSessionRow": {
+        "additionalProperties": true,
+        "description": "One active session.\n\n`extra=\"allow\"` because the underlying session dict carries variable\nmetadata (user_agent, ip, geo enrichment, started_at_utc, etc.) that\nwe don't want to drop. Explicit fields cover the read-paths in\nstatic/analytics-usage.html.",
+        "properties": {
+          "expires_in_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Seconds"
+          },
+          "idle_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle Seconds"
+          },
+          "last_activity_cst": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity Cst"
+          },
+          "last_activity_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity Utc"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "started_at_cst": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At Cst"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "title": "ActiveSessionRow",
+        "type": "object"
+      },
+      "ActiveSessionsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "inactivity_timeout_seconds": {
+            "title": "Inactivity Timeout Seconds",
+            "type": "integer"
+          },
+          "now_cst": {
+            "title": "Now Cst",
+            "type": "string"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveSessionRow"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "now_cst",
+          "inactivity_timeout_seconds",
+          "count",
+          "sessions"
+        ],
+        "title": "ActiveSessionsOut",
+        "type": "object"
+      },
       "AdversarialCategoriesResponse": {
         "description": "Response shape for GET /api/security/adversarial/categories.",
         "properties": {
@@ -1736,6 +1853,70 @@
           "password"
         ],
         "title": "Body_login_submit_api_auth_login_post",
+        "type": "object"
+      },
+      "ByCountryRow": {
+        "additionalProperties": false,
+        "properties": {
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "country",
+          "events"
+        ],
+        "title": "ByCountryRow",
+        "type": "object"
+      },
+      "ByUserRow": {
+        "additionalProperties": false,
+        "description": "Per-user activity rollup. Shape is bounded (domain.usage_analytics line 302).",
+        "properties": {
+          "last_city": {
+            "title": "Last City",
+            "type": "string"
+          },
+          "last_ip": {
+            "title": "Last Ip",
+            "type": "string"
+          },
+          "last_seen_cst": {
+            "title": "Last Seen Cst",
+            "type": "string"
+          },
+          "last_seen_utc": {
+            "title": "Last Seen Utc",
+            "type": "string"
+          },
+          "logins": {
+            "title": "Logins",
+            "type": "integer"
+          },
+          "page_views": {
+            "title": "Page Views",
+            "type": "integer"
+          },
+          "user": {
+            "title": "User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "logins",
+          "page_views",
+          "last_seen_utc",
+          "last_seen_cst",
+          "last_ip",
+          "last_city"
+        ],
+        "title": "ByUserRow",
         "type": "object"
       },
       "CascadeListOut": {
@@ -3674,6 +3855,58 @@
         "title": "EventRequest",
         "type": "object"
       },
+      "EventRow": {
+        "additionalProperties": true,
+        "description": "One audit event (JSONL record).\n\n`extra=\"allow\"` because events are polymorphic by event_type \u2014 LOGIN\ncarries ip/city/region/country/user_agent; PAGE_VIEW carries path;\ndomain events carry their own payload. Explicit fields are the common\nsuperset read by static/analytics-usage.html.",
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "ts_cst": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts Cst"
+          },
+          "ts_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts Utc"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "title": "EventRow",
+        "type": "object"
+      },
       "EventTypesMetaOut": {
         "additionalProperties": false,
         "properties": {
@@ -3689,6 +3922,38 @@
           "event_types"
         ],
         "title": "EventTypesMetaOut",
+        "type": "object"
+      },
+      "EventsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventRow"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "now_cst": {
+            "title": "Now Cst",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "now_cst",
+          "window_days",
+          "count",
+          "events"
+        ],
+        "title": "EventsOut",
         "type": "object"
       },
       "EvidenceDetailResponse": {
@@ -8613,6 +8878,54 @@
         "title": "SubmitEditOut",
         "type": "object"
       },
+      "SummaryOut": {
+        "additionalProperties": false,
+        "description": "Response envelope for GET /api/usage/summary.",
+        "properties": {
+          "by_country": {
+            "items": {
+              "$ref": "#/components/schemas/ByCountryRow"
+            },
+            "title": "By Country",
+            "type": "array"
+          },
+          "by_user": {
+            "items": {
+              "$ref": "#/components/schemas/ByUserRow"
+            },
+            "title": "By User",
+            "type": "array"
+          },
+          "now_cst": {
+            "title": "Now Cst",
+            "type": "string"
+          },
+          "top_pages": {
+            "items": {
+              "$ref": "#/components/schemas/TopPageRow"
+            },
+            "title": "Top Pages",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TotalsOut"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "now_cst",
+          "totals",
+          "by_user",
+          "top_pages",
+          "by_country"
+        ],
+        "title": "SummaryOut",
+        "type": "object"
+      },
       "SyncAllResponse": {
         "description": "Envelope for POST /sync-all.",
         "properties": {
@@ -9006,6 +9319,60 @@
           "enabled"
         ],
         "title": "ToggleProviderOut",
+        "type": "object"
+      },
+      "TopPageRow": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "views"
+        ],
+        "title": "TopPageRow",
+        "type": "object"
+      },
+      "TotalsOut": {
+        "additionalProperties": false,
+        "description": "Aggregate counters in the summary window.",
+        "properties": {
+          "active_sessions": {
+            "title": "Active Sessions",
+            "type": "integer"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "logins": {
+            "title": "Logins",
+            "type": "integer"
+          },
+          "page_views": {
+            "title": "Page Views",
+            "type": "integer"
+          },
+          "unique_users": {
+            "title": "Unique Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "logins",
+          "page_views",
+          "unique_users",
+          "active_sessions"
+        ],
+        "title": "TotalsOut",
         "type": "object"
       },
       "TraceItemOut": {
@@ -17385,15 +17752,14 @@
     },
     "/api/usage/active-sessions": {
       "get": {
-        "operationId": "get_active_sessions_api_usage_active_sessions_get",
+        "description": "All sessions whose last activity is within the inactivity window.",
+        "operationId": "usage_get_active_sessions",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Active Sessions Api Usage Active Sessions Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActiveSessionsOut"
                 }
               }
             },
@@ -17408,7 +17774,8 @@
     },
     "/api/usage/events": {
       "get": {
-        "operationId": "get_events_api_usage_events_get",
+        "description": "Recent audit events, optionally filtered by event type or user.",
+        "operationId": "usage_get_events",
         "parameters": [
           {
             "in": "query",
@@ -17464,9 +17831,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Events Api Usage Events Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EventsOut"
                 }
               }
             },
@@ -17491,7 +17856,8 @@
     },
     "/api/usage/summary": {
       "get": {
-        "operationId": "get_summary_api_usage_summary_get",
+        "description": "Aggregate usage summary over the last N days.",
+        "operationId": "usage_get_summary",
         "parameters": [
           {
             "in": "query",
@@ -17511,9 +17877,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Summary Api Usage Summary Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SummaryOut"
                 }
               }
             },

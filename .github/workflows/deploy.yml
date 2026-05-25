@@ -20,6 +20,14 @@ on:
       - 'docs/**/*'
       - '**/*.md'
       - '.github/workflows/contract-tests*.yml'
+      # Session 41 (compound 28a decision-gate action — tally hit 4/8):
+      # V2 split shipped two Vite SPAs (team-portal, ciso-console) that are
+      # NOT baked into the engine zip — verified against deploy/build-zip.py
+      # INCLUDE allowlist (S19c). Their source-only commits cannot affect
+      # the running engine; skip deploy. Reverse if SPA artifacts ever ship
+      # in the engine zip (e.g. server-side rendering).
+      - 'team-portal/**'
+      - 'ciso-console/**'
   workflow_dispatch:
 
 concurrency:
