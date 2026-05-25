@@ -1046,6 +1046,26 @@ Verification: `python -c "import api.analytics"` passes; 24c probe
 SPA-consumer grep returned only `deploy/smoke_e2e.ps1` (HTTP-200
 assertion, no shape coupling) + ARCHITECTURE/plan docs.
 
+**Compound rules amended this session (parallelization pivot):**
+- **24b amendment (per-coupling-tier sweep).** Original "one router per
+  session" rule was minted in S25-28 when every sweep touched live UI
+  consumers. By S28+ most untouched routers have zero SPA consumers
+  (verified by S25b grep pattern). New rule: routers batch by coupling
+  tier. **Tier 1** (zero SPA consumers — verified via grep across
+  `static/` + `team-portal/`): batch up to 5 in one Track A commit via
+  parallel `implementer` subagents, single closeout. **Tier 2**
+  (partials needing visual recount): batch up to 2 via parallel
+  `Explore` agents. **Tier 3** (≥1 live SPA consumer or ≥6 routes):
+  keep one-per-session. Rationale: serial pacing was protecting against
+  blast radius that no longer exists for low-coupling routers.
+- **Compound rule 28c (NEW — batch verification audits).** When ≥3
+  consecutive sweep sessions are verification-only no-ops (S31
+  `findings_v2`, S32-original `agent_bindings`, S37 `analytics`), the
+  partials-list staleness is systemic, not per-router. Batch the
+  remaining partials in a single audit-and-recount pass with parallel
+  agents — do not spend one session per stale entry. Couples with the
+  24b amendment above: verification batches sit in Tier 2.
+
 **Partials list audit.** Quick 24c on remaining partials revealed
 `api/reports.py` is also 6/3/6 mirroring analytics' exact shape
 (3 JSON routes typed + 3 export endpoints bare-by-design per
