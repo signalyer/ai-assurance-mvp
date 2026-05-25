@@ -2357,7 +2357,7 @@
         "type": "object"
       },
       "DomainConfig": {
-        "description": "Schema for creating/updating a domain.",
+        "description": "Schema for creating/updating a domain (request body).",
         "properties": {
           "compliance": {
             "anyOf": [
@@ -2476,6 +2476,176 @@
           "description"
         ],
         "title": "DomainConfig",
+        "type": "object"
+      },
+      "DomainDeleteResponse": {
+        "description": "Envelope for DELETE /{domain_id}.",
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "title": "DomainDeleteResponse",
+        "type": "object"
+      },
+      "DomainListResponse": {
+        "description": "Envelope for GET / (list).\n\n`domains` is list[dict] per compound 27a \u2014 domain JSON files carry\narbitrary keys and picker consumers read few fields; decoupling\nOpenAPI from per-domain schema drift is the goal here.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "domains": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Domains",
+            "type": "array"
+          }
+        },
+        "required": [
+          "domains",
+          "count"
+        ],
+        "title": "DomainListResponse",
+        "type": "object"
+      },
+      "DomainOut": {
+        "additionalProperties": true,
+        "description": "Single-domain response: DomainConfig fields + id.\n\n`extra=\"allow\"` tolerates legacy keys in stored JSON files without\nforcing a schema migration. Single-record consumers (domains.html\nedit modal) read many fields, so a strict mirror is worthwhile.",
+        "properties": {
+          "compliance": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "eval_weights": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Weights"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "regulatory_context": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regulatory Context"
+          },
+          "risk_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Rules"
+          },
+          "test_cases": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Cases"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "title": "DomainOut",
         "type": "object"
       },
       "DomainsResponse": {
@@ -10986,15 +11156,13 @@
     "/api/domains/": {
       "get": {
         "description": "List all available domains with full configs.",
-        "operationId": "list_all_domains_api_domains__get",
+        "operationId": "domains_list",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List All Domains Api Domains  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DomainListResponse"
                 }
               }
             },
@@ -11010,7 +11178,7 @@
     "/api/domains/{domain_id}": {
       "delete": {
         "description": "Delete a domain.",
-        "operationId": "delete_domain_api_domains__domain_id__delete",
+        "operationId": "domains_delete",
         "parameters": [
           {
             "in": "path",
@@ -11027,9 +11195,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Delete Domain Api Domains  Domain Id  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DomainDeleteResponse"
                 }
               }
             },
@@ -11053,7 +11219,7 @@
       },
       "get": {
         "description": "Get a specific domain configuration.",
-        "operationId": "get_domain_api_domains__domain_id__get",
+        "operationId": "domains_get",
         "parameters": [
           {
             "in": "path",
@@ -11070,9 +11236,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Domain Api Domains  Domain Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DomainOut"
                 }
               }
             },
@@ -11096,7 +11260,7 @@
       },
       "post": {
         "description": "Create a new domain.",
-        "operationId": "create_domain_api_domains__domain_id__post",
+        "operationId": "domains_create",
         "parameters": [
           {
             "in": "path",
@@ -11123,9 +11287,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Create Domain Api Domains  Domain Id  Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DomainOut"
                 }
               }
             },
@@ -11149,7 +11311,7 @@
       },
       "put": {
         "description": "Update an existing domain.",
-        "operationId": "update_domain_api_domains__domain_id__put",
+        "operationId": "domains_update",
         "parameters": [
           {
             "in": "path",
@@ -11176,9 +11338,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Domain Api Domains  Domain Id  Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DomainOut"
                 }
               }
             },
