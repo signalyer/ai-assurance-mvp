@@ -6,6 +6,13 @@ Prod (App Service): set AUTH_ENABLED=true plus DEMO_USER_<ROLE>_HASH app setting
 Sessions are server-side (data/usage_sessions.jsonl). Cookie carries only the
 signed session_id. Each authenticated request bumps last_activity. If idle >
 10 minutes, the session is killed and the user is redirected to /login.
+
+Session 43 (V2-PORTAL-SPLIT A6/A7): role-aware default landing URL.
+    /api/auth/login now returns a role-derived `next` when the caller did not
+    supply an explicit deep-link target. Mapping is env-var driven
+    (PORTAL_URL / GOV_URL) so the V2 DNS cutover (Session 45) is a no-code
+    env-flip. ENGINEER role added to ROLES; provision DEMO_USER_ENGINEER_HASH
+    alongside the other role hashes. See `_default_target_for_user`.
 """
 
 from __future__ import annotations
@@ -37,9 +44,57 @@ PUBLIC_PREFIXES = (
     "/api/sdk/",  # SDK paths are authenticated by HMACAuthMiddleware, not session cookies
 )
 
-ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR")
+ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER")
 # OPERATOR added in Session 11 for the Demo Control panel. Provision
 # DEMO_USER_OPERATOR_HASH to permit `demo-operator` logins in prod.
+#
+# ENGINEER added in Session 43 for V2-PORTAL-SPLIT acceptance A6 (engineer →
+# Team Workspace landing). Provision DEMO_USER_ENGINEER_HASH alongside the
+# other DEMO_USER_<ROLE>_HASH settings.
+
+
+# ---------------------------------------------------------------------------
+# Role → default landing URL (V2-PORTAL-SPLIT A6/A7)
+# ---------------------------------------------------------------------------
+# When a user logs in WITHOUT an explicit `next` destination (i.e. they hit
+# /login directly rather than being bounced from a deep link), the response's
+# `next` is computed from their role:
+#
+#   engineer / operator / aigov → PORTAL_URL   (Team Workspace)
+#   ciso / audit / mrm / cro    → GOV_URL      (CISO Console)
+#
+# PORTAL_URL / GOV_URL default to "/" in dev (single-host V1 layout) and are
+# flipped to absolute custom-DNS URLs at V2 cutover (Session 45):
+#   PORTAL_URL=https://portal.aigovern.sandboxhub.co/
+#   GOV_URL=https://gov.aigovern.sandboxhub.co/
+#
+# Parent-domain session cookie (SESSION_COOKIE_DOMAIN=.aigovern.sandboxhub.co,
+# Session 25) keeps the SSO seamless across the two subdomains.
+
+_PORTAL_ROLES = frozenset({"engineer", "operator", "aigov"})
+_GOV_ROLES = frozenset({"ciso", "audit", "mrm", "cro"})
+
+
+def _portal_url() -> str:
+    return os.getenv("PORTAL_URL", "/").strip() or "/"
+
+
+def _gov_url() -> str:
+    return os.getenv("GOV_URL", "/").strip() or "/"
+
+
+def _default_target_for_user(user: str) -> str:
+    """Return the role-aware landing URL for `user` (e.g. "demo-ciso").
+
+    Falls back to "/" for unrecognised roles so an mis-provisioned account
+    still gets a usable destination.
+    """
+    role = user.replace("demo-", "", 1).lower()
+    if role in _GOV_ROLES:
+        return _gov_url()
+    if role in _PORTAL_ROLES:
+        return _portal_url()
+    return "/"
 
 
 def _is_enabled() -> bool:
@@ -192,7 +247,18 @@ async def login_submit(
     ua.log_event("LOGIN", user=user, session_id=sid, ip=ip, user_agent=agent)
 
     token = _serializer().dumps({"u": user, "sid": sid})
-    target = next if next.startswith("/") else "/"
+    # Role-aware default landing (V2-PORTAL-SPLIT A6/A7):
+    # - If the user was bounced from a deep link, `next` is the original path
+    #   (starts with "/") — honour it.
+    # - If `next` is the bare default "/" (user hit /login directly), compute
+    #   a role-aware destination via PORTAL_URL / GOV_URL env vars.
+    # - Any other (non-"/" starting) value falls back to the safe default.
+    if next == "/":
+        target = _default_target_for_user(user)
+    elif next.startswith("/"):
+        target = next
+    else:
+        target = _default_target_for_user(user)
     resp = JSONResponse({"ok": True, "user": user, "next": target})
     _set_session_cookie(resp, token)
     return resp

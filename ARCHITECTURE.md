@@ -1293,6 +1293,38 @@ The S41 `paths-ignore` extension to `team-portal/**` + `ciso-console/**` works a
 
 **Trajectory:** A1 likely closes 40/40 in S43 (fan-out 4 Tier 1 routers via parallel implementers per 24b). S44 = role-aware redirect + smoke harnesses. S45 = V1→V2 302 + DNS rehearsal. V2 live in ~3 more sessions.
 
+### Session 43 (A1 OpenAPI → 40/40 ✅ via single-file 28b sweep + A6/A7 role-aware redirect)
+
+Discovery overturned the S43 plan's "fan-out 4 Tier 1 routers in parallel" premise. Pre-flight enumeration (`response_model=` count vs `@router.<verb>` count per router) revealed that of the 6 routers carrying at least one un-typed route, **5 already had canonical 28b module-docstring prose citing compound 26a** (adversarial S18, agent_bindings S36, frameworks S32, analytics S27, aws_demo S39 — plus agent_notifications S38 and metrics S38 for SSE/Prometheus). Only `api/reports.py` documented its three export routes functionally without the explicit 26a citation header the audit uses to count "swept."
+
+**Track A — A1 OpenAPI 36/40 → 40/40 ✅:**
+- [api/reports.py](api/reports.py): module docstring extended with an "OpenAPI typing — Session 43 (sweep close-out)" section. Documents the three JSON-shape routes (`/catalog`, `/systems`, `/{type}`) as strict-Pydantic-per-27a and the three export routes (`/{type}/export.{json,csv,pdf}`) as 26a-exempt Response-subclass downloads (JSONResponse with attachment Content-Disposition, PlainTextResponse text/csv, HTMLResponse for print-ready PDF strategy). 38a coupling note included: ciso-console Reports page (S42 CSM-4) consumes exports as `<a href>` downloads — no SPA-side JSON-shape contract.
+- `docs/openapi-v1.json` regenerated per 24d — **zero shape diff** (docstring-only change; module docstrings do not enter the spec). Confirms 28b prose is internal audit evidence, not a wire contract.
+- **A1 ACCEPTANCE CLOSED — 40/40 ✅.** All known router gaps now carry either a strict response_model or canonical 28b prose citing compound 26a.
+
+**Track B — A6/A7 role-aware login redirect (V2-PORTAL-SPLIT acceptance A6 + A7):**
+- [middleware/auth.py](middleware/auth.py): `ENGINEER` added to `ROLES` tuple (V2-PORTAL-SPLIT A6 requires `demo-engineer` user). Provision `DEMO_USER_ENGINEER_HASH` alongside the other role hashes when AUTH_ENABLED=true.
+- Role→landing URL map added (env-var driven for cutover decoupling):
+  - `_PORTAL_ROLES = {engineer, operator, aigov}` → `PORTAL_URL` (default `/`)
+  - `_GOV_ROLES = {ciso, audit, mrm, cro}` → `GOV_URL` (default `/`)
+  - Unknown role → `/` (safe fallback)
+- `/api/auth/login` only substitutes the role-aware default when caller sent the bare `next="/"` (i.e. hit /login directly). Explicit deep-link `next` values (session-middleware bounce path) still take precedence — A6/A7 do not regress the existing 302-then-resume flow.
+- Verification: 8-assertion smoke (`python -c`) covers all 7 role→URL mappings + unknown-role fallback, both with PORTAL_URL/GOV_URL unset (dev default "/") and set (cutover target absolute URLs). Pattern mirrors the S25 `SESSION_COOKIE_DOMAIN` env-var-flip approach — code lands now, S45 cutover is a single env-var change on App Service (`PORTAL_URL=https://portal.aigovern.sandboxhub.co/`, `GOV_URL=https://gov.aigovern.sandboxhub.co/`), no redeploy.
+
+**Compound rule observation (S43 #1 — over-budgeting in plan-from-counter):**
+The S43 plan derived "4 Tier 1 routers to fan-out" purely from the numerator gap (40 − 36). Ground-truth discovery showed zero Tier 1 work remained — the gap was a single router's missing 28b citation. Pattern: when a session plan budgets fan-out from a counter that doesn't decompose by tier, **the discovery step must classify before allocating implementers**. 38a (consumer-coupling grep) catches Tier 3 mis-classification but does not catch already-26a-documented routes that were never going to be Tier 1 in the first place. Adopt for S44+ planning: enumerate untyped routes, classify each as Tier 1 (needs new model) vs 26a-exempt (needs docstring only), THEN budget fan-out.
+
+**V2 acceptance state after S43:**
+- A1 OpenAPI: **40/40 ✅ DONE**
+- A5 CISO Console: **10/10 ✅ DONE** (no change)
+- A6/A7: **logic shipped, env-var pending S45 DNS cutover** — defaults to host-relative "/" in dev, flips to absolute custom-DNS URLs at cutover
+- A2/A3/A4/A8/A10/A14/A16: ✓ (prior sessions)
+- A12/A13: blockers — cutover work (S45)
+- A15: 🟡 Bicep ✓; P1v3 + staging slot independent infra track
+- A9, A11 (Garak): locked-deferred / out-of-scope V2
+
+**Trajectory:** A1 closed this session. S44 = `smoke_portal.ps1` + `smoke_gov.ps1` split + DEMO_USER_ENGINEER_HASH provisioning + login smoke probe (verify `next` JSON honors PORTAL_URL/GOV_URL). S45 = V1→V2 302 redirect at root + DNS rehearsal + env-var flip → V2 LIVE.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)

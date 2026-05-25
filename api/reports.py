@@ -12,6 +12,35 @@ PDF strategy: there is no native PDF generator wired in this build. The
 '.pdf' endpoint returns an HTML document with print-only styles — auditors
 hit Ctrl+P / Cmd+P → 'Save as PDF' in their browser. This matches the
 existing `/api/report/compliance` pattern in dashboard.py.
+
+OpenAPI typing — Session 43 (sweep close-out, A1 → 40/40 ✅):
+    The three JSON-shape routes (``GET /catalog``, ``GET /systems``,
+    ``GET /{report_type}``) carry strict Pydantic v2 ``response_model``s
+    (``ReportCatalogResponse``, ``ReportSystemsResponse``,
+    ``ReportDataResponse``) with ``ConfigDict(extra='forbid')`` per
+    compound 27a.
+
+    The three export routes are intentionally bare per compound 26a —
+    they return Response subclasses whose wire shape is not JSON and
+    cannot carry a meaningful Pydantic schema:
+
+      - ``reports_report_export_json`` (``GET /{report_type}/export.json``)
+        — ``JSONResponse`` with ``Content-Disposition: attachment``
+        (file download, not an in-band JSON body).
+      - ``reports_report_export_csv``  (``GET /{report_type}/export.csv``)
+        — ``PlainTextResponse`` ``text/csv`` download.
+      - ``reports_report_export_pdf``  (``GET /{report_type}/export.pdf``)
+        — ``HTMLResponse`` (print-ready HTML; PDF rendering deferred to
+        the browser per the strategy note above).
+
+    Each export route carries only a stable ``operation_id`` so generated
+    SDK clients still expose a typed method name. Mirrors the canonical
+    26a treatment in api/analytics.py (S27), api/aws_demo.py (S39),
+    api/agent_notifications.py (S38), and api/frameworks.py (S32).
+
+    Consumer-coupling grep (38a): export routes are linked from
+    ciso-console (S42 CSM-4 Reports page) as direct ``<a href="...">``
+    downloads — no JSON-shape contract is read in the SPA.
 """
 
 from __future__ import annotations
