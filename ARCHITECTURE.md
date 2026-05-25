@@ -671,22 +671,98 @@ Verification: `python -c "import api.domains_api"` + TestClient
 `extra="allow"`. `openapi.drift.production_warn` logs as expected
 on local import (compound 25b).
 
+### Session 31 (Track A seventh router — api/adversarial.py + sweep recount)
+Sweep counter **corrected from recount** — prior planning headers
+(6/25 routers, 29/66 routes) were tracking only the routers swept by
+this initiative, not total project coverage. Empirical recount of
+`api/*.py` against the spec:
+
+| Bucket | Routers | Routes |
+|---|---|---|
+| Fully typed (`response_model` on every JSON route) | 19 | ~108 |
+| Partially typed | 5 | 11 untyped |
+| Fully untyped | 12 | 32 untyped |
+| **Total** | **36** | **~151** |
+
+S31 promotes `api/adversarial.py` from partially-typed to fully-swept,
+so the new state is **19/36 routers fully typed** (some by pre-S25
+typing audit, e.g. `findings_v2.py` per SESSION-13 §3.1). Sweep
+target list goes forward on the 5 partial + 12 untyped routers, not
+the inflated `25 - swept-this-initiative` framing.
+
+**Originally planned S31 target `api/findings_v2.py` was already
+fully typed** (5 response models + 5 operation_ids, SESSION-13 §3.1).
+No-op on that file. Pivoted to `api/adversarial.py` — 1 typed JSON
+route, 1 SSE route (`POST /run` returns `StreamingResponse`,
+intentionally cannot have a JSON `response_model`).
+
+Changes to `api/adversarial.py`:
+- `CategoriesResponse.model_config` tightened `ConfigDict()` → `ConfigDict(extra="forbid")` (sweep strict-mirror policy)
+- `GET /categories` operation_id stamped `adversarial_categories_list` (was auto-generated `list_categories_api_adversarial_categories_get`)
+- `POST /run` operation_id stamped `adversarial_run` (was auto-generated `run_suite_api_adversarial_run_post`); no `response_model` since SSE — documented in file docstring
+
+Consumer surface: only `team-portal/src/pages/adversarial/AdversarialPage.tsx`,
+locked out per V2-PORTAL-SPLIT.md §3. No `static/` consumer.
+Grep for old auto-generated operationIds across `*.py`, `*.ts`,
+`*.tsx`, `*.html` returned zero hits — safe to rename.
+
+`docs/openapi-v1.json` regenerated: +3/-2 lines. Diff is exactly
+{two operationIds renamed, `additionalProperties: false` added to
+`CategoriesResponse` schema}. No removed routes, no shape changes
+to other schemas. `openapi.drift.production_warn` fires on local
+`import dashboard` as expected per compound 25b.
+
+**Compound rule 28a regression (open issue, not in this session's
+budget).** S30 closeout commit `b796494` (doc-only:
+`ARCHITECTURE.md` + delete `SESSION-30-*.md` + add `SESSION-31-*.md`)
+**did trigger the deploy workflow** despite all 3 files matching
+the `**/*.md` and `docs/**/*` paths-ignore globs. By contrast,
+the prior test commit `704e7430` (single-file `ARCHITECTURE.md`
+modify) correctly skipped deploy. The only diff between them is
+the presence of file **deletions/additions** vs pure modify.
+Suspected GitHub Actions paths-ignore quirk around delete+add
+in the same push; needs reproduction in a dedicated session before
+the rule is updated. Until then, doc-only commits that **only
+modify** (no add/delete) remain safe; doc-only commits with file
+moves should expect deploy to fire.
+
+Verification: `python -c "import api.adversarial"` + `python -c
+"import dashboard"` both pass; route inspection confirms new
+operation_ids on `adversarial.router.routes`; spec round-trip
+clean.
+
 ## Files — Planned
 
-### Sessions 31+ — OpenAPI response-model sweep continuation (19/25 routers remaining)
-Session 30 closed `api/domains_api.py` (5/66 routes; 29/66 cumulative).
-Remaining top offenders: `guide.py` (9 — defer; high SPA coupling),
-`findings_v2.py`, `runtime_v2.py`. Recommended
-next target: `api/findings_v2.py` — confirm route count + consumer
-surface at S31 start (re-grep `static/` + `team-portal/` for
-`/api/findings`). Pattern locked
-by Sessions 25-30:
+### Sessions 32+ — OpenAPI response-model sweep continuation (17 routers remaining)
+Post-S31 state: **19/36 routers fully typed; 5 partial + 12 untyped
+remain.** Recommended next target: `api/agent_bindings.py`
+(4 routes, 3 already typed — same one-route-finish pattern as S31
+adversarial). Alternative small targets: `api/frameworks.py` (4/3),
+`api/projection.py` (3/1), `api/traces.py` (1 route, fully untyped
+— but tracer-adjacent, deserves its own focused session given
+audit-surface coupling). Defer `api/guide.py` (9 routes, high SPA
+coupling).
+
+Partially-typed (finish-the-half) candidates:
+- `api/agent_bindings.py` 4/3, `api/frameworks.py` 4/3 — 1 untyped route each
+- `api/analytics.py` 5/3, `api/reports.py` 6/3 — 2-3 untyped routes each
+- `api/projection.py` 3/1 — 2 untyped routes
+
+Fully-untyped candidates (small first): `agent_notifications.py` (1),
+`metrics.py` (1), `traces.py` (1), `evaluate.py` (1), `assessment.py`
+(2), `demo_run.py` (2), `demo.py` (3), `demo_control.py` (3),
+`aws_demo.py` (3), `framework.py` (3), `usage.py` (3),
+`guide.py` (9 — defer).
+
+Pattern locked by Sessions 25-31:
 1. Grep `static/` + `team-portal/` for `/api/<prefix>/` consumers first.
 2. Draft Pydantic v2 BaseModels inline (or `api/contracts/` if duplication
    crosses three routers).
 3. `response_model=` + `operation_id="<prefix>_<resource>_<verb>"`.
 4. Regenerate `docs/openapi-v1.json` under `SL_OPENAPI_EXPORT_PROFILE=ci`.
 5. Verify diff includes new schemas + new operationIds only (no removed routes).
+6. **SSE/streaming routes get `operation_id=` only** — `response_model=`
+   cannot apply; document the intentional gap in the file docstring (S31 lesson).
 
 ### Sessions 25-26 — Garak Deep Scan implementation (now unblocked)
 ADR-001 accepted this session. Six-step plan per ADR §7: Dockerfile + sidecar server, `deploy/bicep/garak.bicep`, `domain/garak_bridge.py` + `frameworks/garak_severity.yaml`, `api/adversarial.py::deep_scan` endpoint, SPA tab split in `AdversarialPage.tsx`, end-to-end integration test. Independent of V2 critical path.
