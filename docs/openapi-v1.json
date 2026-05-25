@@ -1708,6 +1708,7 @@
         "type": "object"
       },
       "CategoriesResponse": {
+        "additionalProperties": false,
         "description": "Response from GET /api/adversarial/categories.",
         "properties": {
           "categories": {
@@ -9195,7 +9196,7 @@
     "/api/adversarial/categories": {
       "get": {
         "description": "Return the available adversarial probe categories and total probe count.",
-        "operationId": "list_categories_api_adversarial_categories_get",
+        "operationId": "adversarial_categories_list",
         "responses": {
           "200": {
             "content": {
@@ -9217,7 +9218,7 @@
     "/api/adversarial/run": {
       "post": {
         "description": "Run the adversarial suite and stream per-probe results via SSE.\n\nResponse type: text/event-stream. Events fired (each with `event:` header):\n  start  \u2014 once, with model + total_probes + categories\n  probe  \u2014 once per probe, with index/total/resisted/severity/latency_ms\n  done   \u2014 once at the end, with the full summary dict\n  error  \u2014 only on engine failure, before the stream terminates\n\nEmpty `categories` is rejected at the boundary (422) so the SPA never\nstreams an empty run.",
-        "operationId": "run_suite_api_adversarial_run_post",
+        "operationId": "adversarial_run",
         "requestBody": {
           "content": {
             "application/json": {

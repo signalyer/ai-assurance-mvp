@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/adversarial", tags=["adversarial"])
 class CategoriesResponse(BaseModel):
     """Response from GET /api/adversarial/categories."""
 
-    model_config = ConfigDict()
+    model_config = ConfigDict(extra="forbid")
 
     categories: list[str]
     total_probes: int
@@ -149,7 +149,11 @@ async def _stream_suite(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/categories", response_model=CategoriesResponse)
+@router.get(
+    "/categories",
+    response_model=CategoriesResponse,
+    operation_id="adversarial_categories_list",
+)
 async def list_categories() -> CategoriesResponse:
     """Return the available adversarial probe categories and total probe count."""
     logger.info("list_categories: entry")
@@ -171,7 +175,7 @@ async def list_categories() -> CategoriesResponse:
         raise HTTPException(status_code=500, detail="Failed to list categories")
 
 
-@router.post("/run")
+@router.post("/run", operation_id="adversarial_run")
 async def run_suite(body: RunSuiteRequest) -> StreamingResponse:
     """Run the adversarial suite and stream per-probe results via SSE.
 
