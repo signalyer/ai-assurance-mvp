@@ -1077,36 +1077,93 @@ list (agent_notifications, metrics, traces, evaluate, assessment,
 demo_run, demo, demo_control, aws_demo, framework, usage; defer
 guide.py per high SPA coupling).
 
-### Sessions 38+ — OpenAPI sweep continuation
-Post-S37 sweep state: **22/40 routers fully typed.** Empirical recount
+### Session 38 (FIRST parallel batch sweep — 7 routers in one session + 28a observation #5)
+
+**Compound 28a observation #5 = NO** (`gh run list --commit=8e97454`
+empty). Tally last 5 closeouts: S33 YES, S34 NO, S35 NO, S36 YES, S37 NO
+= **2/5 fired**. Below decision gate threshold (3/5). Observation
+continues; workflow unchanged. Gate moves to S38 closeout commit (obs #6).
+
+**First execution of compound 24b amendment (per-coupling-tier batching).**
+Session pivoted from one-router-per-session to a structured parallel batch:
+
+**Tier 2 verify batch** (2 parallel `Explore` agents):
+- `api/reports.py` → 26a-conformant final since S26. 3 JSON routes typed
+  + 3 export endpoints (.json/.csv/.pdf) bare-by-design per 26a. PASS.
+- `api/assurance_model.py` → fully swept (12 routes, all carry
+  response_model + operation_id). Raw 5/12/12 grep was NOT inflation —
+  the "5" was a glob mismatch on the route count probe; visual confirmed
+  12 real decorators. PASS.
+- Counter +2 (both confirmed-final).
+
+**Tier 1 batch sweep** (5 parallel `implementer` subagents, single Track A commit `216359f`):
+| Router | Routes | Pattern |
+|---|---|---|
+| `api/agent_notifications.py` | 1 SSE | op_id only per 26a |
+| `api/metrics.py` | 1 Prometheus | op_id only per 26a |
+| `api/traces.py` | 1 JSON | `TracesResponse` envelope + `TraceItemOut` + `EvalScoreEntry` (dynamic metric keys via `extra="allow"` per 27a) |
+| `api/evaluate.py` | 1 JSON | `EvaluateResponse` envelope + `EvalScore` strict inner; `extra="allow"` on envelope for dynamic evaluator metric keys |
+| `api/demo_run.py` | 2 routes | `DomainsResponse` strict + `DemoRunResponse` permissive (runs payload polymorphic across guardrail configs) |
+
+**Pre-flight consumer-coupling grep gate** (Tier 1 safety net): batch
+candidates were `agent_notifications, metrics, traces, evaluate,
+demo_run, aws_demo` (zero SPA hits). Dropped to Tier 3 for future
+sessions: `assessment` (1 SPA hit), `framework` (3 hits), `usage` (3 hits).
+The grep gate IS the parallelization safety — without it, parallel
+implementer agents could blast UI contracts.
+
+**Spec regenerated once** for all 5 routers (24d, single export):
+`docs/openapi-v1.json` +247/-10 (8 new component schemas + 6 renamed
+operationIds). All 5 imports pass.
+
+**Sweep progress:** 18 routers shipped/verified by this initiative
+(prior 13 + reports verified + assurance_model verified + 5 Tier 1 batch).
+**Sweep counter: 22 → 29/40 fully typed in one session** (vs ~7 sessions
+under the original 24b rule). Validates the amendment.
+
+Compound rule earned this session:
+- **Session 38a:** When parallelizing a sweep via subagents, the
+  consumer-coupling grep gate is what makes batching safe — not the
+  agents themselves. Run the grep on EVERY candidate router before
+  fan-out; routers with ≥1 SPA hit drop to Tier 3 regardless of route
+  count. This pre-flight step takes <2 minutes and prevents the
+  blast-radius failure mode that motivated the original one-per-session
+  rule. Document the gate output in the session entry so future
+  reviewers can see which routers were eligible.
+
+### Sessions 39+ — OpenAPI sweep continuation
+Post-S38 sweep state: **29/40 routers fully typed.** Empirical recount
 output (preserve verbatim for next-session carry-over):
 
 ```
-Fully clean (21 prior + analytics confirmed-final = 22):
+Fully clean (22 prior + reports verified + assurance_model verified + 5 Tier 1 batch = 29):
   agents, ai_system_edit, audit_verify, batch, connectors,
   domains_api, evals_v2, evidence, findings_v2, grc, intake,
   projection, release_gates, right_to_forget, runtime_v2,
   security, frameworks, adversarial, memory, rag, agent_bindings,
-  analytics
+  analytics, reports, assurance_model,
+  agent_notifications, metrics, traces, evaluate, demo_run
 
-Partial bucket — RECOUNT NEEDED (raw greps misleading per 26a):
-  api/reports.py         6 / 3 / 6   (likely already final — 3 JSON + 3 bare exports per S26 entry; verify with 24c+visual at S38 start)
-  api/assurance_model.py 5 / 12 / 12 (grep over-counting from docstrings/comments — needs visual check)
+Tier 3 (has live SPA consumers — sequential, one per session):
+  api/assessment.py      (1 SPA hit — static/assessment.html)
+  api/framework.py       (3 SPA hits — static/ai-systems.html, static/frameworks.html)
+  api/usage.py           (3 SPA hits — static/analytics-usage.html)
+  api/guide.py           (9 routes — high SPA coupling, defer late)
 
-Untouched (0 / 0 — 10 routers):
-  assessment, aws_demo, demo, demo_control, demo_run, evaluate,
-  framework, guide, traces, usage
+Tier 1 remaining (zero SPA consumers — batch up to 5):
+  api/aws_demo.py, api/demo.py, api/demo_control.py
 
 Special-shape (already documented exceptions):
   api/agent_notifications.py — SSE only, op_id deferrable per S31 rule
   api/metrics.py             — Prometheus exposition, response_model n/a
 ```
 
-Recommended S38 target: verify `api/reports.py` first (likely confirmed-
-final under 26a, mirroring S37 analytics outcome); if so, pivot to
-visual check of `api/assurance_model.py` or start the untouched list
-with smallest router (`api/agent_notifications.py` 1 SSE route per
-S31 op_id-only rule, or `api/metrics.py` 1 route).
+Recommended S39 plan: (a) Tier 1 batch of remaining 3 zero-coupling
+routers (`aws_demo`, `demo`, `demo_control`) via parallel implementers —
+single Track A commit; (b) start one Tier 3 router (`assessment` is
+smallest, 1 SPA hit) sequentially in same session. Counter target:
+29 → 33/40. After S39, only `framework`, `usage`, `guide` remain — all
+Tier 3.
 
 Defer to its own session: `api/guide.py` (9 routes, high SPA coupling).
 - `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
