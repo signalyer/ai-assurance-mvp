@@ -789,26 +789,102 @@ Verification: `python -c "import api.frameworks"` passes,
 confirms all 4 op_ids stamped and 10 strict models present (modulo
 the EvidenceOut collision above). /verify all PASS.
 
+### Session 33 (Track A ninth router — api/projection.py)
+Compound rule 24c probe (added end of S32) ran on session start
+against the planned S33 target `api/projection.py`:
+`grep -c 'response_model=\|operation_id=' api/projection.py` → 1.
+Route walk confirmed 1 typed (`GET /status` had response_model only,
+no operation_id), 2 untyped (`POST /replay`, `GET /views/{view}`).
+**Probe matched the S33 plan exactly — no pivot needed.** First clean
+24c application after S31 + S32 both ate pivots on stale targets.
+
+3 routes touched:
+- `GET /status` — already had `ProjectionStatusResponse`; added
+  `operation_id="projection_status"`
+- `POST /replay` — new `ReplayResponse` (strict, 2 fields: `events_processed`,
+  `from_event_id`); op_id `projection_replay`; return type flipped from
+  `JSONResponse` to `ReplayResponse`
+- `GET /views/{view}` — new `ProjectionViewResponse` (envelope + polymorphic
+  `rows: list[dict[str, Any]]`); op_id `projection_view`; return type flipped
+  from `JSONResponse` to `ProjectionViewResponse`
+
+`ProjectionViewResponse.rows` is intentionally `list[dict]` per compound
+27a — the endpoint serves five materialized Postgres tables (ai_systems,
+eval_runs, findings, release_decisions, policy_evaluations) with genuinely
+different column shapes. Single strict union would either force five
+sibling endpoints or freeze all five table schemas into the public OpenAPI
+contract. Model docstring also flags the JSONB-columns-as-strings
+serialization shim at `api/projection.py:278-281` so SDK consumers know
+to `json.loads` JSONB columns explicitly.
+
+`ReplayResponse` is strict (`extra="forbid"`) — 2 fields, zero variance.
+
+Unused `JSONResponse` import removed; pre-existing unused `Depends`
+import left alone (out of sweep scope per compound 24b).
+
+Consumer surface: `static/projection.html` only — reads `lag_events`,
+`tailer_checkpoint_offset`, `last_event_id` from /status, calls /replay
+with confirm dialog. Per-view counts auto-refresh queries /views/{view}.
+None of the consumers care about FastAPI auto-generated operationIds.
+No SPA route in `team-portal/`.
+
+`docs/openapi-v1.json` regenerated via `scripts/export_openapi.py`
+(ci profile, the canonical exporter): +75/-5 lines. Exactly 2 new
+schemas (`ReplayResponse`, `ProjectionViewResponse`) + 3 op_id renames
+(`projection_status_api_projection_status_get` → `projection_status`,
+etc.). Zero removed routes; no shape changes to prior schemas.
+
+Compound rule **24d (NEW — earned this session):** Always regenerate
+`docs/openapi-v1.json` via `python scripts/export_openapi.py`, never
+via an ad-hoc `dashboard.app.openapi()` one-liner. The canonical
+exporter both pins the env profile (compound 25b) AND normalizes key
+ordering — running FastAPI's raw `.openapi()` produces a 15K-line
+key-reordering diff that hides the actual change. First-pass attempt
+this session produced a 15036/14966 diff vs the canonical exporter's
+clean +75/-5 — wasted ~3 min of review before the discrepancy was
+caught. Add to session-start ritual: regen step is `scripts/export_openapi.py`,
+not `python -c "..."`.
+
+**Sweep progress:** 9 routers shipped by this initiative
+(security + reports + analytics + connectors + evidence +
+domains_api + adversarial + frameworks + projection). Empirical
+router count still owed a fresh recount in S34 — the "20/36 fully
+typed" carry-over from S32 is now itself one session stale.
+
+**Compound 28a regression — third data point.** S32 closeout commit
+`ca20d85` (doc-only: ARCHITECTURE.md modify + delete `SESSION-32-*.md`
++ add `SESSION-33-*.md`) needs to be checked for deploy trigger to
+extend the S30→S31 + S31→S32 pattern. This S33 closeout commit will
+follow the same shape (modify + delete + add), giving a fourth data
+point if it also triggers. Dedicated fix session still pending; not
+in S33 scope.
+
+Verification: `python -c "import api.projection"` passes, route
+inspection via `router.routes` confirms all 3 op_ids stamped
+(`projection_status`, `projection_replay`, `projection_view`).
+Canonical exporter spec round-trip clean.
+
 ## Files — Planned
 
-### Sessions 33+ — OpenAPI response-model sweep continuation
-Post-S32 state: **20/36 routers fully typed; ≤4 partial + 12 untyped
-remain** (the 5-partial estimate from S31 was based on the same stale
-list now being corrected). A full empirical recount is overdue —
-recommended for the front of S33.
+### Sessions 34+ — OpenAPI response-model sweep continuation
+Post-S33 state: **9 routers shipped by this initiative** (security,
+reports, analytics, connectors, evidence, domains_api, adversarial,
+frameworks, projection). The "20/36 fully typed; ≤4 partial + 12
+untyped" estimate carried from S31→S32→S33 is now itself two sessions
+stale — **first action in S34 should be an empirical recount across
+all `api/*.py`** before committing to a target. Compound 24c probe
+on the chosen target as usual.
 
-Recommended S33 target: `api/projection.py` (3 routes, 1 typed) —
-genuinely small, needs 2 new response_models for `/replay` and
-`/views/{view}` plus 3 op_ids. Higher delta than frameworks.py but
-unambiguously still-partial. Alternative: `api/traces.py` (1 route,
-untyped) — smallest possible delta but tracer-adjacent so deserves
-its own focused window given audit-surface coupling.
+Recommended S34 candidates (apply 24c before committing):
+- `api/traces.py` (1 route, untyped) — smallest possible delta, but
+  tracer-adjacent so deserves its own focused window given audit-surface
+  coupling
+- `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
+- `api/metrics.py` (1)
+- `api/evaluate.py` (1)
+- `api/assessment.py` (2)
 
 Defer: `api/guide.py` (9 routes, high SPA coupling).
-
-Carryover candidates (apply 24c before committing to any):
-- `api/projection.py` 3/1, `api/analytics.py` 5/3, `api/reports.py` 6/3
-- `api/traces.py` 1/0 (focused session)
 
 Fully-untyped candidates (small first): `agent_notifications.py` (1),
 `metrics.py` (1), `traces.py` (1), `evaluate.py` (1), `assessment.py`
