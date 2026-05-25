@@ -928,11 +928,12 @@ via `gh run list` against recent commits:
 | `d5b36de` (S34 closeout) | modify+delete+add | **NO** |
 | `0d8ff1c` (S35 reframe) | modify-only | **NO** |
 | `12e3908` (S35 Track A code) | code change | YES — expected |
+| `8933b34` (S35 closeout) | modify+delete+add | **NO** (recorded at S36 start) |
 
-Two consecutive doc-only commits correctly suppressed. State is now
-"intermittent: 3/5 prior closeouts triggered, last 2 did not."
-**Workflow unchanged this session per plan.** This very closeout is
-observation data point #3 — record its deploy outcome at S36 start.
+Three consecutive closeouts now suppressed (S34 + S35-reframe + S35).
+State remains "intermittent: 3/5 prior closeouts triggered, 3 most
+recent did not." **Workflow unchanged through S36 per plan.**
+Decision gate at observation point #5 stands.
 
 `api/rag.py` sweep: 4 routes, all already had `response_model=` from
 Session 18; added `operation_id=` to all four following the locked
@@ -960,30 +961,67 @@ via 24c grep returns 4/4/4, canonical exporter spec round-trip clean.
 
 ## Files — Planned
 
-### Session 36 — OpenAPI sweep router 12 + compound 28a data point #4
-Two threads:
-1. **Compound 28a observation #3** — log whether this session's closeout
-   commit triggered deploy. Running tally goes into the S35 table above
-   plus the SESSION-36 plan.
-2. **Track A twelfth sweep target: `api/agent_bindings.py`** (4 routes,
-   3 response_models, 4 op_ids per S34 recount — needs one missing
-   `response_model=` added; smallest delta in the partials list now that
-   rag.py is done).
+### Session 36 (Track A twelfth router — api/agent_bindings.py + compound 28a observation #3)
+Two threads, both as planned.
+
+**Compound 28a observation #3.** `gh run list --commit=8933b34` returned
+empty — S35 closeout did NOT trigger deploy. Tally now 5 fired / 3
+missed (S29-S33 closeouts fired; S34 closeout + S35 reframe + S35
+closeout did not). State remains "intermittent, observation phase";
+workflow stays unchanged through S37. Decision gate at observation
+point #5 stands.
+
+**Track A — `api/agent_bindings.py` sweep.** Compound 24c probe
+confirmed 4/3/4 (matching S34 recount). The missing `response_model=`
+is on DELETE, which returns `Response(status_code=204)` — per compound
+26a, OpenAPI's 204 status forbids a response body, so `response_model=`
+would be misleading. This is a **document-the-gap** sweep per S31 rule,
+not an add-response_model sweep.
+
+Module docstring expanded to record:
+- Per-route response/operation_id status
+- Why DELETE is bare (204 + bare `Response` subclass; consumer reads
+  `response.ok` only)
+- Why `AgentBindingOut` uses `ConfigDict(extra='allow')` (domain
+  enriches base binding with `agent_name`/`agent_team`/
+  `agent_owner_type`/`version_semver` joined from agents + versions)
+
+Spec regeneration via `scripts/export_openapi.py` produced no schema
+diff (prose-only change). Probe re-verified 4/3/4 after docstring
+cleanup — caught new **compound 28b mid-sweep**.
+
+**Compound 28b (new this session).** Docstrings that contain the
+literal tokens `response_model=` or `operation_id=` inflate the 24c
+grep recount. First post-edit probe returned 4/5/5 (true: 4/3/4 + 2
+docstring matches). Rule: when documenting OpenAPI conventions in
+docstrings, refer prose-style (e.g. "response model", "operation id"),
+never with the `=` suffix attached. Catching this pre-commit via the
+second 24c run is the win from running the probe twice — exactly the
+"every mistake → new rule" pattern from CLAUDE.md.
+
+**Sweep progress:** 12 routers shipped by this initiative (security +
+reports + analytics + connectors + evidence + domains_api + adversarial
++ frameworks + projection + memory + rag + agent_bindings).
+**Sweep counter: 21/40 fully typed** (20 carried from S35 +
+agent_bindings.py this session).
+
+Verification: `python -c "import api.agent_bindings"` passes; 24c probe
+returns 4/3/4 (DELETE bare-by-design per 26a); spec regen produced
+identical file.
 
 ### Sessions 37+ — OpenAPI sweep continuation
-Post-S35 sweep state: **20/40 routers fully typed.** Empirical recount
+Post-S36 sweep state: **21/40 routers fully typed.** Empirical recount
 output (preserve verbatim for next-session carry-over):
 
 ```
-Fully clean (19 prior + rag this session = 20):
+Fully clean (20 prior + agent_bindings this session = 21):
   agents, ai_system_edit, audit_verify, batch, connectors,
   domains_api, evals_v2, evidence, findings_v2, grc, intake,
   projection, release_gates, right_to_forget, runtime_v2,
-  security, frameworks, adversarial, memory, rag
+  security, frameworks, adversarial, memory, rag, agent_bindings
 
-Partial (4 candidates — apply 24c before committing):
-  api/agent_bindings.py  4 / 3 / 4   (1 missing response_model — S36 target)
-  api/analytics.py       5 / 3 / 5   (2 missing response_model)
+Partial (3 candidates — apply 24c before committing):
+  api/analytics.py       5 / 3 / 5   (2 missing response_model — S37 target)
   api/reports.py         6 / 3 / 6   (3 missing response_model)
   api/assurance_model.py 5 / 12 / 12 (grep over-counting — needs visual check)
 
@@ -996,9 +1034,8 @@ Special-shape (already documented exceptions):
   api/metrics.py             — Prometheus exposition, response_model n/a
 ```
 
-Recommended S36 target: `api/rag.py` (4 routes, response_models present,
-0 op_ids) — direct sibling of memory.py; same delta size; one-commit
-sweep.
+Recommended S37 target: `api/analytics.py` (5/3/5 — 2 response_model
+additions; smallest remaining delta in partials list).
 
 Defer to its own session: `api/guide.py` (9 routes, high SPA coupling).
 - `api/agent_notifications.py` (1, SSE — would be op_id-only per S31 rule)
