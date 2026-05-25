@@ -8,6 +8,26 @@ two files so /reset can wipe them cleanly:
 
 In addition, /reset removes any findings_events.jsonl entries authored by
 'demo-walkthrough' so reruns are deterministic.
+
+Session 39 — Track A OpenAPI sweep, per-router #19.
+
+Routes and their OpenAPI treatment:
+
+GET  /api/demo/state
+  Strict Pydantic v2 model (DemoStateResponse) — fixed 5-key shape.
+  operation_id: demo_get_state.
+
+POST /api/demo/reset
+  Strict Pydantic v2 model (DemoResetResponse) — single-key {"ok": bool}.
+  operation_id: demo_post_reset.
+
+POST /api/demo/step/{n}
+  Permissive model (DemoStepResponse, extra="allow") — 13 steps each return
+  a structurally different dict (step, title, plus step-specific keys). The
+  asymmetric/polymorphic exemption from compound 27a applies: a closed schema
+  would either be too wide (all optional) or silently strip valid step-specific
+  keys. extra="allow" lets each step payload flow through unchanged.
+  operation_id: demo_post_step.
 """
 
 from __future__ import annotations
@@ -17,9 +37,11 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, date, timedelta
 from enum import Enum
 from pathlib import Path
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from domain import repository
 from domain.assessment_engine import run_assessment
@@ -45,11 +67,53 @@ _OVERLAY_FILE = _DATA_DIR / "demo_overlay.jsonl"
 _EVENTS_FILE = repository.FINDINGS_EVENTS_FILE
 
 
+# ===========================================================================
+# Response models (Session 39 — Track A OpenAPI sweep, per-router #19)
+# ===========================================================================
+
+class DemoStateResponse(BaseModel):
+    """Current demo walkthrough state.
+
+    Fixed 5-key shape: system identity plus step-completion tracking and
+    cached assessment snapshots for v1 (pre-remediation) and v2 (post).
+    """
+
+    system_id: str
+    system_name: str
+    completed_steps: list[int]
+    v1_assessment: Optional[dict[str, Any]] = None
+    v2_assessment: Optional[dict[str, Any]] = None
+
+
+class DemoResetResponse(BaseModel):
+    """Confirmation that the demo state was wiped."""
+
+    ok: bool
+
+
+class DemoStepResponse(BaseModel):
+    """Response envelope for a single demo step execution.
+
+    Permissive (extra="allow"): each of the 13 steps returns a different
+    payload shape beyond the common step/title keys — controls lists,
+    assessment scores, connector run arrays, evidence attachments, finding
+    transition records, and before/after delta dicts. A closed schema would
+    either reject valid step-specific keys or require every field to be
+    Optional, making the contract meaningless. extra="allow" is the correct
+    choice per the asymmetric/polymorphic exemption (compound 27a).
+    """
+
+    step: int
+    title: str
+
+    model_config = ConfigDict(extra="allow")
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _ser(o):
+def _ser(o: Any) -> Any:
     if is_dataclass(o):
         return {k: _ser(v) for k, v in asdict(o).items()}
     if isinstance(o, Enum):
@@ -67,17 +131,17 @@ def _ser(o):
     return o
 
 
-def _load_state() -> dict:
+def _load_state() -> dict[str, Any]:
     if not _STATE_FILE.exists():
         return {"completed_steps": [], "v1_assessment": None, "v2_assessment": None}
     return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
 
 
-def _save_state(s: dict) -> None:
+def _save_state(s: dict[str, Any]) -> None:
     _STATE_FILE.write_text(json.dumps(s, indent=2), encoding="utf-8")
 
 
-def _mark_step(n: int) -> dict:
+def _mark_step(n: int) -> dict[str, Any]:
     s = _load_state()
     if n not in s["completed_steps"]:
         s["completed_steps"].append(n)
@@ -86,7 +150,7 @@ def _mark_step(n: int) -> dict:
     return s
 
 
-def _append_overlay(kind: str, data: dict) -> None:
+def _append_overlay(kind: str, data: dict[str, Any]) -> None:
     with _OVERLAY_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"kind": kind, "data": data}) + "\n")
 
@@ -99,8 +163,8 @@ def _now_iso() -> str:
 # State + reset
 # ---------------------------------------------------------------------------
 
-@router.get("/state")
-async def get_state() -> dict:
+@router.get("/state", response_model=DemoStateResponse, operation_id="demo_get_state")
+async def get_state() -> dict[str, Any]:
     s = _load_state()
     system = repository.get_ai_system(DEMO_SYSTEM_ID)
     return {
@@ -112,8 +176,8 @@ async def get_state() -> dict:
     }
 
 
-@router.post("/reset")
-async def reset() -> dict:
+@router.post("/reset", response_model=DemoResetResponse, operation_id="demo_post_reset")
+async def reset() -> dict[str, Any]:
     """Wipe demo overlay state + filter demo events from the findings log."""
     if _STATE_FILE.exists():
         _STATE_FILE.unlink()
@@ -145,8 +209,8 @@ async def reset() -> dict:
 # Step actions
 # ---------------------------------------------------------------------------
 
-@router.post("/step/{n}")
-async def execute_step(n: int) -> dict:
+@router.post("/step/{n}", response_model=DemoStepResponse, operation_id="demo_post_step")
+async def execute_step(n: int) -> dict[str, Any]:
     """Execute step n. Idempotent except where noted."""
     if n < 1 or n > 13:
         raise HTTPException(400, f"Invalid step {n}")
@@ -189,7 +253,7 @@ async def execute_step(n: int) -> dict:
 
 # --- step implementations ---------------------------------------------------
 
-def _step_1_intake(system) -> dict:
+def _step_1_intake(system: Any) -> dict[str, Any]:
     return {
         "step": 1, "title": "AI System Intake",
         "summary": "Intake submitted for the Payments Exception Review Agent.",
@@ -211,7 +275,7 @@ def _step_1_intake(system) -> dict:
     }
 
 
-def _step_2_classify(system) -> dict:
+def _step_2_classify(system: Any) -> dict[str, Any]:
     from domain.assessment_engine import classify_risk
     c = classify_risk(system)
     return {
@@ -223,7 +287,7 @@ def _step_2_classify(system) -> dict:
     }
 
 
-def _step_3_controls(system) -> dict:
+def _step_3_controls(system: Any) -> dict[str, Any]:
     required = get_required_controls(system)
     all_applicable = get_controls_for_ai_system(system)
     return {
@@ -242,7 +306,7 @@ def _step_3_controls(system) -> dict:
     }
 
 
-def _step_4_assess() -> dict:
+def _step_4_assess() -> dict[str, Any]:
     report = run_assessment(DEMO_SYSTEM_ID)
     rep = _ser(report)
     s = _load_state()
@@ -261,9 +325,9 @@ def _step_4_assess() -> dict:
     }
 
 
-def _step_5_findings() -> dict:
+def _step_5_findings() -> dict[str, Any]:
     findings = repository.findings_for(DEMO_SYSTEM_ID)
-    by_severity = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
+    by_severity: dict[str, list[dict[str, Any]]] = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
     for f in findings:
         sev = f.severity.value
         if f.status.value in ("OPEN", "IN_PROGRESS"):
@@ -281,14 +345,14 @@ def _step_5_findings() -> dict:
     }
 
 
-def _step_6_evals() -> dict:
+def _step_6_evals() -> dict[str, Any]:
     """Run the simulated eval connectors and write authoritative passing evals
     for the three eval types that gate release: PII_LEAKAGE, PROMPT_INJECTION,
     TOOL_AUTHORIZATION. These overlay on top of the (failing) seed evals; the
     assessment engine takes the latest-by-run_at per type.
     """
     from domain.connectors import BY_NAME
-    run_results = []
+    run_results: list[dict[str, Any]] = []
     for connector_name in ("DeepEval", "Garak", "PyRIT"):
         if connector_name in BY_NAME:
             r = BY_NAME[connector_name].run()
@@ -302,7 +366,7 @@ def _step_6_evals() -> dict:
     # Authoritative passing demo evals (will be the latest-by-run_at).
     now = datetime.utcnow()
     demo_evals = [
-        _build_eval(
+        _make_demo_eval_record(
             id_="demo-eval-pii", eval_type=EvalType.PII_LEAKAGE,
             score=0.999, threshold=0.999, status=EvalStatus.PASS,
             tool=ToolSource.DEEPEVAL, test_count=500, failed=0,
@@ -310,7 +374,7 @@ def _step_6_evals() -> dict:
             note="Macie + DLP regression — 0 leaks in 500 redacted-summary samples.",
             run_at=now,
         ),
-        _build_eval(
+        _make_demo_eval_record(
             id_="demo-eval-pi", eval_type=EvalType.PROMPT_INJECTION,
             score=0.97, threshold=0.95, status=EvalStatus.PASS,
             tool=ToolSource.GARAK, test_count=500, failed=15,
@@ -318,7 +382,7 @@ def _step_6_evals() -> dict:
             note="Garak instruction-isolation suite — 97% block rate after RAG sanitizer + tool-router authz hardening.",
             run_at=now,
         ),
-        _build_eval(
+        _make_demo_eval_record(
             id_="demo-eval-ta", eval_type=EvalType.TOOL_AUTHORIZATION,
             score=0.995, threshold=0.99, status=EvalStatus.PASS,
             tool=ToolSource.PYRIT, test_count=200, failed=1,
@@ -342,9 +406,21 @@ def _step_6_evals() -> dict:
     }
 
 
-def _build_eval(*, id_, eval_type, score, threshold, status, tool,
-                test_count, failed, controls, note, run_at):
-    """Build an EvalResult dict suitable for overlay storage."""
+def _make_demo_eval_record(
+    *,
+    id_: str,
+    eval_type: EvalType,
+    score: float,
+    threshold: float,
+    status: EvalStatus,
+    tool: ToolSource,
+    test_count: int,
+    failed: int,
+    controls: list[str],
+    note: str,
+    run_at: datetime,
+) -> dict[str, Any]:
+    """Construct an EvalResult dict suitable for overlay storage."""
     e = EvalResult(
         id=id_, ai_system_id=DEMO_SYSTEM_ID, assessment_id=None,
         eval_type=eval_type, score=score, threshold=threshold,
@@ -360,7 +436,7 @@ def _build_eval(*, id_, eval_type, score, threshold, status, tool,
     return json.loads(e.model_dump_json())
 
 
-def _step_7_gates() -> dict:
+def _step_7_gates() -> dict[str, Any]:
     from domain.release_gate_engine import evaluate_gates
     report = evaluate_gates(DEMO_SYSTEM_ID)
     return {
@@ -370,7 +446,7 @@ def _step_7_gates() -> dict:
     }
 
 
-def _step_8_decision() -> dict:
+def _step_8_decision() -> dict[str, Any]:
     """Show the v1 HOLD decision (assumes step 4 ran)."""
     s = _load_state()
     v1 = s.get("v1_assessment")
@@ -389,12 +465,12 @@ def _step_8_decision() -> dict:
     }
 
 
-def _step_9_remediation() -> dict:
+def _step_9_remediation() -> dict[str, Any]:
     findings = [
         f for f in repository.findings_for(DEMO_SYSTEM_ID)
         if f.status.value in ("OPEN", "IN_PROGRESS")
     ]
-    plan = []
+    plan: list[dict[str, Any]] = []
     for f in findings:
         plan.append({
             "finding_id": f.id, "title": f.title,
@@ -410,7 +486,7 @@ def _step_9_remediation() -> dict:
     }
 
 
-def _step_10_attach_evidence() -> dict:
+def _step_10_attach_evidence() -> dict[str, Any]:
     """Inject the evidence records that the v1 assessment flagged as missing —
     notably RAG_CONFIG (for AI-004 / F-1004) and a fresh REMEDIATION_VERIFICATION.
     """
@@ -484,7 +560,7 @@ def _step_10_attach_evidence() -> dict:
     }
 
 
-def _step_11_close_findings() -> dict:
+def _step_11_close_findings() -> dict[str, Any]:
     """Mark the CRITICAL prompt-injection finding remediated + verified, and
     transition the HIGH unauthorized-tool-call and RAG-quarantine findings into
     REMEDIATED. The remaining HIGH/MEDIUM stay open — that's what makes the
@@ -495,7 +571,7 @@ def _step_11_close_findings() -> dict:
         ("F-1003",          "MARK_REMEDIATED", "Authz moved out of model loop; rate limits applied."),
         ("F-1004",          "MARK_REMEDIATED", "Corpus re-ingested with DLP gate; manifest pinned."),
     ]
-    applied: list[dict] = []
+    applied: list[dict[str, Any]] = []
     for fid, et, note in targets:
         try:
             ev = apply_event(
@@ -513,7 +589,7 @@ def _step_11_close_findings() -> dict:
     }
 
 
-def _step_12_reassess() -> dict:
+def _step_12_reassess() -> dict[str, Any]:
     """Re-run the assessment. With evidence attached, evals refreshed, and the
     CRITICAL finding closed, the engine should now produce CONDITIONAL_PILOT.
     """
@@ -535,12 +611,12 @@ def _step_12_reassess() -> dict:
     }
 
 
-def _step_13_final_decision() -> dict:
+def _step_13_final_decision() -> dict[str, Any]:
     s = _load_state()
     v1 = s.get("v1_assessment")
     v2 = s.get("v2_assessment")
     if not v2:
-        out12 = _step_12_reassess()
+        _step_12_reassess()
         v2 = _load_state().get("v2_assessment")
     delta = None
     if v1 and v2:

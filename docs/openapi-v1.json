@@ -1048,6 +1048,102 @@
         "title": "AskResponseOut",
         "type": "object"
       },
+      "AssessmentReportResponse": {
+        "additionalProperties": true,
+        "description": "Full assessment report.\n\nMirrors domain.assessment_engine.AssessmentReport. Permissive at the top\nlevel so the engine layer can add fields without breaking the SPA. Nested\nmodels are strict \u2014 their domain shapes are stable.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "ai_system_name": {
+            "title": "Ai System Name",
+            "type": "string"
+          },
+          "control_evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/_ControlEvaluationOut"
+            },
+            "title": "Control Evaluations",
+            "type": "array"
+          },
+          "evidence_completeness": {
+            "title": "Evidence Completeness",
+            "type": "number"
+          },
+          "failed_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Controls",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/_GeneratedFindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "framework_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/_FrameworkCoverageOut"
+            },
+            "title": "Framework Coverage",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "inherent_risk": {
+            "title": "Inherent Risk",
+            "type": "string"
+          },
+          "inherent_risk_rules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inherent Risk Rules",
+            "type": "array"
+          },
+          "overall_score": {
+            "title": "Overall Score",
+            "type": "number"
+          },
+          "release_recommendation": {
+            "$ref": "#/components/schemas/_ReleaseRecommendationOut"
+          },
+          "required_remediation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Remediation",
+            "type": "array"
+          },
+          "residual_risk": {
+            "$ref": "#/components/schemas/_ResidualRiskScoreOut"
+          }
+        },
+        "required": [
+          "ai_system_id",
+          "ai_system_name",
+          "generated_at",
+          "overall_score",
+          "inherent_risk",
+          "inherent_risk_rules",
+          "residual_risk",
+          "release_recommendation",
+          "control_evaluations",
+          "failed_controls",
+          "findings",
+          "required_remediation",
+          "framework_coverage",
+          "evidence_completeness"
+        ],
+        "title": "AssessmentReportResponse",
+        "type": "object"
+      },
       "AssessmentSummaryOut": {
         "additionalProperties": false,
         "properties": {
@@ -1318,6 +1414,32 @@
           "user"
         ],
         "title": "AuditRowOut",
+        "type": "object"
+      },
+      "AwsDemoFullResponse": {
+        "additionalProperties": true,
+        "description": "Full walkthrough payload.\n\nPermissive: top-level keys each hold entirely different nested structures\n(intake metadata, risk classification tables, mermaid diagrams, raw HTML,\netc.).  A closed schema would reject valid payload \u2014 extra=\"allow\" is the\ncorrect compound-27a choice for heterogeneous / asymmetric top-level dicts.",
+        "properties": {},
+        "title": "AwsDemoFullResponse",
+        "type": "object"
+      },
+      "AwsDemoStepResponse": {
+        "additionalProperties": true,
+        "description": "Single step slice of the walkthrough payload.\n\n``data`` is typed ``Any`` because each step key returns a completely\ndifferent structure (dict, list, str, int) \u2014 a union type would provide\nfalse precision on a truly open-ended shape.",
+        "properties": {
+          "data": {
+            "title": "Data"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "data"
+        ],
+        "title": "AwsDemoStepResponse",
         "type": "object"
       },
       "BatchHistoryOut": {
@@ -2358,6 +2480,20 @@
         "title": "DeleteDocumentResponse",
         "type": "object"
       },
+      "DemoResetResponse": {
+        "description": "Confirmation that the demo state was wiped.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DemoResetResponse",
+        "type": "object"
+      },
       "DemoRunResponse": {
         "additionalProperties": true,
         "description": "Response from demo run.\n\nPermissive: each run record contains nested eval_scores and guardrail\nresults whose key sets vary by model, domain, and guardrail pipeline\nversion. extra=\"allow\" lets those dynamic payloads flow through unchanged.",
@@ -2386,6 +2522,77 @@
           "runs"
         ],
         "title": "DemoRunResponse",
+        "type": "object"
+      },
+      "DemoStateResponse": {
+        "description": "Current demo walkthrough state.\n\nFixed 5-key shape: system identity plus step-completion tracking and\ncached assessment snapshots for v1 (pre-remediation) and v2 (post).",
+        "properties": {
+          "completed_steps": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Completed Steps",
+            "type": "array"
+          },
+          "system_id": {
+            "title": "System Id",
+            "type": "string"
+          },
+          "system_name": {
+            "title": "System Name",
+            "type": "string"
+          },
+          "v1_assessment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V1 Assessment"
+          },
+          "v2_assessment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V2 Assessment"
+          }
+        },
+        "required": [
+          "system_id",
+          "system_name",
+          "completed_steps"
+        ],
+        "title": "DemoStateResponse",
+        "type": "object"
+      },
+      "DemoStepResponse": {
+        "additionalProperties": true,
+        "description": "Response envelope for a single demo step execution.\n\nPermissive (extra=\"allow\"): each of the 13 steps returns a different\npayload shape beyond the common step/title keys \u2014 controls lists,\nassessment scores, connector run arrays, evidence attachments, finding\ntransition records, and before/after delta dicts. A closed schema would\neither reject valid step-specific keys or require every field to be\nOptional, making the contract meaningless. extra=\"allow\" is the correct\nchoice per the asymmetric/polymorphic exemption (compound 27a).",
+        "properties": {
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "title"
+        ],
+        "title": "DemoStepResponse",
         "type": "object"
       },
       "DomainConfig": {
@@ -7835,6 +8042,60 @@
         "title": "RotateKeyOut",
         "type": "object"
       },
+      "RunAcceptedResponse": {
+        "description": "Response for POST /api/demo-control/run/{scenario_id} (202 Accepted).\n\nTerminal result is available via status_url once the run completes.",
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_url": {
+            "title": "Status Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status_url",
+          "status"
+        ],
+        "title": "RunAcceptedResponse",
+        "type": "object"
+      },
+      "RunStatusResponse": {
+        "additionalProperties": true,
+        "description": "Response for GET /api/demo-control/run/{run_id}/status.\n\nPermissive (extra=\"allow\"): the ``result`` field carries whichever scenario\nhandler's payload was returned. Shapes differ across all 6 scenarios \u2014\nvault_stats dict, 14-day trend list, right-to-forget cascade model_dump,\nagent publish dict, PDF pack hash. A closed schema would reject valid\npayloads. Same bare-by-design rationale as DemoRunResponse (S38, compound\n27a).",
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "scenario_id",
+          "started_at",
+          "status"
+        ],
+        "title": "RunStatusResponse",
+        "type": "object"
+      },
       "RunSuiteRequest": {
         "description": "Body for POST /api/adversarial/run.",
         "properties": {
@@ -8097,6 +8358,23 @@
           "states"
         ],
         "title": "RuntimeStatesOut",
+        "type": "object"
+      },
+      "ScenariosResponse": {
+        "description": "Response for GET /api/demo-control/scenarios.",
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/_ScenarioEntry"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarios"
+        ],
+        "title": "ScenariosResponse",
         "type": "object"
       },
       "SearchRequest": {
@@ -9011,6 +9289,320 @@
           "episode_id"
         ],
         "title": "WriteEpisodeResponse",
+        "type": "object"
+      },
+      "_ControlEvaluationOut": {
+        "properties": {
+          "blocking": {
+            "title": "Blocking",
+            "type": "boolean"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "failed_evals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Evals",
+            "type": "array"
+          },
+          "missing_evidence_types": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Evidence Types",
+            "type": "array"
+          },
+          "open_finding_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Finding Ids",
+            "type": "array"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "related_runtime_events": {
+            "default": 0,
+            "title": "Related Runtime Events",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "domain",
+          "priority",
+          "status",
+          "blocking",
+          "rationale"
+        ],
+        "title": "_ControlEvaluationOut",
+        "type": "object"
+      },
+      "_FrameworkCoverageOut": {
+        "properties": {
+          "controls_applicable": {
+            "title": "Controls Applicable",
+            "type": "integer"
+          },
+          "controls_failing": {
+            "title": "Controls Failing",
+            "type": "integer"
+          },
+          "controls_passing": {
+            "title": "Controls Passing",
+            "type": "integer"
+          },
+          "coverage_pct": {
+            "title": "Coverage Pct",
+            "type": "number"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "framework_refs": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Framework Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "framework",
+          "controls_applicable",
+          "controls_passing",
+          "controls_failing",
+          "coverage_pct"
+        ],
+        "title": "_FrameworkCoverageOut",
+        "type": "object"
+      },
+      "_GeneratedFindingOut": {
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "framework_mappings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Framework Mappings",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "release_impact": {
+            "title": "Release Impact",
+            "type": "string"
+          },
+          "remediation": {
+            "title": "Remediation",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ai_system_id",
+          "control_id",
+          "title",
+          "description",
+          "severity",
+          "framework_mappings",
+          "owner",
+          "release_impact",
+          "remediation"
+        ],
+        "title": "_GeneratedFindingOut",
+        "type": "object"
+      },
+      "_ReleaseRecommendationOut": {
+        "properties": {
+          "conditions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "rule_fired": {
+            "title": "Rule Fired",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "rule_fired",
+          "rationale"
+        ],
+        "title": "_ReleaseRecommendationOut",
+        "type": "object"
+      },
+      "_ResidualRiskScoreOut": {
+        "properties": {
+          "explanation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Explanation",
+            "type": "array"
+          },
+          "factors": {
+            "$ref": "#/components/schemas/_RiskFactorsOut"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "normalized_score": {
+            "title": "Normalized Score",
+            "type": "number"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "factors",
+          "raw_score",
+          "normalized_score",
+          "level",
+          "explanation"
+        ],
+        "title": "_ResidualRiskScoreOut",
+        "type": "object"
+      },
+      "_RiskFactorsOut": {
+        "properties": {
+          "autonomy": {
+            "title": "Autonomy",
+            "type": "number"
+          },
+          "control_gap_modifier": {
+            "title": "Control Gap Modifier",
+            "type": "number"
+          },
+          "data_sensitivity": {
+            "title": "Data Sensitivity",
+            "type": "number"
+          },
+          "exposure": {
+            "title": "Exposure",
+            "type": "number"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "number"
+          },
+          "likelihood": {
+            "title": "Likelihood",
+            "type": "number"
+          }
+        },
+        "required": [
+          "likelihood",
+          "impact",
+          "exposure",
+          "autonomy",
+          "data_sensitivity",
+          "control_gap_modifier"
+        ],
+        "title": "_RiskFactorsOut",
+        "type": "object"
+      },
+      "_ScenarioEntry": {
+        "description": "A single scenario summary returned by the list endpoint.",
+        "properties": {
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          },
+          "expected_duration_sec": {
+            "title": "Expected Duration Sec",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "narration_url": {
+            "title": "Narration Url",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "brief",
+          "expected_duration_sec",
+          "narration_url"
+        ],
+        "title": "_ScenarioEntry",
         "type": "object"
       },
       "api__findings_v2__FindingsListOut": {
@@ -10975,15 +11567,14 @@
     },
     "/api/aws-demo": {
       "get": {
-        "operationId": "get_full_api_aws_demo_get",
+        "description": "Return the full deterministic AWS Analyzer demo payload.",
+        "operationId": "aws_demo_get_full",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Full Api Aws Demo Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AwsDemoFullResponse"
                 }
               }
             },
@@ -10998,7 +11589,8 @@
     },
     "/api/aws-demo/document": {
       "get": {
-        "operationId": "get_final_document_api_aws_demo_document_get",
+        "description": "Return the final assembled document as rendered HTML.",
+        "operationId": "aws_demo_get_document",
         "responses": {
           "200": {
             "content": {
@@ -11019,7 +11611,8 @@
     },
     "/api/aws-demo/step/{step_key}": {
       "get": {
-        "operationId": "get_step_api_aws_demo_step__step_key__get",
+        "description": "Return a single step slice of the demo payload by key.",
+        "operationId": "aws_demo_get_step",
         "parameters": [
           {
             "in": "path",
@@ -11036,9 +11629,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Step Api Aws Demo Step  Step Key  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AwsDemoStepResponse"
                 }
               }
             },
@@ -11195,7 +11786,7 @@
     "/api/demo-control/run/{run_id}/status": {
       "get": {
         "description": "Return the current state of a previously-triggered run.",
-        "operationId": "run_status_api_demo_control_run__run_id__status_get",
+        "operationId": "demo_control_get_run_status",
         "parameters": [
           {
             "in": "path",
@@ -11212,9 +11803,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Status Api Demo Control Run  Run Id  Status Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RunStatusResponse"
                 }
               }
             },
@@ -11240,7 +11829,7 @@
     "/api/demo-control/run/{scenario_id}": {
       "post": {
         "description": "Execute a demo scenario by id. Returns 202 with run_id and status_url.\n\nExecution is synchronous (scenarios are <5s); the 202 acknowledges the\nintent and the same response carries terminal state via status_url.",
-        "operationId": "run_scenario_api_demo_control_run__scenario_id__post",
+        "operationId": "demo_control_post_run",
         "parameters": [
           {
             "in": "path",
@@ -11257,9 +11846,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Scenario Api Demo Control Run  Scenario Id  Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RunAcceptedResponse"
                 }
               }
             },
@@ -11285,15 +11872,13 @@
     "/api/demo-control/scenarios": {
       "get": {
         "description": "Return the list of available demo scenarios (without handlers).",
-        "operationId": "list_scenarios_api_demo_control_scenarios_get",
+        "operationId": "demo_control_get_scenarios",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Scenarios Api Demo Control Scenarios Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ScenariosResponse"
                 }
               }
             },
@@ -11309,15 +11894,13 @@
     "/api/demo/reset": {
       "post": {
         "description": "Wipe demo overlay state + filter demo events from the findings log.",
-        "operationId": "reset_api_demo_reset_post",
+        "operationId": "demo_post_reset",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Reset Api Demo Reset Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DemoResetResponse"
                 }
               }
             },
@@ -11375,15 +11958,13 @@
     },
     "/api/demo/state": {
       "get": {
-        "operationId": "get_state_api_demo_state_get",
+        "operationId": "demo_get_state",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get State Api Demo State Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DemoStateResponse"
                 }
               }
             },
@@ -11399,7 +11980,7 @@
     "/api/demo/step/{n}": {
       "post": {
         "description": "Execute step n. Idempotent except where noted.",
-        "operationId": "execute_step_api_demo_step__n__post",
+        "operationId": "demo_post_step",
         "parameters": [
           {
             "in": "path",
@@ -11416,9 +11997,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Execute Step Api Demo Step  N  Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DemoStepResponse"
                 }
               }
             },
@@ -12073,7 +12652,7 @@
     "/api/grc/assessment/run/{ai_system_id}": {
       "post": {
         "description": "Run a full assessment against an AI system and return the report.",
-        "operationId": "run_api_grc_assessment_run__ai_system_id__post",
+        "operationId": "assessment_run_post",
         "parameters": [
           {
             "in": "path",
@@ -12090,9 +12669,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Api Grc Assessment Run  Ai System Id  Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AssessmentReportResponse"
                 }
               }
             },
@@ -12118,7 +12695,7 @@
     "/api/grc/assessment/{ai_system_id}": {
       "get": {
         "description": "Convenience GET \u2014 same as POST /run.",
-        "operationId": "get_api_grc_assessment__ai_system_id__get",
+        "operationId": "assessment_get",
         "parameters": [
           {
             "in": "path",
@@ -12135,9 +12712,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Api Grc Assessment  Ai System Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AssessmentReportResponse"
                 }
               }
             },

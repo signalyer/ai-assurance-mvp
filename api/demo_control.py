@@ -26,6 +26,20 @@ Environment variables
 ``AUTH_ENABLED``  — see ``middleware.auth``.
 ``DEMO_SEED_SYSTEM_ID``  — system id used by scenarios that need one
     (defaults to ``"ai-sys-001"``).
+
+OpenAPI operation names (Session 39 Track A sweep)
+---------------------------------------------------
+* ``demo_control_get_scenarios`` — GET /api/demo-control/scenarios
+  Response model: ScenariosResponse (strict — 5 fixed keys per scenario entry).
+* ``demo_control_post_run`` — POST /api/demo-control/run/{scenario_id}
+  Response model: RunAcceptedResponse (strict — run_id, status_url, status).
+* ``demo_control_get_run_status`` — GET /api/demo-control/run/{run_id}/status
+  Response model: RunStatusResponse (permissive, extra="allow") — the ``result``
+  field carries whichever scenario handler's payload was returned; shapes vary
+  across all 6 scenarios (vault_stats dict, trend list, cascade model_dump,
+  agent publish dict, PDF hash dict). A closed schema would reject valid
+  payloads. Same bare-by-design rationale as DemoRunResponse (S38) and
+  AnalyticsResponse (S27, compound 27a).
 """
 
 from __future__ import annotations
@@ -425,34 +439,94 @@ _SCENARIO_REGISTRY: dict[str, _Scenario] = {
 
 
 # ---------------------------------------------------------------------------
+# Response models
+# ---------------------------------------------------------------------------
+
+
+class _ScenarioEntry(BaseModel):
+    """A single scenario summary returned by the list endpoint."""
+
+    id: str
+    title: str
+    brief: str
+    expected_duration_sec: int
+    narration_url: str
+
+
+class ScenariosResponse(BaseModel):
+    """Response for GET /api/demo-control/scenarios."""
+
+    scenarios: list[_ScenarioEntry]
+
+
+class RunAcceptedResponse(BaseModel):
+    """Response for POST /api/demo-control/run/{scenario_id} (202 Accepted).
+
+    Terminal result is available via status_url once the run completes.
+    """
+
+    run_id: str
+    status_url: str
+    status: str
+
+
+class RunStatusResponse(BaseModel):
+    """Response for GET /api/demo-control/run/{run_id}/status.
+
+    Permissive (extra="allow"): the ``result`` field carries whichever scenario
+    handler's payload was returned. Shapes differ across all 6 scenarios —
+    vault_stats dict, 14-day trend list, right-to-forget cascade model_dump,
+    agent publish dict, PDF pack hash. A closed schema would reject valid
+    payloads. Same bare-by-design rationale as DemoRunResponse (S38, compound
+    27a).
+    """
+
+    run_id: str
+    scenario_id: str
+    started_at: str
+    status: str
+
+    model_config = ConfigDict(extra="allow")
+
+
+# ---------------------------------------------------------------------------
 # API surface
 # ---------------------------------------------------------------------------
 
 
-@router.get("/scenarios")
+@router.get(
+    "/scenarios",
+    response_model=ScenariosResponse,
+    operation_id="demo_control_get_scenarios",
+)
 async def list_scenarios(
     _role: None = Depends(require_role("demo-operator", "ciso")),
-) -> dict[str, Any]:
+) -> ScenariosResponse:
     """Return the list of available demo scenarios (without handlers)."""
-    return {
-        "scenarios": [
-            {
-                "id": s.id,
-                "title": s.title,
-                "brief": s.brief,
-                "expected_duration_sec": s.expected_duration_sec,
-                "narration_url": s.narration_url,
-            }
+    return ScenariosResponse(
+        scenarios=[
+            _ScenarioEntry(
+                id=s.id,
+                title=s.title,
+                brief=s.brief,
+                expected_duration_sec=s.expected_duration_sec,
+                narration_url=s.narration_url,
+            )
             for s in _SCENARIO_REGISTRY.values()
         ]
-    }
+    )
 
 
-@router.post("/run/{scenario_id}", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/run/{scenario_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=RunAcceptedResponse,
+    operation_id="demo_control_post_run",
+)
 async def run_scenario(
     scenario_id: str,
     _role: None = Depends(require_role("demo-operator", "ciso")),
-) -> dict[str, Any]:
+) -> RunAcceptedResponse:
     """Execute a demo scenario by id. Returns 202 with run_id and status_url.
 
     Execution is synchronous (scenarios are <5s); the 202 acknowledges the
@@ -521,19 +595,23 @@ async def run_scenario(
         )
         _record_metric(scenario_id, outcome, duration)
 
-    return {
-        "run_id": run_id,
-        "status_url": f"/api/demo-control/run/{run_id}/status",
-        "status": _RUNS[run_id]["status"],
-    }
+    return RunAcceptedResponse(
+        run_id=run_id,
+        status_url=f"/api/demo-control/run/{run_id}/status",
+        status=_RUNS[run_id]["status"],
+    )
 
 
-@router.get("/run/{run_id}/status")
+@router.get(
+    "/run/{run_id}/status",
+    response_model=RunStatusResponse,
+    operation_id="demo_control_get_run_status",
+)
 async def run_status(
     run_id: str,
     _role: None = Depends(require_role("demo-operator", "ciso")),
-) -> dict[str, Any]:
+) -> RunStatusResponse:
     """Return the current state of a previously-triggered run."""
     if run_id not in _RUNS:
         raise HTTPException(status_code=404, detail=f"unknown run_id: {run_id}")
-    return _RUNS[run_id]
+    return RunStatusResponse(**_RUNS[run_id])
