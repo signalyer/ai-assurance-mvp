@@ -2427,6 +2427,118 @@
         "title": "ContextResponse",
         "type": "object"
       },
+      "ControlDetailOut": {
+        "additionalProperties": false,
+        "description": "Full control payload for /controls/{control_id}.",
+        "properties": {
+          "automated": {
+            "title": "Automated",
+            "type": "boolean"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "evidence_required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Required",
+            "type": "array"
+          },
+          "failure_impact": {
+            "title": "Failure Impact",
+            "type": "string"
+          },
+          "framework_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/api__guide__FrameworkMappingOut"
+            },
+            "title": "Framework Mappings",
+            "type": "array"
+          },
+          "gate_expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate Expression"
+          },
+          "pass_criteria": {
+            "title": "Pass Criteria",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "recommended_owner": {
+            "title": "Recommended Owner",
+            "type": "string"
+          },
+          "requirement": {
+            "title": "Requirement",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "domain",
+          "priority",
+          "requirement",
+          "pass_criteria",
+          "failure_impact",
+          "recommended_owner",
+          "evidence_required",
+          "framework_mappings",
+          "automated"
+        ],
+        "title": "ControlDetailOut",
+        "type": "object"
+      },
+      "ControlIndexRow": {
+        "additionalProperties": false,
+        "description": "Lightweight control summary for /controls listing.",
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "domain",
+          "priority"
+        ],
+        "title": "ControlIndexRow",
+        "type": "object"
+      },
       "ControlMappingOut": {
         "additionalProperties": false,
         "properties": {
@@ -2498,6 +2610,23 @@
           "required"
         ],
         "title": "ControlsBreakdownOut",
+        "type": "object"
+      },
+      "ControlsListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "controls": {
+            "items": {
+              "$ref": "#/components/schemas/ControlIndexRow"
+            },
+            "title": "Controls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "controls"
+        ],
+        "title": "ControlsListOut",
         "type": "object"
       },
       "CreateAgentRequest": {
@@ -4555,7 +4684,7 @@
           },
           "framework_mappings": {
             "items": {
-              "$ref": "#/components/schemas/FrameworkMappingOut"
+              "$ref": "#/components/schemas/api__findings_v2__FrameworkMappingOut"
             },
             "title": "Framework Mappings",
             "type": "array"
@@ -4676,6 +4805,87 @@
         "title": "FindingV2Out",
         "type": "object"
       },
+      "FrameworkIndexRow": {
+        "additionalProperties": false,
+        "description": "Lightweight framework-item summary for /frameworks listing.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "framework",
+          "display_name",
+          "snippet"
+        ],
+        "title": "FrameworkIndexRow",
+        "type": "object"
+      },
+      "FrameworkItemDetailOut": {
+        "additionalProperties": false,
+        "description": "Full framework-item payload for /framework-item.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "exact_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exact Clauses",
+            "type": "array"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "prefix_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prefix Clauses",
+            "type": "array"
+          },
+          "recommended_owner": {
+            "title": "Recommended Owner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "framework",
+          "display_name",
+          "description",
+          "exact_clauses",
+          "prefix_clauses",
+          "recommended_owner"
+        ],
+        "title": "FrameworkItemDetailOut",
+        "type": "object"
+      },
       "FrameworkItemOut": {
         "additionalProperties": false,
         "description": "One catalog item. Mirrors domain.framework_coverage.FrameworkItem.",
@@ -4725,25 +4935,6 @@
         "title": "FrameworkItemOut",
         "type": "object"
       },
-      "FrameworkMappingOut": {
-        "additionalProperties": false,
-        "properties": {
-          "clause": {
-            "title": "Clause",
-            "type": "string"
-          },
-          "framework": {
-            "title": "Framework",
-            "type": "string"
-          }
-        },
-        "required": [
-          "framework",
-          "clause"
-        ],
-        "title": "FrameworkMappingOut",
-        "type": "object"
-      },
       "FrameworkOverviewOut": {
         "additionalProperties": false,
         "properties": {
@@ -4788,6 +4979,23 @@
           "clause"
         ],
         "title": "FrameworkRefOut",
+        "type": "object"
+      },
+      "FrameworksListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FrameworkIndexRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FrameworksListOut",
         "type": "object"
       },
       "GateCatalogOut": {
@@ -5290,6 +5498,55 @@
           "rules"
         ],
         "title": "GateRulesOut",
+        "type": "object"
+      },
+      "GlossaryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/GlossaryTermOut"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "terms"
+        ],
+        "title": "GlossaryOut",
+        "type": "object"
+      },
+      "GlossaryTermOut": {
+        "additionalProperties": false,
+        "description": "Mirrors domain.governance_guide.GlossaryTerm.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "definition": {
+            "title": "Definition",
+            "type": "string"
+          },
+          "see_also": {
+            "items": {
+              "type": "string"
+            },
+            "title": "See Also",
+            "type": "array"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "category",
+          "definition"
+        ],
+        "title": "GlossaryTermOut",
         "type": "object"
       },
       "GovernanceMetadata": {
@@ -7210,6 +7467,83 @@
         "title": "OwaspListOut",
         "type": "object"
       },
+      "PageGuideOut": {
+        "additionalProperties": false,
+        "description": "Per-page contextual guide. Mirrors domain.governance_guide.PageGuide.",
+        "properties": {
+          "blocks_production": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocks Production",
+            "type": "array"
+          },
+          "frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Frameworks",
+            "type": "array"
+          },
+          "next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "string"
+          },
+          "primary_question": {
+            "title": "Primary Question",
+            "type": "string"
+          },
+          "recommended_remediation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Remediation",
+            "type": "array"
+          },
+          "required_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Evidence",
+            "type": "array"
+          },
+          "see_also": {
+            "items": {
+              "$ref": "#/components/schemas/SeeAlsoLink"
+            },
+            "title": "See Also",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "what_it_means": {
+            "title": "What It Means",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page",
+          "title",
+          "primary_question",
+          "what_it_means",
+          "frameworks",
+          "next_actions",
+          "blocks_production",
+          "required_evidence",
+          "recommended_remediation"
+        ],
+        "title": "PageGuideOut",
+        "type": "object"
+      },
       "PoliciesOut": {
         "additionalProperties": false,
         "properties": {
@@ -8591,6 +8925,98 @@
         "title": "ScenariosResponse",
         "type": "object"
       },
+      "SearchControlHit": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "title",
+          "priority",
+          "domain"
+        ],
+        "title": "SearchControlHit",
+        "type": "object"
+      },
+      "SearchFrameworkHit": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "framework",
+          "display_name",
+          "snippet"
+        ],
+        "title": "SearchFrameworkHit",
+        "type": "object"
+      },
+      "SearchOut": {
+        "additionalProperties": false,
+        "description": "Aggregate search response.",
+        "properties": {
+          "controls": {
+            "items": {
+              "$ref": "#/components/schemas/SearchControlHit"
+            },
+            "title": "Controls",
+            "type": "array"
+          },
+          "framework_items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchFrameworkHit"
+            },
+            "title": "Framework Items",
+            "type": "array"
+          },
+          "glossary": {
+            "items": {
+              "$ref": "#/components/schemas/GlossaryTermOut"
+            },
+            "title": "Glossary",
+            "type": "array"
+          }
+        },
+        "required": [
+          "glossary",
+          "controls",
+          "framework_items"
+        ],
+        "title": "SearchOut",
+        "type": "object"
+      },
       "SearchRequest": {
         "description": "Body for POST /api/rag/search.",
         "properties": {
@@ -8790,6 +9216,25 @@
           "sections"
         ],
         "title": "SectionsResponse",
+        "type": "object"
+      },
+      "SeeAlsoLink": {
+        "additionalProperties": false,
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ],
+        "title": "SeeAlsoLink",
         "type": "object"
       },
       "SimulatedRunOut": {
@@ -9294,6 +9739,32 @@
           "series"
         ],
         "title": "ThreatSeriesOut",
+        "type": "object"
+      },
+      "TipOut": {
+        "additionalProperties": true,
+        "description": "Single tip detail. Polymorphic inner shape \u2014 extra=allow per 27a sub-rule.",
+        "properties": {},
+        "title": "TipOut",
+        "type": "object"
+      },
+      "TipsRegistryOut": {
+        "additionalProperties": false,
+        "description": "Tip registry envelope.\n\n`tips` is a registry dict keyed by tip_id. Inner shape varies per tip\ntype (text vs. action vs. linked-control) and is consumed as a map by\nstatic/shared.js (line 698), so the inner value is left as `dict[str, Any]`\nrather than a strict model. Outer envelope stays strict.",
+        "properties": {
+          "tips": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tips",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tips"
+        ],
+        "title": "TipsRegistryOut",
         "type": "object"
       },
       "ToggleProviderOut": {
@@ -9943,6 +10414,25 @@
         "title": "FindingsListOut",
         "type": "object"
       },
+      "api__findings_v2__FrameworkMappingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clause": {
+            "title": "Clause",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework",
+          "clause"
+        ],
+        "title": "FrameworkMappingOut",
+        "type": "object"
+      },
       "api__framework__ControlRollupOut": {
         "additionalProperties": false,
         "description": "Per-control rollup. Mirrors domain.framework_coverage.ControlRollup.",
@@ -10478,6 +10968,30 @@
           "events"
         ],
         "title": "RuntimeEventsOut",
+        "type": "object"
+      },
+      "api__guide__FrameworkMappingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "clause": {
+            "title": "Clause",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework",
+          "clause",
+          "rationale"
+        ],
+        "title": "FrameworkMappingOut",
         "type": "object"
       },
       "api__runtime_v2__RuntimeEventOut": {
@@ -15821,15 +16335,14 @@
     },
     "/api/guide/controls": {
       "get": {
-        "operationId": "list_controls_api_guide_controls_get",
+        "description": "Return the control index (lightweight rows).",
+        "operationId": "guide_list_controls",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Controls Api Guide Controls Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ControlsListOut"
                 }
               }
             },
@@ -15844,7 +16357,8 @@
     },
     "/api/guide/controls/{control_id}": {
       "get": {
-        "operationId": "get_control_api_guide_controls__control_id__get",
+        "description": "Return full detail for a single control.",
+        "operationId": "guide_get_control",
         "parameters": [
           {
             "in": "path",
@@ -15861,9 +16375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Control Api Guide Controls  Control Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ControlDetailOut"
                 }
               }
             },
@@ -15888,7 +16400,8 @@
     },
     "/api/guide/framework-item": {
       "get": {
-        "operationId": "get_framework_item_api_guide_framework_item_get",
+        "description": "Return full detail for a framework item by clause or slug.",
+        "operationId": "guide_get_framework_item",
         "parameters": [
           {
             "description": "Clause (LLM01) or id (llm01)",
@@ -15907,9 +16420,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Framework Item Api Guide Framework Item Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FrameworkItemDetailOut"
                 }
               }
             },
@@ -15934,15 +16445,14 @@
     },
     "/api/guide/frameworks": {
       "get": {
-        "operationId": "list_framework_items_api_guide_frameworks_get",
+        "description": "Return the framework-item index (lightweight rows).",
+        "operationId": "guide_list_frameworks",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Framework Items Api Guide Frameworks Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FrameworksListOut"
                 }
               }
             },
@@ -15957,15 +16467,14 @@
     },
     "/api/guide/glossary": {
       "get": {
-        "operationId": "get_glossary_api_guide_glossary_get",
+        "description": "Return the full glossary.",
+        "operationId": "guide_get_glossary",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Glossary Api Guide Glossary Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GlossaryOut"
                 }
               }
             },
@@ -15980,7 +16489,8 @@
     },
     "/api/guide/page": {
       "get": {
-        "operationId": "get_page_guide_api_guide_page_get",
+        "description": "Return the contextual guide for a page path; falls back to overview.",
+        "operationId": "guide_get_page",
         "parameters": [
           {
             "description": "Page path, e.g. /findings",
@@ -15999,9 +16509,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Page Guide Api Guide Page Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PageGuideOut"
                 }
               }
             },
@@ -16026,7 +16534,8 @@
     },
     "/api/guide/search": {
       "get": {
-        "operationId": "guide_search_api_guide_search_get",
+        "description": "Search across glossary, controls, and framework items.",
+        "operationId": "guide_search",
         "parameters": [
           {
             "in": "query",
@@ -16044,9 +16553,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Guide Search Api Guide Search Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SearchOut"
                 }
               }
             },
@@ -16071,15 +16578,14 @@
     },
     "/api/guide/tips": {
       "get": {
-        "operationId": "get_tips_api_guide_tips_get",
+        "description": "Return the full tip registry as a map keyed by tip_id.",
+        "operationId": "guide_list_tips",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tips Api Guide Tips Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TipsRegistryOut"
                 }
               }
             },
@@ -16094,7 +16600,8 @@
     },
     "/api/guide/tips/{tip_id}": {
       "get": {
-        "operationId": "get_tip_api_guide_tips__tip_id__get",
+        "description": "Return a single tip by id.",
+        "operationId": "guide_get_tip",
         "parameters": [
           {
             "in": "path",
@@ -16111,9 +16618,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tip Api Guide Tips  Tip Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TipOut"
                 }
               }
             },
