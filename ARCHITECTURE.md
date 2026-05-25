@@ -1222,6 +1222,25 @@ ADR-001 accepted this session. Six-step plan per ADR §7: Dockerfile + sidecar s
 ### ~~Session 24b — DNS + custom domain (V2 Phase 1 item A4)~~ ✓ Session 25
 Closed in Session 25: `api.aigovern.sandboxhub.co` was already bound with SNI SSL active when discovery ran. Only the `SESSION_COOKIE_DOMAIN` env-var flip was needed to fully activate the parent-domain cookie path. Final manual step pending: one real-login DevTools verification of cookie `Domain` attribute.
 
+### Session 40 (Track A Tier 3 sweep api/framework.py + RTF reject + CSM-2 parallel)
+Two-track parallel push. Track A landed at [`8e2eb3f`](https://github.com/signalyer/ai-assurance-mvp/commit/8e2eb3f); CSM-2 (Track B) landed at [`e40fccd`](https://github.com/signalyer/ai-assurance-mvp/commit/e40fccd).
+
+**Track A — A1 OpenAPI sweep 33/40 → 34/40 (85%) + RTF reject endpoint:**
+- [api/right_to_forget.py](api/right_to_forget.py): NEW `POST /{cascade_id}/reject` (op_id `right_to_forget_reject`) mirroring `approve_cascade` shape — lookup → audit `RTF_REJECTED` with operator reason → return `CascadeResultOut`. `RejectCascadeIn` body is strict (`extra="forbid"`), reason 1-1024 chars. Auto-approved-stub workflow stays as-is (cascade runs sync inline at initiate per S08 §7.1); reject is audit-trail-only in MVP. Closes the CSM-1 carry-over 404 banner.
+- [api/framework.py](api/framework.py): Tier 3 sweep. All 3 endpoints (`/catalog`, `/overview`, `/{item_id}`) now return strict Pydantic v2 response models (`FrameworkItemOut`, `ControlRollupOut`, `FindingSummaryOut`, `ItemCoverageOut`, `CatalogOut`, `OverviewOut`) mirroring the underlying dataclasses; all `extra="forbid"` per 27a. Operation_ids prefixed `framework_*` to avoid collision with `frameworks_*` from api/frameworks.py (S32). Consumer-coupling grep (38a): only `/overview` hits SPAs (governance.html line 112, security.html line 110); `/catalog` + `/{item_id}` are zero-consumer but typed uniformly.
+- `docs/openapi-v1.json` regenerated ONCE via `scripts/export_openapi.py` per 24d.
+
+**Track B — A5 CISO Console 3/10 → 6/10 (60%):**
+- [ciso-console/src/pages/portfolio/](ciso-console/src/pages/portfolio/) — KPI strip + risk distribution 4-grid + top-10 by findings, drill link to /findings?system_id=. Pure read on GET /api/grc/ai-systems.
+- [ciso-console/src/pages/release-gates/](ciso-console/src/pages/release-gates/) — per-system expandable rollups + inline gate table; CISO "Create Exception" on FAILED blocking gates → POST /v2/system/{id}/exception (button label matches endpoint; engine has no /override).
+- [ciso-console/src/pages/frameworks/](ciso-console/src/pages/frameworks/) — matrix grid (systems × frameworks) with color-coded coverage cells, click-cell drill modal, per-framework PDF export. Consumes api/frameworks.py (plural, S32) — orthogonal to this session's api/framework.py (singular) Track A sweep.
+- Build: tsc --noEmit PASS; vite build PASS (index 45.84 kB / 11.98 kB gzip).
+- Spawned via parallel implementer subagent (run_in_background, worktree); isolation didn't take (agent wrote to main tree) — accepted per spawn-prompt fallback because net-new files in `ciso-console/src/pages/` had zero collision risk.
+
+**Compound 28a observation #7:** CSM-1 commit `b7c2a3c` (pure ciso-console scaffold, zero engine code) fired `deploy` wastefully because `paths-ignore` doesn't cover SPA dirs. Tally **3/7** — below 3/5 decision gate; observation continues, workflow unchanged. When the gate hits, fix is likely additive (`team-portal/**`, `ciso-console/**` to `paths-ignore`) but must verify `deploy/build-zip.py` whitelist first per S19c.
+
+**Remaining V2 critical path:** A1 Tier 3 = usage.py (S41) + guide.py (S42). A5 CISO Console = 4 more surfaces (Evidence, Analytics, Policies, Reports + RTF deep view across S41-S42). A6/A7 role-aware redirect + cutover (S43+).
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
