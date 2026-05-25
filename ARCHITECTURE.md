@@ -1448,6 +1448,45 @@ Next reading due: 2026-05-26 UTC.
 
 **Trajectory:** V2 stable, A15 closed, V1 deprecation clock running. S47 STEP 1 fully validated by canary. **S47 STEP 2 closed: cadence = manual operator check, tracking table live above.** Remaining S47 housekeeping (still open, non-blocking): (2) `parameters.dev.json` exhaustive vs minimal, (3) Garak ADR-001 — accept 2-session implementation or close as out-of-scope via ADR amendment.
 
+### Session 47 — Production SPA outage hotfix + auth unblock (in-session pivot)
+
+S47 started as housekeeping (V1 deprecation watch cadence — completed) but pivoted mid-session when the user reported "404s on many pages" then "401s after the 404 fix." Three production incidents diagnosed and fixed in one session. Two compound rules learned.
+
+**Symptom timeline:**
+1. **404 on every SPA subroute** — discovered both Vite SPAs were missing `staticwebapp.config.json` entirely. Azure SWA served `/` but had no `navigationFallback` for client-side routes, so `/findings`, `/ai-systems`, etc. all returned 404. Bug had been live since the SPAs first shipped (S14+); smoke tests at the time only probed `/`, never subroutes — gap that hid this since Day 1 of V2.
+2. **After 404 fix → "many features broken"** — page loads succeeded but no data rendered. Root cause was *two* problems compounding: (a) `VITE_API_BASE_URL` was never set at production build time, so the bundled SPAs called same-origin `/api/v1/*` which the SWA fallback caught and served `index.html` (HTTP 200 + HTML body → silent JSON-parse failure in browser); (b) the SPA `client.ts` used `credentials: 'same-origin'`, which omits cookies on cross-origin fetch even when parent-domain cookies would otherwise apply; (c) engine `CORSMiddleware` was added FIRST (innermost) so OPTIONS preflight hit `SessionAuthMiddleware` and returned 401 before CORS could answer; (d) engine `allow_origins` was localhost-only.
+3. **After cross-origin fix → 401 on /api/v1/grc/ai-systems** — engine working as designed: SPA fetch reached engine, browser sent no `aigovern_session` cookie (user hadn't logged in to engine), engine returned 401. Engine auth is **demo-role username/password** (`POST /api/auth/login` form-encoded), not Entra. No Entra integration with engine exists today — that's a future workstream, not a regression.
+
+**Fixes shipped (three commits to main, all production-live):**
+
+- [`1d95422`](https://github.com/signalyer/ai-assurance-mvp/commit/1d95422) — `Fix: SPA fallback for portal + gov (404 on every subroute)`. Added [team-portal/public/staticwebapp.config.json](team-portal/public/staticwebapp.config.json) + [ciso-console/public/staticwebapp.config.json](ciso-console/public/staticwebapp.config.json) with `navigationFallback.rewrite=/index.html` and exclude list for built assets. Vite copies `public/*` to `dist/` at build time, so the config ships with every future build.
+- [`d6f9a8d`](https://github.com/signalyer/ai-assurance-mvp/commit/d6f9a8d) — `Fix: CORS middleware order + allow portal.* and gov.* origins`. Moved `CORSMiddleware` from innermost to **outermost** in [dashboard.py](dashboard.py:227-269) (added LAST per Starlette ordering). Expanded `allow_origins` to portal.* + gov.* + localhost dev variants; configurable via `CORS_ALLOWED_ORIGINS` env (comma-separated). `allow_credentials=True` required listing explicit origins (wildcard forbidden by spec). Cookies remain `SameSite=Lax` — portal.* and gov.* are same-site as aigovern.* (registrable domain `sandboxhub.co`), so Lax flows on cross-origin fetch. Validated: preflight from portal.* and gov.* → 200 with proper headers; bad origin → 400 with no `Allow-Origin`.
+- [`02f9f95`](https://github.com/signalyer/ai-assurance-mvp/commit/02f9f95) — `Fix: SPA cross-origin API config (VITE_API_BASE_URL + credentials)`. New [team-portal/.env.production](team-portal/.env.production) + [ciso-console/.env.production](ciso-console/.env.production) (public values only, no secrets) — `VITE_API_BASE_URL=https://aigovern.sandboxhub.co/api/v1`. Both SPAs' `src/shared/api/client.ts` switched `credentials: 'same-origin'` → `'include'`. SPAs rebuilt + redeployed via `swa deploy` (manual; SWA deploys are out of band from the engine slot-swap CI).
+
+**Auth unblock (operator action, not a code change):** new bcrypt hashes pushed via `az webapp config appsettings set` for `DEMO_USER_CISO_HASH` and `DEMO_USER_ENGINEER_HASH`. Verified end-to-end: login at `https://aigovern.sandboxhub.co/login` → cookie issued with `Domain=.aigovern.sandboxhub.co` → cross-subdomain fetch from portal.* returns 200. User confirmed: logged in as `demo-engineer`, AI systems list rendered.
+
+**One mid-session production mistake (caught + reverted in ~30s):** during the first 404-fix deploy round, the second `swa deploy ./dist` reused a persisted `cd team-portal` from earlier in the same bash session — briefly deployed the team-portal build to the gov SWA. Detected via title check (`<title>AI Assurance — Team Workspace</title>` on gov.*), redeployed `ciso-console/dist` to gov correctly. Saved as feedback memory [[bash-cwd-persistence]]. All subsequent deploys used absolute paths.
+
+**Live state at S47 close:**
+- Production sha: `d6f9a8d` (engine; S46 canary `11e7f29` → S47 hotfix `d6f9a8d` via slot-swap CI in 6m12s)
+- portal SPA bundle (live): contains `https://aigovern.sandboxhub.co/api/v1`
+- gov SPA bundle (live): contains `https://aigovern.sandboxhub.co/api/v1`
+- Engine CORS: allow-origins = portal.* + gov.* + localhost dev variants, `allow_credentials=True`, OPTIONS preflight handled outermost-of-stack
+- Cookie domain: `.aigovern.sandboxhub.co` (set since S25 / A3)
+- Engine `AUTH_ENABLED=true` with demo-role username/password (7 roles: CRO/CISO/AUDIT/MRM/AIGOV/OPERATOR/ENGINEER)
+- All 23 SPA routes return 200 over HTTP (Tier 1+2 sweep)
+- `demo-engineer` walked successfully through portal `/ai-systems`; remaining surfaces not yet walked
+
+**Compound rules learned (S47):**
+1. **S47 #1 — SPA smoke tests must probe a subroute.** `smoke_portal.ps1` / `smoke_gov.ps1` only probed `/`, which hid the missing `staticwebapp.config.json` since Day 1 of V2. Any future SPA smoke must include at least one client-side subroute (e.g. `/findings` returning 200 + an HTML body that mentions the page chrome). Codified as Tier-5 follow-up; not yet implemented this session.
+2. **S47 #2 — Bash tool persists cwd across calls.** Multi-target deploys (multiple SWAs, multiple zips) must use absolute paths or re-`cd` explicitly per target. Saved as [[bash-cwd-persistence]] memory after the gov-served-portal mis-deploy.
+
+**Known still-broken at S47 close (deferred to S48):**
+- **`/ai-systems/new` route missing in team-portal SPA.** "Register System" button is `<a href="/ai-systems/new">`, but no wouter route is registered; SPA falls through to in-app catch-all. V1 had a 451-line 5-step intake wizard at this path (`static/ai-systems-new.html`) calling `POST /api/grc/intake/preview` + `POST /api/grc/intake/submit` — both intake APIs still live on the engine (verified anonymous 401 = working). Three options scoped, none implemented this session: (A) full Preact port of the 5-step wizard, (B) minimal modal stripped to 3 fields, (C) interim deep-link to V1 register page with V1-deletion-carve-out. User wants this addressed in a future session (likely S48).
+- **No regression smoke for subroute coverage.** Tier 5 follow-up; one ~30-line PowerShell extension to `smoke_portal.ps1` / `smoke_gov.ps1` adding one subroute probe each, plus one authenticated API probe (login → curl `/api/v1/grc/ai-systems` with cookie → expect 200). Prevents this exact regression class from recurring undetected.
+
+**Trajectory:** V2 LIVE and fully functional after `demo-engineer` and `demo-ciso` login. Register-new-system flow remains the one user-visible feature gap (interim workaround: log in to engine and use legacy `static/ai-systems-new.html` directly). Two compound rules added. S48 picks up: register page port (A/B/C decision), regression smoke, and the still-pending S47 housekeeping items (parameters.dev.json + Garak ADR-001).
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
