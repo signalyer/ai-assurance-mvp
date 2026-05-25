@@ -1429,7 +1429,24 @@ S46 closed all four planned steps in one session, including the optional A15 tra
 **V1 deprecation observation signal — live from 2026-05-25:**
 - `/api/health` exposes `v1_surface_hits_24h`. Header `X-V1-Surface-Deprecated: removal-date=2026-07-02` confirmed on `/findings`. Banner rendered (browser verified). Counter increments on V1 attempts including the auth-required 302 path (correct intent-to-use semantics). Deletion criterion: 7 consecutive days `< 5 hits/day`. Day 0 baseline reading: 1 (canary curl).
 
-**Trajectory:** V2 stable, A15 closed, V1 deprecation clock running. S47 STEP 1 fully validated by this commit. Remaining S47 work is non-blocking decision/housekeeping: (1) V1 deprecation watch cadence (manual / Azure Monitor / scheduled-tasks), (2) `parameters.dev.json` exhaustive vs minimal, (3) Garak ADR-001 — accept 2-session implementation or close as out-of-scope via ADR amendment.
+**V1 deprecation watch — daily counts (S47 STEP 2 cadence decision: manual operator check)**
+
+Cadence: one curl per UTC day, recorded below. Mechanism rationale: signal is low-frequency and human-gated; cron/App Insights upgrade only if the daily curl ever stops being trivial. Counter is process-local (worker recycle → resets to 0), which is conservative-correct — a reset can only *delay* the deletion criterion, never falsify it. A reading of `0` is treated as a sub-5 day for the streak count, since a recycled worker reports 0 honestly.
+
+Operator command (paste daily, copy reading into the table):
+```bash
+curl -s https://aigovern.sandboxhub.co/api/health | jq -r '"\(now | strftime("%Y-%m-%d"))  v1_surface_hits_24h=\(.v1_surface_hits_24h)  sha=\(.sha // .commit // .version // "?")"'
+```
+
+Streak rule: increment "consecutive sub-5 days" when reading `< 5`; reset to 0 on any reading `>= 5`. At streak = 7, `static/*.html` deletion is authorized (separate S?? session). Removal date hard-stop: 2026-07-02 regardless of streak.
+
+| Date (UTC) | `v1_surface_hits_24h` | < 5? | Consecutive sub-5 days | Notes |
+|---|---|---|---|---|
+| 2026-05-25 | 3 | ✓ | 1 | Day 0 — post-canary reading (S47 STEP 2 establishment); sha 11e7f29. Earlier intra-day reading was 1 (canary curl only); 3 is the end-of-day value used for the streak. |
+
+Next reading due: 2026-05-26 UTC.
+
+**Trajectory:** V2 stable, A15 closed, V1 deprecation clock running. S47 STEP 1 fully validated by canary. **S47 STEP 2 closed: cadence = manual operator check, tracking table live above.** Remaining S47 housekeeping (still open, non-blocking): (2) `parameters.dev.json` exhaustive vs minimal, (3) Garak ADR-001 — accept 2-session implementation or close as out-of-scope via ADR amendment.
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
