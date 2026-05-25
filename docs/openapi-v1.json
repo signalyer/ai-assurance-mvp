@@ -6881,6 +6881,45 @@
         "title": "ProjectionStatusResponse",
         "type": "object"
       },
+      "ProjectionViewResponse": {
+        "additionalProperties": false,
+        "description": "Response body for GET /api/projection/views/{view}.\n\n``rows`` is intentionally typed ``list[dict[str, Any]]`` because the endpoint\nserves five different Postgres tables (ai_systems, eval_runs, findings,\nrelease_decisions, policy_evaluations) and each has its own column shape.\nA single strict model would either become a giant union or force five\nsibling endpoints \u2014 both worse than honest polymorphism. See\nARCHITECTURE.md compound rule 27a (list[dict] justified for asymmetric /\npolymorphic responses).\n\nJSONB columns are returned as JSON-encoded *strings*, not nested objects\n(see api/projection.py L278-281). SDK consumers should ``json.loads`` those\ncolumns explicitly when needed.",
+        "properties": {
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "view": {
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "view",
+          "rows",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "ProjectionViewResponse",
+        "type": "object"
+      },
       "ProviderOut": {
         "additionalProperties": false,
         "description": "Full provider record (catalog entry).\n\nNote: api_key_secret_ref is the SECRET REFERENCE URI, not the secret value.\nmasked_key_preview is the only key-related field clients ever see.",
@@ -7305,6 +7344,33 @@
           }
         },
         "title": "ReplayRequest",
+        "type": "object"
+      },
+      "ReplayResponse": {
+        "additionalProperties": false,
+        "description": "Response body for POST /api/projection/replay.",
+        "properties": {
+          "events_processed": {
+            "title": "Events Processed",
+            "type": "integer"
+          },
+          "from_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Event Id"
+          }
+        },
+        "required": [
+          "events_processed",
+          "from_event_id"
+        ],
+        "title": "ReplayResponse",
         "type": "object"
       },
       "ReportCatalogItem": {
@@ -14974,7 +15040,7 @@
     "/api/projection/replay": {
       "post": {
         "description": "Replay events from events.jsonl into the Postgres projection tables.\n\nPrivileged endpoint: requires demo-ciso, demo-risk, or demo-engineer role.\nRuns synchronously in v1 (Day 10 makes it async with a job queue).\n\nArgs:\n    body:    ReplayRequest with optional from_event_id.\n    request: FastAPI request (used to check role).\n\nReturns:\n    JSON with events_processed count.",
-        "operationId": "projection_replay_api_projection_replay_post",
+        "operationId": "projection_replay",
         "requestBody": {
           "content": {
             "application/json": {
@@ -14989,7 +15055,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15014,7 +15082,7 @@
     "/api/projection/status": {
       "get": {
         "description": "Return projection lag and tailer checkpoint metadata.\n\nNever includes event payloads in the response.\n\nReturns:\n    ProjectionStatusResponse with lag_events and lag_seconds.",
-        "operationId": "projection_status_api_projection_status_get",
+        "operationId": "projection_status",
         "responses": {
           "200": {
             "content": {
@@ -15036,7 +15104,7 @@
     "/api/projection/views/{view}": {
       "get": {
         "description": "Return a paginated slice of a projection materialized table.\n\nThe *view* path parameter is whitelisted against PROJECTION_VIEWS to\nprevent SQL injection.  Anything not in the whitelist \u2192 400.\n\nArgs:\n    view:      Table name \u2014 must be one of PROJECTION_VIEWS.\n    page:      1-based page number.\n    page_size: Rows per page (max 500).\n\nReturns:\n    JSON with ``rows``, ``page``, ``page_size``, and ``total``.",
-        "operationId": "projection_view_api_projection_views__view__get",
+        "operationId": "projection_view",
         "parameters": [
           {
             "in": "path",
@@ -15075,7 +15143,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionViewResponse"
+                }
               }
             },
             "description": "Successful Response"

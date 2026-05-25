@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
@@ -59,6 +58,40 @@ class ProjectionStatusResponse(BaseModel):
     tailer_checkpoint_offset: int
     lag_events: int
     lag_seconds: float | None
+
+
+class ReplayResponse(BaseModel):
+    """Response body for POST /api/projection/replay."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    events_processed: int
+    from_event_id: str | None
+
+
+class ProjectionViewResponse(BaseModel):
+    """Response body for GET /api/projection/views/{view}.
+
+    ``rows`` is intentionally typed ``list[dict[str, Any]]`` because the endpoint
+    serves five different Postgres tables (ai_systems, eval_runs, findings,
+    release_decisions, policy_evaluations) and each has its own column shape.
+    A single strict model would either become a giant union or force five
+    sibling endpoints — both worse than honest polymorphism. See
+    ARCHITECTURE.md compound rule 27a (list[dict] justified for asymmetric /
+    polymorphic responses).
+
+    JSONB columns are returned as JSON-encoded *strings*, not nested objects
+    (see api/projection.py L278-281). SDK consumers should ``json.loads`` those
+    columns explicitly when needed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    view: str
+    rows: list[dict[str, Any]]
+    page: int
+    page_size: int
+    total: int
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +157,11 @@ def _current_role(request: Request) -> str:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/status", response_model=ProjectionStatusResponse)
+@router.get(
+    "/status",
+    response_model=ProjectionStatusResponse,
+    operation_id="projection_status",
+)
 async def projection_status() -> ProjectionStatusResponse:
     """Return projection lag and tailer checkpoint metadata.
 
@@ -172,11 +209,15 @@ async def projection_status() -> ProjectionStatusResponse:
     )
 
 
-@router.post("/replay")
+@router.post(
+    "/replay",
+    response_model=ReplayResponse,
+    operation_id="projection_replay",
+)
 async def projection_replay(
     body: ReplayRequest,
     request: Request,
-) -> JSONResponse:
+) -> ReplayResponse:
     """Replay events from events.jsonl into the Postgres projection tables.
 
     Privileged endpoint: requires demo-ciso, demo-risk, or demo-engineer role.
@@ -216,15 +257,19 @@ async def projection_replay(
         "projection_replay: exit events_processed=%d elapsed_ms=%.0f",
         count, elapsed * 1000,
     )
-    return JSONResponse(content={"events_processed": count, "from_event_id": body.from_event_id})
+    return ReplayResponse(events_processed=count, from_event_id=body.from_event_id)
 
 
-@router.get("/views/{view}")
+@router.get(
+    "/views/{view}",
+    response_model=ProjectionViewResponse,
+    operation_id="projection_view",
+)
 async def projection_view(
     view: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
-) -> JSONResponse:
+) -> ProjectionViewResponse:
     """Return a paginated slice of a projection materialized table.
 
     The *view* path parameter is whitelisted against PROJECTION_VIEWS to
@@ -286,10 +331,10 @@ async def projection_view(
         view, total, page, elapsed * 1000,
     )
 
-    return JSONResponse(content={
-        "view": view,
-        "rows": rows,
-        "page": page,
-        "page_size": page_size,
-        "total": total,
-    })
+    return ProjectionViewResponse(
+        view=view,
+        rows=rows,
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
