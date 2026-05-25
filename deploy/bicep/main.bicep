@@ -46,6 +46,23 @@ param teamPortalSwaName string = 'swa-aigovern-portal-dev'
 @description('Pricing tier for the Team Workspace SWA. Free is sufficient for staging.')
 param teamPortalSwaSku string = 'Free'
 
+// ---- V2 Phase 2 — CISO Console SWA (opt-in, default OFF) -------------------
+// Session 44 — sibling of deployTeamPortal. Mirrors the same toggle pattern
+// so the two SPAs can be provisioned independently (e.g. portal first to
+// shake out the SWA-CLI deploy path, then gov when ready).
+
+@description('Toggle: provision the V2 CISO Console Static Web App. Defaults to false to keep existing deploys idempotent.')
+param deployCisoConsole bool = false
+
+@description('Region for the CISO Console SWA. Must be eastus2 per the global Static Web App regional rule.')
+param cisoConsoleLocation string = 'eastus2'
+
+@description('Resource name for the CISO Console Static Web App.')
+param cisoConsoleSwaName string = 'swa-aigovern-gov-dev'
+
+@description('Pricing tier for the CISO Console SWA. Free is sufficient for staging.')
+param cisoConsoleSwaSku string = 'Free'
+
 // ---------------------------------------------------------------------------
 // Existing resource references (read-only — do NOT create)
 // ---------------------------------------------------------------------------
@@ -97,6 +114,21 @@ module teamPortalSwa 'staticwebapps.bicep' = if (deployTeamPortal) {
 }
 
 // ---------------------------------------------------------------------------
+// V2 Phase 2 — CISO Console Static Web App (conditional, Session 44)
+// ---------------------------------------------------------------------------
+// Opt-in via `deployCisoConsole=true`. Independent of `deployTeamPortal` so
+// either SPA can be provisioned first. Same constraints: eastus2 region, no
+// custom DNS binding (Week 5 cutover handles gov.aigovern.sandboxhub.co).
+module cisoConsoleSwa 'staticwebapps-gov.bicep' = if (deployCisoConsole) {
+  name: 'ciso-console-swa-deploy'
+  params: {
+    swaName: cisoConsoleSwaName
+    location: cisoConsoleLocation
+    sku: cisoConsoleSwaSku
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 
@@ -112,3 +144,6 @@ output postDeployNote string = 'Run: az webapp config appsettings set --name ${a
 
 @description('Default *.azurestaticapps.net hostname for the Team Workspace SWA. Empty string when deployTeamPortal=false.')
 output teamPortalHostname string = deployTeamPortal ? teamPortalSwa.outputs.defaultHostname : ''
+
+@description('Default *.azurestaticapps.net hostname for the CISO Console SWA. Empty string when deployCisoConsole=false.')
+output cisoConsoleHostname string = deployCisoConsole ? cisoConsoleSwa.outputs.defaultHostname : ''

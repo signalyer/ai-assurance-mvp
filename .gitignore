@@ -60,6 +60,12 @@ deploy/*.zip
 deploy/applogs*/
 deploy/jar.txt
 
+# Operator credentials (NEVER commit — bcrypt hashes + plaintext demo passwords
+# + SESSION_SECRET). Generated locally by deploy/generate-creds.py and pushed
+# to Azure App Service via the appsettings.json artifact. Session 44 hardening.
+deploy/creds.txt
+deploy/appsettings.json
+
 # Azure Functions
 local.settings.json
 

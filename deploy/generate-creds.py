@@ -1,12 +1,19 @@
-"""Generate 5 role-based demo creds + bcrypt hashes + session secret.
+"""Generate role-based demo creds + bcrypt hashes + session secret.
 
 Idempotent: if deploy/creds.txt AND deploy/appsettings.json already exist, exits
 without regenerating (preserves stakeholders' working passwords across redeploys).
 Pass --rotate to force regeneration.
 
+To ADD missing roles to an existing creds.txt WITHOUT rotating the existing
+passwords (Session 44+ V2-PORTAL-SPLIT prep — append ENGINEER without
+disrupting stakeholders), use deploy/add-missing-creds.py instead.
+
 Outputs:
 - deploy/creds.txt        (plaintext, for handing to stakeholders — NEVER COMMIT)
 - deploy/appsettings.json (settings to push via `az webapp config appsettings set`)
+
+Session 44: ROLES extended to include OPERATOR (S11 Demo Control gap-fill) and
+ENGINEER (V2-PORTAL-SPLIT A6 — engineer → Team Workspace landing).
 """
 
 import argparse
@@ -18,7 +25,10 @@ from pathlib import Path
 
 import bcrypt
 
-ROLES = ["CRO", "CISO", "AUDIT", "MRM", "AIGOV"]
+# Must stay in sync with middleware/auth.py ROLES. Order is intentional —
+# CRO/CISO/AUDIT/MRM/AIGOV are governance roles (CISO Console landing per S43
+# A7); OPERATOR/ENGINEER are workspace roles (Team Workspace landing per A6).
+ROLES = ["CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER"]
 ALPHABET = string.ascii_letters + string.digits + "!@#$%^*-_=+"
 
 

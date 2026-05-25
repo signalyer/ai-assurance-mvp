@@ -1325,6 +1325,37 @@ The S43 plan derived "4 Tier 1 routers to fan-out" purely from the numerator gap
 
 **Trajectory:** A1 closed this session. S44 = `smoke_portal.ps1` + `smoke_gov.ps1` split + DEMO_USER_ENGINEER_HASH provisioning + login smoke probe (verify `next` JSON honors PORTAL_URL/GOV_URL). S45 = V1→V2 302 redirect at root + DNS rehearsal + env-var flip → V2 LIVE.
 
+### Session 44 (smoke harness split + A6/A7 verification probe + cred-management hardening + CISO Console SWA Bicep)
+
+**Track A — smoke harness split for V2-PORTAL-SPLIT A4/A5:**
+- [deploy/smoke_api.ps1](deploy/smoke_api.ps1) (NEW, 7 probes): inherits the 6 engine scenarios from the original `smoke_e2e.ps1` plus a new **Scenario 7 — A6/A7 login redirect**. Scenario 7 POSTs to `/api/auth/login` for demo-engineer + demo-ciso (passwords from `$env:SMOKE_ENGINEER_PW` / `$env:SMOKE_CISO_PW`) and asserts response JSON `next` matches `$env:PORTAL_URL` / `$env:GOV_URL` (or "/" in dev). Third sub-assertion: explicit deep-link `next="/runtime"` survives — proves the session-middleware bounce path is not regressed by the role-aware default. SKIPs gracefully when role passwords aren't provided, so the same script runs cleanly in dev and prod-hardened modes.
+- [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) (NEW, 3 probes): Team Workspace SPA load probe — index HTML reachable + Vite `<div id="root">` shell present + first JS bundle 200 OK + first CSS 200 OK (SKIP if Vite inlined). Defaults to `swa-aigovern-portal-dev.azurestaticapps.net`; flips to `portal.aigovern.sandboxhub.co` at S45 cutover via `$env:SMOKE_PORTAL_URL`.
+- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) (NEW, 3 probes): identical pattern for CISO Console; flips via `$env:SMOKE_GOV_URL`. Mirroring the two SPA probes exactly is intentional — same Vite build pattern means same failure modes; divergence would be a smell.
+- [deploy/smoke_e2e.ps1](deploy/smoke_e2e.ps1) (REFACTORED — was 297 lines, now ~85): thin wrapper. Each child runs in its own `pwsh` process so a hard fail in one (e.g. exit 99 host-allowlist abort in `smoke_api`) does not abort the siblings; aggregate exit code = sum of child exit codes. CI hooks and operator muscle memory continue to work. Delete after V2 LIVE once CI references the three children directly.
+
+**Track B — cred-management hardening (Session 11 OPERATOR debt + S43 ENGINEER add):**
+- [deploy/generate-creds.py](deploy/generate-creds.py): `ROLES` extended `["CRO","CISO","AUDIT","MRM","AIGOV"]` → `["CRO","CISO","AUDIT","MRM","AIGOV","OPERATOR","ENGINEER"]`. Matches `middleware/auth.py` ROLES tuple (single source of truth at runtime; this list is the *provisioning* mirror). Future fresh-install workflows include both new roles. Existing `--rotate` path unchanged.
+- [deploy/add-missing-creds.py](deploy/add-missing-creds.py) (NEW): append-only complement to `generate-creds.py`. Imports `middleware.auth.ROLES` as authority, scans `deploy/appsettings.json` for `DEMO_USER_<ROLE>_HASH` entries, and appends only the missing ones (each with a fresh 16-char password + bcrypt hash + plaintext row in `deploy/creds.txt`). **Does NOT rotate existing passwords** — stakeholders' demo-cro/demo-ciso/etc. creds keep working. Dry-run confirmed on the live deploy: `Missing roles to append: ['ENGINEER', 'OPERATOR']`. Operator step (deferred — not executed in-session): `python deploy/add-missing-creds.py` followed by `az webapp config appsettings set --name app-aigovern-dev --resource-group rg-aigovern-dev --settings @deploy/appsettings.json`. Documented in S45 plan as part of the cutover checklist (paired with the PORTAL_URL/GOV_URL env-var flips).
+- [.gitignore](.gitignore) hardening: `deploy/creds.txt` + `deploy/appsettings.json` were untracked but unprotected. Defense-in-depth: explicitly listed under a `# Operator credentials (NEVER commit)` block.
+
+**Track C — Bicep prep for V2 LIVE:**
+- [deploy/bicep/staticwebapps-gov.bicep](deploy/bicep/staticwebapps-gov.bicep) (NEW): sibling of `staticwebapps.bicep`. Provisions `swa-aigovern-gov-dev` in `eastus2` (mandatory SWA region per global rule). Same lean-staging pattern — no custom-domain binding, no repo wiring (SWA-CLI deploy from `ciso-console/dist`). Differs from the portal module only in resource name + component tag — same shape for the same failure modes (cf. smoke probe rationale above).
+- [deploy/bicep/main.bicep](deploy/bicep/main.bicep): added `deployCisoConsole` toggle parameter (default false — preserves the existing what-if for runs that don't opt in) + `cisoConsoleSwa` conditional module instance + `cisoConsoleHostname` output. Toggle is independent of `deployTeamPortal` so the two SPAs can be provisioned in either order. S45 cutover: set both flags to true and re-run `az deployment group create`.
+
+**Compound rule observation (S44 #1 — silently-orphaned cred lists):**
+`deploy/generate-creds.py` ROLES diverged from `middleware/auth.py` ROLES in S11 (OPERATOR added at runtime, never back-filled to provisioning) and again in S43 (ENGINEER). Cost of detection was zero (S44 discovery grep), but cost of *latent failure* was real: a hardened deploy with AUTH_ENABLED=true would have 401-rejected `demo-engineer` login despite the middleware claiming the role exists. Pattern: when a tuple-of-strings constant appears in multiple files for the same logical concept, **import the runtime authority into the provisioning script** (as `add-missing-creds.py` now does). Future debt-prevention: a one-line CI assertion (`python -c "from middleware.auth import ROLES; from deploy.generate_creds import ROLES as P; assert set(ROLES) == set(P)"`) catches the next divergence at PR time.
+
+**V2 acceptance state after S44:**
+- A1 OpenAPI: **40/40 ✅** (no change)
+- A5 CISO Console: **10/10 ✅** (no change)
+- A6/A7: **logic ✓ + smoke probe ✓ + cred provisioning ready** — operator runs `add-missing-creds.py` + `az webapp config appsettings set` at S45 cutover (paired with PORTAL_URL/GOV_URL env-var flips)
+- A4 (smoke split): **smoke_portal.ps1 + smoke_gov.ps1 ✓**, smoke_api.ps1 carries A6/A7 verification
+- Bicep (both SWAs as IaC): **✓** — toggles default off; flip both to true at S45
+- A12/A13: blockers — cutover work (S45)
+- A15: 🟡 Bicep ✓; P1v3 + staging slot independent infra track
+
+**Trajectory:** S44 collapsed every prerequisite for the S45 cutover into IaC + code + provisioning helpers — the cutover itself is now *configuration only*: (1) `az deployment group create` with both SWA toggles true, (2) deploy portal + console build artefacts via SWA CLI, (3) bind custom DNS (`portal.*` and `gov.*` CNAMEs), (4) run `add-missing-creds.py` + push appsettings.json, (5) set PORTAL_URL/GOV_URL env vars on the engine, (6) add V1→V2 302 at apex `aigovern.sandboxhub.co`, (7) full smoke (`smoke_e2e.ps1` with custom-DNS env vars set) → V2 LIVE.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)

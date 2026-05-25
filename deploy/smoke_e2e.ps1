@@ -1,34 +1,43 @@
 <#
 .SYNOPSIS
-    E2E smoke test — 6 demo scenarios against a running AI Assurance instance.
+    AI Assurance E2E smoke wrapper — Session 44 V2-PORTAL-SPLIT split.
 
 .DESCRIPTION
-    Runs 6 scenario probes in sequence against $env:SMOKE_TARGET_URL.
-    Each scenario prints PASS or FAIL with the assertion that failed.
+    Thin orchestrator. The actual probes live in three focused scripts:
+      * deploy/smoke_api.ps1     — engine API surfaces + A6/A7 login redirect (7 probes)
+      * deploy/smoke_portal.ps1  — Team Workspace SPA load (3 probes)
+      * deploy/smoke_gov.ps1     — CISO Console SPA load (3 probes)
 
-    Default target: http://localhost:8000
+    This wrapper runs all three in sequence, threads through their environment
+    variables, and aggregates exit codes. Retained for backward compatibility
+    with existing CI hooks and operator muscle memory. Delete after V2 cutover
+    once CI references all three scripts directly.
 
-    Scenarios:
-      1. PII pipeline        POST /api/demo/run         — vault_id present, no "@" in scrubbed_prompt
-      2. Gate failure        GET  /api/grc/release-gates/v2/systems  — gates summary present
-      3. Agent governance    GET  /api/agents            — >= 6 agents listed
-      4. RTF cascade         POST /api/right-to-forget   — cascade_id present
-      5. Eval trend          GET  /api/analytics/trends  — 200 (even if empty)
-      6. Framework coverage  GET  /api/frameworks/matrix — at least one framework slug present
+    Each child script is INVOKED in its own pwsh process so a hard failure in
+    one (e.g. exit 99 host-allowlist abort in smoke_api) does not abort the
+    siblings. Exit code = sum of child exit codes; non-zero = something failed.
 
-    Exit codes:
-      0 — all 6 scenarios pass
-      N — count of failing scenarios
+    Environment variables read (passed through to children):
+      SMOKE_TARGET_URL  → smoke_api    (engine base URL)
+      SMOKE_USER        → smoke_api    (operator login username)
+      SMOKE_PASSWORD    → smoke_api    (operator login password)
+      SMOKE_ENGINEER_PW → smoke_api    (demo-engineer password — for A6 probe)
+      SMOKE_CISO_PW     → smoke_api    (demo-ciso password — for A7 probe)
+      PORTAL_URL        → smoke_api    (expected engineer-redirect target)
+      GOV_URL           → smoke_api    (expected ciso-redirect target)
+      SMOKE_PORTAL_URL  → smoke_portal (Team Workspace SPA base URL)
+      SMOKE_GOV_URL     → smoke_gov    (CISO Console SPA base URL)
+      SMOKE_ALLOW_PROD  → smoke_api    (override host allowlist)
 
 .EXAMPLE
-    # Dev (no auth):
+    # Dev — engine only (SPA probes will SKIP if SWA hostnames unreachable):
     $env:SMOKE_TARGET_URL = "http://localhost:8000"
     pwsh deploy/smoke_e2e.ps1
 
-    # Prod / hardened (AUTH_ENABLED=true):
-    $env:SMOKE_TARGET_URL = "https://aigovern.sandboxhub.co"
+    # Full staging sweep:
+    $env:SMOKE_TARGET_URL = "https://api.aigovern.sandboxhub.co"
     $env:SMOKE_USER       = "demo-aigov"
-    $env:SMOKE_PASSWORD   = "<shared demo password>"
+    $env:SMOKE_PASSWORD   = "<password>"
     pwsh deploy/smoke_e2e.ps1
 #>
 
@@ -38,260 +47,44 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Continue"
 
-$BaseUrl = if ($env:SMOKE_TARGET_URL) { $env:SMOKE_TARGET_URL.TrimEnd('/') } else { "http://localhost:8000" }
+$scriptDir = $PSScriptRoot
+$total = 0
 
-# Guard: this script sends synthetic PII to /api/demo/run. Refuse to run against
-# anything that is not explicitly an allowed dev/staging host. Override with
-# $env:SMOKE_ALLOW_PROD=true to opt in (do NOT set this on the real prod URL).
-$AllowedHostPatterns = @(
-    'localhost',
-    '127\.0\.0\.1',
-    '.*\.azurewebsites\.net.*-dev',
-    'aigovern-dev\.',
-    'sandboxhub\.co'
-)
-$hostAllowed = $false
-foreach ($pat in $AllowedHostPatterns) {
-    if ($BaseUrl -match $pat) { $hostAllowed = $true; break }
-}
-if (-not $hostAllowed -and $env:SMOKE_ALLOW_PROD -ne 'true') {
-    Write-Host "ERROR: Target '$BaseUrl' is not in the dev/staging allowlist." -ForegroundColor Red
-    Write-Host "       Scenario 1 sends synthetic PII to /api/demo/run; refusing to run." -ForegroundColor Red
-    Write-Host "       Set SMOKE_ALLOW_PROD=true to override (NOT recommended)." -ForegroundColor Red
-    exit 99
-}
-
-Write-Host "=== AI Assurance E2E Smoke Test ===" -ForegroundColor Cyan
-Write-Host "Target: $BaseUrl"
+Write-Host "=== AI Assurance E2E Smoke (wrapper) ===" -ForegroundColor Cyan
 Write-Host ""
 
-# ---------------------------------------------------------------------------
-# Optional login — required when the target has AUTH_ENABLED=true.
-# Set $env:SMOKE_USER and $env:SMOKE_PASSWORD to authenticate before the
-# scenarios run. The session cookie is threaded through every Invoke-RestMethod
-# call via $AuthSplat. Credentials are NEVER printed to stdout.
-# ---------------------------------------------------------------------------
-$Session = $null
-$AuthSplat = @{}
-if ($env:SMOKE_USER -and $env:SMOKE_PASSWORD) {
-    Write-Host "Authenticating as '$env:SMOKE_USER'..." -NoNewline
-    try {
-        $loginBody = @{
-            username = $env:SMOKE_USER
-            password = $env:SMOKE_PASSWORD
-            next     = "/"
-        }
-        $null = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method POST `
-            -Body $loginBody `
-            -SessionVariable Session `
-            -ErrorAction Stop
-        $AuthSplat = @{ WebSession = $Session }
-        Write-Host " [OK]" -ForegroundColor Green
-    } catch {
-        Write-Host " [FAIL] $_" -ForegroundColor Red
-        Write-Host "Cannot run scenarios without auth on a hardened target. Exiting." -ForegroundColor Red
-        exit 98
-    }
-    Write-Host ""
-}
-
-$Failures = 0
-
-function Invoke-Scenario {
-    <#
-    .SYNOPSIS
-        Execute a single smoke scenario and report PASS/FAIL/SKIP.
-
-    .PARAMETER Name
-        Display name of the scenario.
-
-    .PARAMETER ScriptBlock
-        The test logic. Should throw on assertion failure.
-        Connection-refused errors are treated as SKIP (target unreachable).
-    #>
-    param(
-        [string]$Name,
-        [scriptblock]$ScriptBlock
-    )
-
-    Write-Host "Scenario: $Name" -NoNewline
-    try {
-        & $ScriptBlock
-        Write-Host "  [PASS]" -ForegroundColor Green
-    } catch {
-        $msg = "$_"
-        # Connection refused / network unreachable — target is not running; skip gracefully
-        if ($msg -match "refused|unreachable|No connection|Unable to connect|SocketException|actively refused") {
-            Write-Host "  [SKIP] target unreachable ($BaseUrl)" -ForegroundColor DarkYellow
-        } else {
-            Write-Host "  [FAIL] $msg" -ForegroundColor Red
-            $script:Failures++
-        }
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 1 — PII pipeline
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "1. PII pipeline (POST /api/demo/run)" -ScriptBlock {
-    $url  = "$BaseUrl/api/demo/run"
-    # Prompt deliberately carries identifiable text (email + name) so the
-    # scrubber has something to tokenise — but is phrased neutrally to avoid
-    # tripping LlamaGuard's substring keyword matcher (which flags any output
-    # containing "harm", "kill", etc. — substrings of harmless words too).
-    $body = @{
-        prompt    = "Customer Jane Doe at jane.doe@example.com is asking about portfolio rebalancing options. Suggest a diversified allocation across index funds."
-        system_id = "sys-payments-001"
-        action    = "llm_call"
-    } | ConvertTo-Json
-
-    $resp = Invoke-RestMethod -Uri $url -Method POST `
-        -Body $body `
-        -ContentType "application/json" `
-        @AuthSplat `
-        -ErrorAction Stop
-
-    # Response shape: { runs: [{ vault_id, prompt, response, ... }], error }
-    # We accept any run (Claude OR OpenAI may be blocked by guardrails — that's
-    # demo material, not a smoke failure) — at least ONE run must have a vault_id
-    # and a scrubbed prompt with no raw '@' character.
-    $runs = @($resp.runs)
-    if ($runs.Count -lt 1) {
-        throw "Expected at least one run in response; got: $($resp | ConvertTo-Json -Compress -Depth 4)"
-    }
-
-    $run = $runs[0]
-    if (-not $run.vault_id) {
-        throw "Expected 'vault_id' in first run; got: $($run | ConvertTo-Json -Compress -Depth 3)"
-    }
-
-    # The scrubbed prompt is stored on the run as `prompt` (post-scrub).
-    $scrubbed = "$($run.prompt)"
-    if ($scrubbed -match "@") {
-        throw "Run.prompt still contains '@' — PII not scrubbed. Value: $scrubbed"
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 2 — Gate failure check
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "2. Gate failure (GET /api/grc/release-gates/v2/systems)" -ScriptBlock {
-    $url  = "$BaseUrl/api/grc/release-gates/v2/systems"
-
-    $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
-
-    # v2 endpoint returns {"systems": [...]}; each item has release_decision.
-    # Empty list is acceptable (no AI systems seeded yet) — we only assert the
-    # shape is right and the router is mounted.
-    if ($null -eq $resp.systems) {
-        throw "Expected 'systems' array in response; got: $($resp | ConvertTo-Json -Compress -Depth 3)"
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 3 — Agent governance
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "3. Agent governance (GET /api/agents)" -ScriptBlock {
-    $url = "$BaseUrl/api/agents"
-
-    try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
-    } catch [System.Net.WebException] {
-        if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
-            Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
-            return
-        }
-        throw
-    }
-
-    # Accept both array response and {agents: [...]} envelope
-    $agents = if ($resp -is [array]) { $resp } elseif ($resp.agents) { $resp.agents } else { @() }
-
-    if (@($agents).Count -lt 6) {
-        throw "Expected >= 6 agents; found $(@($agents).Count). Seed demo data first (python mock_data.py)."
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 4 — RTF cascade
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "4. RTF cascade (POST /api/right-to-forget)" -ScriptBlock {
-    $url  = "$BaseUrl/api/right-to-forget"
-    $body = @{
-        subject_id = "smoke-test-subject-$(Get-Date -Format 'yyyyMMddHHmmss')"
-        reason     = "e2e smoke test"
-        requested_by = "smoke_e2e.ps1"
-    } | ConvertTo-Json
-
-    try {
-        $resp = Invoke-RestMethod -Uri $url -Method POST `
-            -Body $body `
-            -ContentType "application/json" `
-            @AuthSplat `
-            -ErrorAction Stop
-    } catch [System.Net.WebException] {
-        if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -in @(404, 422)) {
-            Write-Host " (skipped — endpoint not reachable or payload mismatch)" -NoNewline -ForegroundColor DarkYellow
-            return
-        }
-        throw
-    }
-
-    if (-not $resp.cascade_id) {
-        throw "Expected 'cascade_id' in response; got: $($resp | ConvertTo-Json -Compress)"
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 5 — Eval trend
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "5. Eval trend (GET /api/analytics/trends)" -ScriptBlock {
-    $url = "$BaseUrl/api/analytics/trends"
-
-    try {
-        # We only assert HTTP 200; empty history is fine
-        $null = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
-    } catch [System.Net.WebException] {
-        if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
-            Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
-            return
-        }
-        throw
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Scenario 6 — Framework coverage matrix
-# ---------------------------------------------------------------------------
-Invoke-Scenario -Name "6. Framework coverage (GET /api/frameworks/matrix)" -ScriptBlock {
-    $url = "$BaseUrl/api/frameworks/matrix?systems=sys-payments-001"
-
-    try {
-        $resp = Invoke-RestMethod -Uri $url -Method GET @AuthSplat -ErrorAction Stop
-    } catch [System.Net.WebException] {
-        if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode) -eq 404) {
-            Write-Host " (skipped — endpoint not mounted)" -NoNewline -ForegroundColor DarkYellow
-            return
-        }
-        throw
-    }
-
-    # Accept {frameworks: [...], rows: [...]} or array of slugs
-    $frameworks = if ($resp.frameworks) { $resp.frameworks } elseif ($resp -is [array]) { $resp } else { @() }
-
-    if (@($frameworks).Count -lt 1) {
-        throw "Expected at least 1 framework slug in response; got: $($resp | ConvertTo-Json -Compress)"
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
+# --- Engine API ------------------------------------------------------------
+Write-Host "--- Running smoke_api.ps1 ---" -ForegroundColor Cyan
+pwsh -NoProfile -File (Join-Path $scriptDir "smoke_api.ps1")
+$apiExit = $LASTEXITCODE
+$total += $apiExit
 Write-Host ""
-if ($Failures -eq 0) {
-    Write-Host "=== SMOKE E2E PASSED — all 6 scenarios passed ===" -ForegroundColor Green
+
+# --- Team Workspace SPA ---------------------------------------------------
+Write-Host "--- Running smoke_portal.ps1 ---" -ForegroundColor Cyan
+pwsh -NoProfile -File (Join-Path $scriptDir "smoke_portal.ps1")
+$portalExit = $LASTEXITCODE
+$total += $portalExit
+Write-Host ""
+
+# --- CISO Console SPA -----------------------------------------------------
+Write-Host "--- Running smoke_gov.ps1 ---" -ForegroundColor Cyan
+pwsh -NoProfile -File (Join-Path $scriptDir "smoke_gov.ps1")
+$govExit = $LASTEXITCODE
+$total += $govExit
+Write-Host ""
+
+# --- Summary --------------------------------------------------------------
+Write-Host "=== Aggregate ===" -ForegroundColor Cyan
+Write-Host ("  smoke_api.ps1     exit {0}" -f $apiExit)
+Write-Host ("  smoke_portal.ps1  exit {0}" -f $portalExit)
+Write-Host ("  smoke_gov.ps1     exit {0}" -f $govExit)
+Write-Host ""
+
+if ($total -eq 0) {
+    Write-Host "=== SMOKE E2E PASSED — all three scripts exited 0 ===" -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "=== SMOKE E2E FAILED — $Failures scenario(s) failed ===" -ForegroundColor Red
-    exit $Failures
+    Write-Host "=== SMOKE E2E FAILED — aggregate exit $total ===" -ForegroundColor Red
+    exit $total
 }
