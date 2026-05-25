@@ -224,19 +224,10 @@ _validate_openapi_artifact()
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
-# CORS for localhost only
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:9007", "http://127.0.0.1:9007"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Middleware execution order (Starlette: last add_middleware = outermost = first to execute).
-# RequestContextMiddleware added first (innermost of the request-id tier),
-# SessionAuth added next (auth gate), HMAC added last (outermost SDK gate).
-# Request flow: HMACAuthMiddleware -> SessionAuthMiddleware -> RequestContextMiddleware -> routes.
+# Request flow (outer -> inner):
+#   CORSMiddleware -> ApiVersionAliasMiddleware -> HMACAuthMiddleware ->
+#   SessionAuthMiddleware -> RequestContextMiddleware -> routes.
 
 # RequestContextMiddleware -- generates X-Request-Id, stamps into ContextVar (innermost)
 if _HAS_REQUEST_CTX:
@@ -245,13 +236,41 @@ if _HAS_REQUEST_CTX:
 # Session-cookie auth gate (no-op unless AUTH_ENABLED=true)
 app.add_middleware(SessionAuthMiddleware)
 
-# HMAC auth for /api/sdk/* -- outermost, executes first on every request
+# HMAC auth for /api/sdk/* -- outer of the auth tier, executes before SessionAuth
 app.add_middleware(HMACAuthMiddleware)
 
 # API version alias -- rewrites /api/v1/* -> /api/* BEFORE auth so the auth
-# middleware sees the canonical path. Added LAST so it's outermost and
-# executes FIRST per Starlette ordering. See middleware/api_version_alias.py.
+# middleware sees the canonical path.
 app.add_middleware(ApiVersionAliasMiddleware)
+
+# CORS -- added LAST so it is OUTERMOST and runs FIRST on every request.
+# Critical for cross-origin preflight: OPTIONS must be answered with CORS
+# headers BEFORE SessionAuth/HMACAuth can 401 it. V2 split puts the engine
+# on aigovern.sandboxhub.co and the SPAs on portal.* / gov.* (same-site,
+# different-origin), so preflight on POST/PUT/DELETE/credentialed-GET will
+# fire. allow_credentials=True forbids wildcard origins -- list them
+# explicitly. Override via CORS_ALLOWED_ORIGINS env (comma-separated).
+_default_origins = [
+    "https://portal.aigovern.sandboxhub.co",
+    "https://gov.aigovern.sandboxhub.co",
+    "http://localhost:9007",
+    "http://127.0.0.1:9007",
+    "http://localhost:5174",  # team-portal vite dev
+    "http://localhost:5175",  # ciso-console vite dev
+]
+_env_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+_cors_origins = (
+    [o.strip() for o in _env_origins.split(",") if o.strip()]
+    if _env_origins
+    else _default_origins
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # S46 — V1 surface deprecation. Stamps X-V1-Surface-Deprecated on responses
