@@ -8,6 +8,9 @@ multiple times (or reloading it in tests) never raises ``ValueError``.
 from __future__ import annotations
 
 import logging
+import time
+from collections import deque
+from threading import Lock
 
 _log = logging.getLogger(__name__)
 
@@ -107,6 +110,21 @@ _rtf_sidecar_unsigned = _make_counter(
     "Number of RTF sidecar entries that were unsigned or had an invalid HMAC signature.",
 )
 
+# S46 — V1 surface deprecation. Cumulative Prometheus counter for long-term
+# trend visibility, plus an in-process deque of recent hit timestamps for the
+# 24h-window readout surfaced via /api/health. Process-local is intentional:
+# when the worker recycles the rolling figure resets to zero, which is the
+# conservatively-correct answer ("has anyone hit V1 since process start?").
+_v1_surface_hits = _make_counter(
+    "v1_surface_hits_total",
+    "Number of HTTP hits to legacy V1 navigation pages (deprecated; removal 2026-07-02).",
+    ["route"],
+)
+
+_V1_HIT_WINDOW_SECONDS = 24 * 60 * 60
+_v1_hit_timestamps: deque[float] = deque()
+_v1_hit_lock = Lock()
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -179,6 +197,50 @@ def record_rtf_sidecar_unsigned() -> None:
         _rtf_sidecar_unsigned.inc()
     except Exception as exc:
         _log.debug("record_rtf_sidecar_unsigned_noop error=%s", exc)
+
+
+def record_v1_surface_hit(route: str) -> None:
+    """Record a hit to a legacy V1 navigation page.
+
+    Increments the cumulative Prometheus counter (labelled by route) and
+    appends the timestamp to the 24h rolling window used by /api/health.
+    Both operations are best-effort and never raise.
+
+    Args:
+        route: The V1 URL path (e.g. ``"/ai-systems"``) used as the counter label.
+    """
+    try:
+        _v1_surface_hits.labels(route=route).inc()
+    except Exception as exc:
+        _log.debug("record_v1_surface_hit_counter_noop route=%s error=%s", route, exc)
+    try:
+        now = time.time()
+        with _v1_hit_lock:
+            _v1_hit_timestamps.append(now)
+            cutoff = now - _V1_HIT_WINDOW_SECONDS
+            while _v1_hit_timestamps and _v1_hit_timestamps[0] < cutoff:
+                _v1_hit_timestamps.popleft()
+    except Exception as exc:
+        _log.debug("record_v1_surface_hit_deque_noop error=%s", exc)
+
+
+def get_v1_surface_hits_24h() -> int:
+    """Return the count of V1 navigation hits in the trailing 24 hours.
+
+    Process-local: resets when the worker recycles. Used by /api/health to
+    drive the V1-deletion observation criterion (7 consecutive days under
+    5 hits/day catches lingering bookmarks and external links).
+    """
+    try:
+        now = time.time()
+        cutoff = now - _V1_HIT_WINDOW_SECONDS
+        with _v1_hit_lock:
+            while _v1_hit_timestamps and _v1_hit_timestamps[0] < cutoff:
+                _v1_hit_timestamps.popleft()
+            return len(_v1_hit_timestamps)
+    except Exception as exc:
+        _log.debug("get_v1_surface_hits_24h_noop error=%s", exc)
+        return 0
 
 
 def record_rtf_cascade(status: str) -> None:

@@ -4,11 +4,12 @@
 
 | Resource | Name | Notes |
 |---|---|---|
-| App Service Plan | `asp-aigovern-dev` | B1 Linux, Python 3.12, ~$13/mo |
-| Web App reference | `app-aigovern-dev` | Existing — not re-created |
+| App Service Plan | `asp-aigovern-dev` | P2v3 Linux (PremiumV3), Python 3.12, ~$146/mo. Upgraded from B1 pre-S46 to support slots. |
+| Web App reference | `app-aigovern-dev` | Existing — not re-created. westus2. |
+| Staging slot (opt-in) | `app-aigovern-dev/slots/staging` | A15 / S46 — zero-downtime deploys via swap. Off by default; set `deployStagingSlot=true` to provision. Requires Standard+ ASP tier (P2v3 ✓). |
 | Log Analytics workspace | `log-aigovern-prod` | PerGB2018, 30-day retention, eastus |
 | Application Insights | `appi-aigovern-prod` | Workspace-based, linked to above |
-| 8 KQL alert rules | `alert-*` | See `alerts.bicep` for KQL and thresholds |
+| 8 KQL alert rules (opt-in) | `alert-*` | One-shot. Default off. Set `deployAlerts=true` only on first provision or when explicitly modifying alert configs. See `alerts.bicep`. |
 | Static Web App (opt-in) | `swa-aigovern-portal-dev` | V2 Phase 2 Team Workspace SPA. **eastus2** (regional rule). Off by default — set `deployTeamPortal=true` to provision. See `staticwebapps.bicep`. |
 
 ## Deploy command
@@ -116,6 +117,13 @@ binds `portal.aigovern.sandboxhub.co` (see
   string is returned as a `@secure()` output and must be injected separately.
 - `actionGroupId` defaults to empty (no alerts notifications). Populate with
   an existing Action Group resource ID to enable email/SMS/webhook paging.
+- **Alerts module is one-shot.** Azure Monitor metric-alert `scopes[]` is
+  immutable after creation; redeploying with `deployAlerts=true` against
+  existing alerts fails with `ScopeUpdateNotAllowed`. Default is `false`.
+  Set `--parameters deployAlerts=true` only on first provision or when
+  intentionally recreating alert configs (delete the existing alerts first
+  via `az monitor scheduled-query delete`). Routine `main.bicep` redeploys
+  for SWA / App Insights changes should leave `deployAlerts=false`.
 - The Team Workspace SWA is in **eastus2** while the rest of the stack is in
   **eastus**. This is mandatory per the Static Web App regional rule — SWAs
   are not available in eastus. Cross-region SWA → API latency is sub-10ms

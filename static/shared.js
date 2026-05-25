@@ -1041,4 +1041,43 @@ function initPage(activePath) {
     setGuideActivePath(activePath);
     wireGuidePanel();
     wireTopbarIdentity();
+    injectV1DeprecationBanner();
+}
+
+// S46 — V1 surface deprecation banner. Yellow bar at the top of every V1 page
+// pointing operators at the V2 surfaces. Removal date matches the server-side
+// X-V1-Surface-Deprecated header (2026-07-02, 60-day window post-S45 cutover).
+// Built via safe DOM methods (no innerHTML) — content is all static literals
+// so XSS is structurally impossible, but textContent/appendChild keeps the
+// CSP-friendly contract explicit. Idempotent on the marker id.
+function injectV1DeprecationBanner() {
+    if (document.getElementById('v1-deprecation-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'v1-deprecation-banner';
+    banner.setAttribute('role', 'alert');
+    banner.style.cssText = [
+        'position:sticky','top:0','left:0','right:0','z-index:9999',
+        'background:#fff3cd','color:#664d03','border-bottom:1px solid #ffe69c',
+        'padding:8px 16px','font-size:13px','font-weight:500','text-align:center',
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    ].join(';');
+    const linkStyle = 'color:#664d03;text-decoration:underline;font-weight:600';
+    const portalLink = document.createElement('a');
+    portalLink.href = 'https://portal.aigovern.sandboxhub.co';
+    portalLink.style.cssText = linkStyle;
+    portalLink.textContent = 'portal.aigovern.sandboxhub.co';
+    const govLink = document.createElement('a');
+    govLink.href = 'https://gov.aigovern.sandboxhub.co';
+    govLink.style.cssText = linkStyle;
+    govLink.textContent = 'gov.aigovern.sandboxhub.co';
+    const date = document.createElement('strong');
+    date.textContent = '2026-07-02';
+    banner.appendChild(document.createTextNode('⚠️ This is the legacy V1 surface. The V2 surfaces are at '));
+    banner.appendChild(portalLink);
+    banner.appendChild(document.createTextNode(' and '));
+    banner.appendChild(govLink);
+    banner.appendChild(document.createTextNode('. V1 will be removed after '));
+    banner.appendChild(date);
+    banner.appendChild(document.createTextNode('.'));
+    document.body.insertBefore(banner, document.body.firstChild);
 }

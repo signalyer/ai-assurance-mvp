@@ -1396,6 +1396,38 @@ Smoke scripts that hard-code framework-default markers (Vite's `id="root"`, CRA'
 
 **Trajectory:** V2 LIVE. S46 owns: (1) delete `deploy/smoke_e2e.ps1` wrapper (operator muscle-memory window closed), (2) `main.bicep` `deployAlerts` toggle to unblock future redeploys, (3) V1 deprecation runway (`static/*.html` deletion after observation window), (4) optional A15 P1v3 + staging slot track.
 
+### Session 46 (post-cutover cleanup — STEPS 1-4 ✅ + A15 slot live)
+
+S46 closed all four planned steps in one session, including the optional A15 track. V2 LIVE undisturbed throughout — every change was additive or removal of dead scaffolding. Production sha unchanged (`fe0b0050`); S46 commit will be the first to hit production via the new slot+swap CI path.
+
+**STEP 1 — `deploy/smoke_e2e.ps1` deleted.** Wrapper served its purpose during the S44→S45 cutover (operator muscle-memory continuity through the three-script split). Removed. `ARCHITECTURE.md` verify block (line ~1488) updated to call `smoke_api.ps1` / `smoke_portal.ps1` / `smoke_gov.ps1` explicitly. Historical session-log mentions of `smoke_e2e` in this document remain — they describe what was true at the time. Acceptance interpreted as "zero live references" (achieved); literal `git grep == 0` would falsify history.
+
+**STEP 2 — `main.bicep` `deployAlerts` toggle.** Param `deployAlerts bool = false` added; `alertsModule` wrapped in `if (deployAlerts)` mirroring the existing `deployTeamPortal` / `deployCisoConsole` pattern. README now documents alerts as one-shot — `ScopeUpdateNotAllowed` will no longer block redeploys. **Validated in production:** S46 bicep deploy (provisioning the staging slot) succeeded end-to-end — first clean `main.bicep` redeploy since the S45 #2 immutable-scope blocker. Compound rule S45 #2 contract delivered.
+
+**STEP 3 — V1 deprecation runway (60-day window, removal 2026-07-02).**
+- [dashboard.py](dashboard.py) — `_V1_NAV_PATHS` frozenset enumerates the 28 V1 routes; an `@app.middleware("http")` handler stamps `X-V1-Surface-Deprecated: removal-date=2026-07-02` on every V1 response and increments a counter. Middleware decouples the deprecation contract from per-handler edits — adding a new V1 route is a one-line frozenset edit. Guards against stamping the apex 302 to V2 (would have leaked the header onto V2 browser caches).
+- [observability/counters.py](observability/counters.py) — `record_v1_surface_hit(route)` + `get_v1_surface_hits_24h()`. Cumulative Prometheus counter (labelled by route) plus an in-process `deque[float]` of timestamps for the 24h rolling window. Process-local: worker recycle resets the deque, which is conservatively-correct ("has anyone hit V1 since process start?").
+- [dashboard.py](dashboard.py:339) `/api/health` now returns `v1_surface_hits_24h` — the observation signal for the eventual `static/*.html` deletion (criterion: 7 consecutive days < 5 hits/day).
+- [static/shared.js](static/shared.js) — `injectV1DeprecationBanner()` appended to `renderShell()`. Yellow sticky-top banner with links to portal + gov. Built via `createElement` + `textContent` + `appendChild` only (no `innerHTML`) — XSS structurally impossible (all literals), keeps CSP-friendly contract explicit.
+- **Decision:** 60-day window (operator choice) — tighter than the 90-day default in the S46 plan. Bookmarks and external links should clear inside that window per the 24h-hits readout.
+
+**STEP 4 — A15 P1v3 + staging slot (delivered, scope adjusted).** Discovered the existing ASP is already **P2v3** (not B1 as `deploy/bicep/README.md` claimed). README corrected; SKU kept (P1v3 downgrade would have halved headroom for ~$73/mo savings — not a forced move). Slot provisioned via Bicep (`deployStagingSlot bool = false` toggle, default off; site referenced as `existing`). 39 app settings copied from production to slot via az CLI (no secrets in IaC). Four settings marked sticky on production: `V2_APEX_REDIRECT`, `PORTAL_URL`, `GOV_URL`, `APPLICATIONINSIGHTS_CONNECTION_STRING` — so a future swap doesn't move feature flags between slots. [.github/workflows/deploy.yml](.github/workflows/deploy.yml) rewritten: deploy → staging slot, poll staging `/api/health` for sha match, `az webapp deployment slot swap`, verify production sha post-swap. Rollback = re-swap (old code preserved in staging post-swap).
+
+**Live infra state at S46 close:**
+- `app-aigovern-dev` (production): unchanged, sha `fe0b0050`, V2 LIVE
+- `app-aigovern-dev/slots/staging`: `Running`, returns 503 (bare slot — awaits first zip deploy via new CI path)
+- Bicep deployment `s46-slot-provision-*`: `Succeeded` (also serves as STEP 2 production validation)
+
+**Compound rule observation (S46 #1 — `--slot-settings` requires reapply):**
+`az webapp config appsettings set --slot-settings KEY1 KEY2` fails parsing: there is no toggle-only flag, only `KEY=VALUE` pairs. Marking existing settings as sticky requires reading the current value (`--query "[?name=='X'].value | [0]" -o tsv`) and reapplying with `--slot-settings "X=$x"`. Non-obvious; cost one error round-trip. Saved as feedback memory.
+
+**V2 acceptance state after S46:**
+- A1/A5/A6/A7/A12/A13/A4/Bicep/A2/A3/A8/A10/A14/A16: ✓ (carried)
+- A15: **P1v3 ✓ (P2v3 already), staging slot ✓, CI swap wiring ✓** — A15 closes once the first push to main exercises the new path and reports green
+- A9, A11 (Garak): locked-deferred
+
+**Trajectory:** V2 stable. First S46 push to main is the canary for the slot+swap CI path. S47 owns: (1) confirm the canary push (reuse this commit as the deploy), (2) post-deploy live verification of V1 deprecation surface (header + banner + counter), (3) `parameters.dev.json` housekeeping (no `cisoConsoleSwaName` entry exists despite the parameter being declared — currently relies on Bicep default), (4) consider Garak ADR-001 acceptance or close as out-of-scope.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
@@ -1485,7 +1517,9 @@ python -c "from middleware.guardrails import _extract_text; assert _extract_text
 python -c "from guardrails.llama_guard_adapter import LlamaGuardEvaluator; r=LlamaGuardEvaluator.evaluate('discuss execution of allocation strategy'); assert r.safe, 'FAIL: word-boundary regression'; print('word-boundary OK')"  # after Session 12B
 python -c "import logging,audit; logging.getLogger('any').warning('no action key needed'); print('audit no-root-mutation OK')"  # after Session 12B
 python -m pytest tests/ -v                                                     # after Session 10 — expect 252 passed
-pwsh deploy/smoke_e2e.ps1                                                      # after Session 12B — expect 6/6 PASSED
+pwsh deploy/smoke_api.ps1                                                      # engine API + A6/A7 login redirect (7 probes)
+pwsh deploy/smoke_portal.ps1                                                   # Team Workspace SPA (3 probes)
+pwsh deploy/smoke_gov.ps1                                                      # CISO Console SPA (3 probes)
 uvicorn dashboard:app --port 8001 &
 curl -s http://localhost:8001/api/rag/stats                                    # after Session 04
 curl -s http://localhost:8001/api/policies/stats                               # after Session 02

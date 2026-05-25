@@ -32,6 +32,15 @@ param appName string = 'app-aigovern-dev'
 @description('Optional Action Group resource ID for alert notifications. Leave empty to skip.')
 param actionGroupId string = ''
 
+// ---- Alerts module toggle (S46, default OFF) -------------------------------
+// Azure Monitor metric-alert resources have an immutable `scopes[]` property.
+// Once created, any redeploy that re-emits the scope fails with
+// `ScopeUpdateNotAllowed`. Default false so routine `az deployment group create`
+// runs no-op against existing alerts. Set true only on first provision or when
+// explicitly modifying alert configs (and expect to recreate, not update).
+@description('Toggle: deploy the 8 KQL alerts module. Default false because alert scope is immutable post-create.')
+param deployAlerts bool = false
+
 // ---- V2 Phase 2 — Team Workspace SWA (opt-in, default OFF) -----------------
 
 @description('Toggle: provision the V2 Team Workspace Static Web App. Defaults to false to keep existing deploys idempotent.')
@@ -63,6 +72,25 @@ param cisoConsoleSwaName string = 'swa-aigovern-gov-dev'
 @description('Pricing tier for the CISO Console SWA. Free is sufficient for staging.')
 param cisoConsoleSwaSku string = 'Free'
 
+// ---- A15 / S46 — App Service staging slot (opt-in, default OFF) ------------
+// Adds a `staging` slot to the existing app-aigovern-dev web app for
+// zero-downtime deploys (deploy → smoke staging → swap). Requires the ASP
+// to be Standard tier or higher; current P2v3 satisfies this. The slot
+// inherits its parent web app's location (westus2), not the eastus default
+// of the alerts/AppInsights resources.
+
+@description('Toggle: provision the staging deployment slot on the existing web app. Defaults to false.')
+param deployStagingSlot bool = false
+
+@description('Name of the existing web app to attach the staging slot to.')
+param webAppName string = 'app-aigovern-dev'
+
+@description('Region of the existing web app. Slot inherits parent location; must match.')
+param webAppLocation string = 'westus2'
+
+@description('Name of the slot. Convention: app URL becomes {webAppName}-{slotName}.azurewebsites.net.')
+param stagingSlotName string = 'staging'
+
 // ---------------------------------------------------------------------------
 // Existing resource references (read-only — do NOT create)
 // ---------------------------------------------------------------------------
@@ -86,7 +114,7 @@ module appInsightsModule 'appinsights.bicep' = {
 // ---------------------------------------------------------------------------
 // 8 KQL Alerts (NEW resources)
 // ---------------------------------------------------------------------------
-module alertsModule 'alerts.bicep' = {
+module alertsModule 'alerts.bicep' = if (deployAlerts) {
   name: 'alerts-deploy'
   params: {
     workspaceId: appInsightsModule.outputs.workspaceId
@@ -129,6 +157,29 @@ module cisoConsoleSwa 'staticwebapps-gov.bicep' = if (deployCisoConsole) {
 }
 
 // ---------------------------------------------------------------------------
+// A15 / S46 — Staging deployment slot on the existing web app (conditional)
+// ---------------------------------------------------------------------------
+// Slot is a child resource of the existing site. We reference the parent as
+// `existing` to avoid re-emitting site properties on every deploy (the site
+// was provisioned out-of-band). Slot keeps minimal explicit properties —
+// httpsOnly + serverFarmId inheritance — so app-setting overrides ("sticky"
+// settings like V2_APEX_REDIRECT) are managed via az CLI post-provision.
+
+resource existingWebApp 'Microsoft.Web/sites@2023-12-01' existing = {
+  name: webAppName
+}
+
+resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = if (deployStagingSlot) {
+  parent: existingWebApp
+  name: stagingSlotName
+  location: webAppLocation
+  properties: {
+    serverFarmId: existingWebApp.properties.serverFarmId
+    httpsOnly: true
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 
@@ -147,3 +198,6 @@ output teamPortalHostname string = deployTeamPortal ? teamPortalSwa.outputs.defa
 
 @description('Default *.azurestaticapps.net hostname for the CISO Console SWA. Empty string when deployCisoConsole=false.')
 output cisoConsoleHostname string = deployCisoConsole ? cisoConsoleSwa.outputs.defaultHostname : ''
+
+@description('Hostname of the staging slot. Empty string when deployStagingSlot=false.')
+output stagingSlotHostname string = deployStagingSlot ? stagingSlot.properties.defaultHostName : ''

@@ -253,6 +253,25 @@ app.add_middleware(HMACAuthMiddleware)
 # executes FIRST per Starlette ordering. See middleware/api_version_alias.py.
 app.add_middleware(ApiVersionAliasMiddleware)
 
+
+# S46 — V1 surface deprecation. Stamps X-V1-Surface-Deprecated on responses
+# from legacy V1 navigation routes and records a 24h-rolling hit counter
+# surfaced via /api/health. Set `_V1_NAV_PATHS` is defined alongside the
+# page handlers below; we forward-reference it via the module global so the
+# middleware registration order doesn't matter.
+@app.middleware("http")
+async def v1_surface_deprecation(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path in _V1_NAV_PATHS and response.status_code < 400:
+        # Skip apex redirects to V2 — only stamp when V1 HTML is actually served.
+        if not (path == "/" and 300 <= response.status_code < 400):
+            response.headers["X-V1-Surface-Deprecated"] = f"removal-date={_V1_REMOVAL_DATE}"
+            from observability.counters import record_v1_surface_hit
+            record_v1_surface_hit(path)
+    return response
+
+
 app.include_router(auth_router)
 
 # Include API routers
@@ -345,11 +364,16 @@ async def health_check() -> dict:
     is live without authenticating. The previous api_keys disclosure was
     removed in Session 10.
     """
+    from observability.counters import get_v1_surface_hits_24h
+
     status = validate_api_keys()
     all_required = bool(status.get("ANTHROPIC_API_KEY") and status.get("OPENAI_API_KEY"))
     return {
         "status": "ready" if all_required else "incomplete",
         "sha": _BUILD_SHA,
+        # S46 — V1 deprecation observation signal. Process-local 24h counter;
+        # deletion criterion: 7 consecutive days < 5 hits/day. See SESSION-46.
+        "v1_surface_hits_24h": get_v1_surface_hits_24h(),
     }
 
 
@@ -384,6 +408,23 @@ async def get_compliance_report(
 
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+_V1_REMOVAL_DATE = "2026-07-02"  # S46 — 60-day deprecation window post-S45 V2 LIVE cutover.
+
+# S46 — V1 navigation paths. Membership here drives the deprecation header
+# (X-V1-Surface-Deprecated) and the 24h-hits counter consumed by /api/health.
+# Keep in sync with the V1 page handlers below; adding a new V1 route without
+# updating this set silently skips the deprecation contract.
+_V1_NAV_PATHS: frozenset[str] = frozenset({
+    "/", "/ai-systems", "/ai-systems/new", "/assessment", "/connectors",
+    "/demo", "/demo-control", "/reports", "/assurance-providers",
+    "/framework-sop", "/governance", "/security", "/runtime", "/evals",
+    "/findings", "/release-gates", "/evidence", "/policies", "/analytics",
+    "/domains", "/compare", "/analytics-usage", "/demo-aws-analyzer",
+    "/frameworks", "/agent-library", "/right-to-forget", "/audit-events",
+    "/projection",
+})
 
 
 def _page(filename: str) -> FileResponse:
