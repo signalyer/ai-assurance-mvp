@@ -1771,6 +1771,70 @@
         "title": "ChainVerifyResponse",
         "type": "object"
       },
+      "CompletenessResponse": {
+        "description": "Envelope for GET /completeness.",
+        "properties": {
+          "axis": {
+            "title": "Axis",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CompletenessRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "axis",
+          "scope",
+          "rows"
+        ],
+        "title": "CompletenessResponse",
+        "type": "object"
+      },
+      "CompletenessRowOut": {
+        "description": "Single completeness row.\n\nMirrors domain.evidence_repository.CompletenessRow (dataclass).\n`pct` is rounded to 1 decimal upstream; `missing` is already capped\nat 10-15 items per row depending on axis.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "pct": {
+            "title": "Pct",
+            "type": "number"
+          },
+          "present": {
+            "title": "Present",
+            "type": "integer"
+          },
+          "required": {
+            "title": "Required",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "present",
+          "required",
+          "pct",
+          "missing"
+        ],
+        "title": "CompletenessRowOut",
+        "type": "object"
+      },
       "ConflictDetail": {
         "additionalProperties": false,
         "description": "Structured 409 body for typed conflicts (gate denials, idempotency, state transitions).\n\nVocabulary locked at the 4 values below per audit doc \u00a710 resolution #3.\nAdding a new value = minor __version__ bump.",
@@ -3123,6 +3187,112 @@
         "title": "EventTypesMetaOut",
         "type": "object"
       },
+      "EvidenceDetailResponse": {
+        "description": "Single Evidence record + resolved AI system name.\n\nMirrors domain.models.Evidence (Pydantic v2) field-by-field with\ndatetimes serialized as ISO strings (model_dump(mode=\"json\")), plus\nthe resolved `ai_system_name` joined from the parent AI system. Kept\nstrict \u2014 the Evidence domain model is stable and audit clients\nfetching by id benefit from a typed shape.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "ai_system_name": {
+            "title": "Ai System Name",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "immutable": {
+            "title": "Immutable",
+            "type": "boolean"
+          },
+          "linked_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Control Ids",
+            "type": "array"
+          },
+          "linked_finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "linked_frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Frameworks",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "id",
+          "ai_system_id",
+          "ai_system_name",
+          "evidence_type",
+          "source",
+          "collected_at",
+          "summary",
+          "immutable",
+          "linked_control_ids",
+          "linked_finding_ids",
+          "linked_frameworks"
+        ],
+        "title": "EvidenceDetailResponse",
+        "type": "object"
+      },
       "EvidenceListOut": {
         "additionalProperties": false,
         "properties": {
@@ -3143,6 +3313,127 @@
           "total"
         ],
         "title": "EvidenceListOut",
+        "type": "object"
+      },
+      "EvidenceRowOut": {
+        "description": "Single evidence record as rendered in the sectioned roll-up.\n\nMirrors domain.evidence_repository.EvidenceRow (dataclass). 18\nfields, all always present. Optionals reflect the source dataclass:\nassessment_id / hash / uri may be None.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "ai_system_name": {
+            "title": "Ai System Name",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "evidence_type_pretty": {
+            "title": "Evidence Type Pretty",
+            "type": "string"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "immutable": {
+            "title": "Immutable",
+            "type": "boolean"
+          },
+          "linked_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Control Ids",
+            "type": "array"
+          },
+          "linked_finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "linked_frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Frameworks",
+            "type": "array"
+          },
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          },
+          "section_name": {
+            "title": "Section Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "id",
+          "ai_system_id",
+          "ai_system_name",
+          "evidence_type",
+          "evidence_type_pretty",
+          "section_id",
+          "section_name",
+          "source",
+          "collected_at",
+          "immutable",
+          "summary",
+          "linked_control_ids",
+          "linked_finding_ids",
+          "linked_frameworks"
+        ],
+        "title": "EvidenceRowOut",
         "type": "object"
       },
       "ExceptionRequest": {
@@ -7513,6 +7804,112 @@
         "title": "SearchResultItem",
         "type": "object"
       },
+      "SectionCatalogItem": {
+        "description": "One entry in the static section catalog.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "types"
+        ],
+        "title": "SectionCatalogItem",
+        "type": "object"
+      },
+      "SectionedResponse": {
+        "description": "Envelope for GET /sectioned.",
+        "properties": {
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionedSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope",
+          "sections"
+        ],
+        "title": "SectionedResponse",
+        "type": "object"
+      },
+      "SectionedSection": {
+        "description": "One section in the sectioned roll-up response.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          },
+          "section_name": {
+            "title": "Section Name",
+            "type": "string"
+          },
+          "type_filter": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Type Filter",
+            "type": "array"
+          }
+        },
+        "required": [
+          "section_id",
+          "section_name",
+          "type_filter",
+          "count",
+          "items"
+        ],
+        "title": "SectionedSection",
+        "type": "object"
+      },
+      "SectionsResponse": {
+        "description": "Envelope for GET /sections.",
+        "properties": {
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionCatalogItem"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "SectionsResponse",
+        "type": "object"
+      },
       "SimulatedRunOut": {
         "additionalProperties": false,
         "description": "Synchronous result of re-running the simulated eval suite for one system.\n\nNOT a JobResponse -- this endpoint completes inline; no background work.",
@@ -11581,7 +11978,7 @@
     "/api/grc/evidence/v2/completeness": {
       "get": {
         "description": "Evidence completeness along one of four axes.",
-        "operationId": "completeness_api_grc_evidence_v2_completeness_get",
+        "operationId": "evidence_v2_completeness_get",
         "parameters": [
           {
             "in": "query",
@@ -11609,9 +12006,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Completeness Api Grc Evidence V2 Completeness Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CompletenessResponse"
                 }
               }
             },
@@ -11637,7 +12032,7 @@
     "/api/grc/evidence/v2/sectioned": {
       "get": {
         "description": "All evidence grouped into the 8 spec'd sections.",
-        "operationId": "sectioned_api_grc_evidence_v2_sectioned_get",
+        "operationId": "evidence_v2_sectioned_get",
         "parameters": [
           {
             "in": "query",
@@ -11655,9 +12050,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Sectioned Api Grc Evidence V2 Sectioned Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SectionedResponse"
                 }
               }
             },
@@ -11683,15 +12076,13 @@
     "/api/grc/evidence/v2/sections": {
       "get": {
         "description": "Static section catalog with the evidence types in each.",
-        "operationId": "sections_api_grc_evidence_v2_sections_get",
+        "operationId": "evidence_v2_sections_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Sections Api Grc Evidence V2 Sections Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SectionsResponse"
                 }
               }
             },
@@ -11707,7 +12098,7 @@
     "/api/grc/evidence/v2/{evidence_id}": {
       "get": {
         "description": "Lookup a single evidence record by id (across all systems).",
-        "operationId": "evidence_by_id_api_grc_evidence_v2__evidence_id__get",
+        "operationId": "evidence_v2_record_get",
         "parameters": [
           {
             "in": "path",
@@ -11724,9 +12115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Evidence By Id Api Grc Evidence V2  Evidence Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/EvidenceDetailResponse"
                 }
               }
             },

@@ -5,14 +5,27 @@ Drives the audit-ready Evidence page:
   GET /api/grc/evidence/v2/completeness?axis=...        — 4 axes of coverage
   GET /api/grc/evidence/v2/sections                     — section catalog
   GET /api/grc/evidence/v2/{evidence_id}                — single record
+
+Session 29 — Track A OpenAPI sweep, per-router #5.
+All four routes get strict Pydantic v2 response models and stable
+operation_ids. Live UI consumer: static/evidence.html (sectioned +
+completeness only). All field shapes are deterministic upstream
+(dataclasses with fixed fields and the Evidence Pydantic model), so
+strict (no extra="allow") fits per compound rule 27a.
+
+The single-record endpoint mirrors the Evidence domain model field-by-
+field rather than typing it as dict — Evidence is stable and audit
+clients fetching by id genuinely benefit from a typed response shape.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from enum import Enum
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from domain.models import FrameworkName
 from domain.evidence_repository import (
@@ -29,6 +42,113 @@ from domain import repository
 router = APIRouter(prefix="/api/grc/evidence/v2", tags=["evidence-repository"])
 
 
+# ===========================================================================
+# Response models (Session 29 — Track A OpenAPI sweep, per-router #5)
+# ===========================================================================
+
+class SectionCatalogItem(BaseModel):
+    """One entry in the static section catalog."""
+    id: str
+    name: str
+    types: list[str]
+
+
+class SectionsResponse(BaseModel):
+    """Envelope for GET /sections."""
+    sections: list[SectionCatalogItem]
+
+
+class EvidenceRowOut(BaseModel):
+    """Single evidence record as rendered in the sectioned roll-up.
+
+    Mirrors domain.evidence_repository.EvidenceRow (dataclass). 18
+    fields, all always present. Optionals reflect the source dataclass:
+    assessment_id / hash / uri may be None.
+    """
+    id: str
+    ai_system_id: str
+    ai_system_name: str
+    assessment_id: Optional[str] = None
+    evidence_type: str
+    evidence_type_pretty: str
+    section_id: str
+    section_name: str
+    source: str
+    collected_at: str
+    hash: Optional[str] = None
+    immutable: bool
+    summary: str
+    uri: Optional[str] = None
+    linked_control_ids: list[str]
+    linked_finding_ids: list[str]
+    linked_frameworks: list[str]
+
+
+class SectionedSection(BaseModel):
+    """One section in the sectioned roll-up response."""
+    section_id: str
+    section_name: str
+    type_filter: list[str]
+    count: int
+    items: list[EvidenceRowOut]
+
+
+class SectionedResponse(BaseModel):
+    """Envelope for GET /sectioned."""
+    scope: str
+    sections: list[SectionedSection]
+
+
+class CompletenessRowOut(BaseModel):
+    """Single completeness row.
+
+    Mirrors domain.evidence_repository.CompletenessRow (dataclass).
+    `pct` is rounded to 1 decimal upstream; `missing` is already capped
+    at 10-15 items per row depending on axis.
+    """
+    label: str
+    present: int
+    required: int
+    pct: float
+    missing: list[str]
+
+
+class CompletenessResponse(BaseModel):
+    """Envelope for GET /completeness."""
+    axis: str
+    scope: str
+    rows: list[CompletenessRowOut]
+
+
+class EvidenceDetailResponse(BaseModel):
+    """Single Evidence record + resolved AI system name.
+
+    Mirrors domain.models.Evidence (Pydantic v2) field-by-field with
+    datetimes serialized as ISO strings (model_dump(mode="json")), plus
+    the resolved `ai_system_name` joined from the parent AI system. Kept
+    strict — the Evidence domain model is stable and audit clients
+    fetching by id benefit from a typed shape.
+    """
+    id: str
+    ai_system_id: str
+    ai_system_name: str
+    assessment_id: Optional[str] = None
+    evidence_type: str
+    source: str
+    uri: Optional[str] = None
+    hash: Optional[str] = None
+    collected_at: str
+    summary: str
+    immutable: bool
+    linked_control_ids: list[str]
+    linked_finding_ids: list[str]
+    linked_frameworks: list[str]
+
+
+# ===========================================================================
+# Serialization helper
+# ===========================================================================
+
 def _ser(o):
     if is_dataclass(o):
         return {k: _ser(v) for k, v in asdict(o).items()}
@@ -41,7 +161,15 @@ def _ser(o):
     return o
 
 
-@router.get("/sections")
+# ===========================================================================
+# Routes
+# ===========================================================================
+
+@router.get(
+    "/sections",
+    response_model=SectionsResponse,
+    operation_id="evidence_v2_sections_get",
+)
 async def sections() -> dict:
     """Static section catalog with the evidence types in each."""
     return {
@@ -52,7 +180,11 @@ async def sections() -> dict:
     }
 
 
-@router.get("/sectioned")
+@router.get(
+    "/sectioned",
+    response_model=SectionedResponse,
+    operation_id="evidence_v2_sectioned_get",
+)
 async def sectioned(scope: str = "ALL") -> dict:
     """All evidence grouped into the 8 spec'd sections."""
     grouped = list_evidence_sectioned(scope=scope)
@@ -76,7 +208,11 @@ async def sectioned(scope: str = "ALL") -> dict:
     return {"scope": scope, "sections": out}
 
 
-@router.get("/completeness")
+@router.get(
+    "/completeness",
+    response_model=CompletenessResponse,
+    operation_id="evidence_v2_completeness_get",
+)
 async def completeness(axis: str = "ai_system", scope: str = "ALL") -> dict:
     """Evidence completeness along one of four axes."""
     axis = axis.lower()
@@ -100,7 +236,11 @@ async def completeness(axis: str = "ai_system", scope: str = "ALL") -> dict:
     return {"axis": axis, "scope": scope, "rows": [_ser(r) for r in rows]}
 
 
-@router.get("/{evidence_id}")
+@router.get(
+    "/{evidence_id}",
+    response_model=EvidenceDetailResponse,
+    operation_id="evidence_v2_record_get",
+)
 async def evidence_by_id(evidence_id: str) -> dict:
     """Lookup a single evidence record by id (across all systems)."""
     for s in repository.list_ai_systems():
