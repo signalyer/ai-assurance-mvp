@@ -1,12 +1,29 @@
 """FastAPI router for Agent Binding endpoints — Session 07.
 
 Endpoints:
-    GET    /api/systems/{system_id}/bindings
-    POST   /api/systems/{system_id}/bindings
-    PATCH  /api/systems/{system_id}/bindings/{binding_id}
-    DELETE /api/systems/{system_id}/bindings/{binding_id}
+    GET    /api/systems/{system_id}/bindings        → list[AgentBindingOut]
+    POST   /api/systems/{system_id}/bindings        → AgentBindingOut (201)
+    PATCH  /api/systems/{system_id}/bindings/{id}   → AgentBindingOut
+    DELETE /api/systems/{system_id}/bindings/{id}   → 204 No Content (bare)
 
 All domain calls are sync (Postgres); dispatched via asyncio.to_thread.
+
+OpenAPI typing — Session 36 (sweep 21/40):
+    All four routes carry `operation_id. Three of four carry
+    `response_model (AgentBindingOut / list[AgentBindingOut]).
+
+    DELETE is intentionally bare per compound 26a — returns
+    `Response(status_code=204)` (no body). OpenAPI's 204 status
+    forbids a response body, so `response_model would be misleading.
+    Consumer (static/ai-systems.html) reads `response.ok` only.
+
+    AgentBindingOut uses `ConfigDict(extra='allow')` because
+    domain.agent_bindings.list_bindings_for_system enriches the base
+    AgentBinding with agent_name / agent_team / agent_owner_type /
+    version_semver fields (joined from agents + versions tables). The
+    base schema only declares the three id fields the wire contract
+    guarantees; `extra='allow'` preserves the enrichment without
+    forcing a polymorphic model.
 """
 from __future__ import annotations
 
