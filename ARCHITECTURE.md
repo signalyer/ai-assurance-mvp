@@ -912,50 +912,77 @@ Step 0 for the decision gate.
 Verification: `python -c "import api.memory"` passes, route inspection
 via 24c grep returns 5/5/5, canonical exporter spec round-trip clean.
 
+### Session 35 (Track A eleventh router — api/rag.py + compound 28a observation #2)
+S35 plan reframed from "dedicated 28a fix" to "observation phase" after
+S34 closeout `d5b36de` broke the 5/5 streak. Step 0 observation ran first,
+then per the plan's "if S34 was a flake, do nothing" branch, S35 returned
+to the OpenAPI sweep with `api/rag.py` (the 4/4/0 sibling of S34's memory.py).
+
+**Compound 28a observation results (2 new data points).** Re-verification
+via `gh run list` against recent commits:
+
+| Commit | Shape | Deploy fired? |
+|---|---|---|
+| `37458cd` (S33 closeout) | modify+delete+add | YES — 26378651826 |
+| `19e794a` (S34 Track A code) | code change | YES — 26378823188 |
+| `d5b36de` (S34 closeout) | modify+delete+add | **NO** |
+| `0d8ff1c` (S35 reframe) | modify-only | **NO** |
+| `12e3908` (S35 Track A code) | code change | YES — expected |
+
+Two consecutive doc-only commits correctly suppressed. State is now
+"intermittent: 3/5 prior closeouts triggered, last 2 did not."
+**Workflow unchanged this session per plan.** This very closeout is
+observation data point #3 — record its deploy outcome at S36 start.
+
+`api/rag.py` sweep: 4 routes, all already had `response_model=` from
+Session 18; added `operation_id=` to all four following the locked
+`<prefix>_<verb>` convention:
+- `GET /stats` → `rag_get_stats`
+- `POST /search` → `rag_search`
+- `POST /documents` → `rag_index_document`
+- `DELETE /documents/{doc_id}` → `rag_delete_document`
+
+No response model changes, no consumer surface impact. Sole consumer
+`team-portal/src/pages/rag/RagCorpusPage.tsx` reads by path, not op_id.
+
+Compound 24c probe post-edit: `api/rag.py` 4/4/4. Import smoke clean.
+Spec regen via `python scripts/export_openapi.py` (compound 24d applied
+first try): exactly +4/-4 lines, four operationId swaps. Zero key-reorder
+noise — clean diff consistent with the canonical exporter contract.
+
+**Sweep progress:** 11 routers shipped by this initiative (security +
+reports + analytics + connectors + evidence + domains_api + adversarial
++ frameworks + projection + memory + rag). **Sweep counter: 20/40
+fully typed** (19 carried from S34 + rag.py this session).
+
+Verification: `python -c "import api.rag"` passes, route inspection
+via 24c grep returns 4/4/4, canonical exporter spec round-trip clean.
+
 ## Files — Planned
 
-### Session 35 — Dedicated compound 28a fix (deploy.yml paths-ignore)
-**Promoted from open carry-over.** 5/5 doc-only closeout commits
-have triggered the deploy workflow despite paths-ignore globs in
-[.github/workflows/deploy.yml](.github/workflows/deploy.yml) intended
-to suppress them. Pattern is fully characterized; root cause is
-almost certainly the modify+delete+add shape — GitHub evaluates
-paths-ignore against the diff set, and the added file
-(`SESSION-N+1-*.md`) may match a path *outside* the ignore globs
-even though the deleted + modified files are within them. Fix likely:
-broaden globs OR switch to a `paths:` allowlist for code-only files.
+### Session 36 — OpenAPI sweep router 12 + compound 28a data point #4
+Two threads:
+1. **Compound 28a observation #3** — log whether this session's closeout
+   commit triggered deploy. Running tally goes into the S35 table above
+   plus the SESSION-36 plan.
+2. **Track A twelfth sweep target: `api/agent_bindings.py`** (4 routes,
+   3 response_models, 4 op_ids per S34 recount — needs one missing
+   `response_model=` added; smallest delta in the partials list now that
+   rag.py is done).
 
-S35 scope:
-1. Reproduce: inspect the actual diff filesets for one of the 5
-   triggering runs (`gh run view <run-id> --json`) to confirm which
-   path bypassed the ignore.
-2. Decide: broaden `paths-ignore` (e.g. add `**/docs/plans/**`,
-   `**/ARCHITECTURE.md`) vs flip to `paths` allowlist scoped to
-   `api/**`, `domain/**`, `middleware/**`, `static/**`, `team-portal/**`,
-   `dashboard.py`, `requirements*.txt`, `deploy/**`.
-3. Implement minimal change; smoke against the S34 closeout commit
-   (the 6th data point — confirm it triggered) then push S35 closeout
-   as the verification commit (should NOT trigger if fix works).
-
-Track A in S35 is the deploy fix itself. Closeout/Track B is the
-ARCHITECTURE entry + SESSION-36 plan (which returns to the OpenAPI
-sweep — recommended target `api/rag.py`, identical 4/4/0 shape to
-this session's memory.py — pure op_id stamping).
-
-### Sessions 36+ — OpenAPI sweep continuation (resumes after S35)
-Post-S34 sweep state: **19/40 routers fully typed.** Empirical recount
+### Sessions 37+ — OpenAPI sweep continuation
+Post-S35 sweep state: **20/40 routers fully typed.** Empirical recount
 output (preserve verbatim for next-session carry-over):
 
 ```
-Fully clean (18 prior + memory this session = 19):
+Fully clean (19 prior + rag this session = 20):
   agents, ai_system_edit, audit_verify, batch, connectors,
   domains_api, evals_v2, evidence, findings_v2, grc, intake,
   projection, release_gates, right_to_forget, runtime_v2,
-  security, frameworks, adversarial, memory
+  security, frameworks, adversarial, memory, rag
 
-Partial (5 candidates — apply 24c before committing):
-  api/rag.py             4 / 4 / 0   (identical shape to memory — cleanest)
-  api/agent_bindings.py  4 / 3 / 4   (1 missing response_model)
+Partial (4 candidates — apply 24c before committing):
+  api/agent_bindings.py  4 / 3 / 4   (1 missing response_model — S36 target)
   api/analytics.py       5 / 3 / 5   (2 missing response_model)
   api/reports.py         6 / 3 / 6   (3 missing response_model)
   api/assurance_model.py 5 / 12 / 12 (grep over-counting — needs visual check)
