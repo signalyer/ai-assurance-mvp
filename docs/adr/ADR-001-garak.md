@@ -1,6 +1,6 @@
 # ADR-001 — Garak integration shape
 
-- **Status:** Accepted (Session 24, 2026-05-24). Originally Proposed in Session 23. Acceptance unblocks Sessions 25-26 (sidecar implementation) but does not schedule them — they remain independent of the V2 critical path per §7.
+- **Status:** Accepted (Session 24, 2026-05-24). Originally Proposed in Session 23. Reconfirmed and scheduled in Session 48 (2026-05-26) — implementation lands in S50 (sidecar + Bicep) and S51 (UI + bridge + integration test). Closing-as-out-of-scope was the explicit alternative considered in S48 STEP 4 and rejected: adversarial breadth is a load-bearing assurance pillar for the demo narrative and post-demo customer conversations.
 - **Deciders:** Praveen Kosuri
 - **Supersedes:** none
 - **Related:** Session 18 (`api/adversarial.py` SSE), Session 20 (`adversarial.py` parallelization), Session 12 (deploy-zip slim-down rule)

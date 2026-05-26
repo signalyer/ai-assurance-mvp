@@ -1487,6 +1487,28 @@ S47 started as housekeeping (V1 deprecation watch cadence — completed) but piv
 
 **Trajectory:** V2 LIVE and fully functional after `demo-engineer` and `demo-ciso` login. Register-new-system flow remains the one user-visible feature gap (interim workaround: log in to engine and use legacy `static/ai-systems-new.html` directly). Two compound rules added. S48 picks up: register page port (A/B/C decision), regression smoke, and the still-pending S47 housekeeping items (parameters.dev.json + Garak ADR-001).
 
+### Session 48 — Register-AI-System V2 port + S47 housekeeping + Entra OIDC commitment
+
+**Closeout state:**
+- **STEP 1 — Register page (Option A: full Preact port).** `team-portal/src/pages/ai-systems/RegisterSystemPage.tsx` (5-step wizard, signal-based state, debounced `/grc/intake/preview`, full V1 field parity). Route `/ai-systems/new` wired in `team-portal/src/app.tsx`. Wizard CSS ported from `static/shared.css:1022-1110` into `team-portal/src/shared/styles/base.css`. Verified locally via preview server: 5 steps render, step nav advances, chip/switch toggles wired, preview API call shape correct via Vite proxy, typecheck clean. End-to-end submit verification requires post-deploy smoke against live engine. Commit `86a94e6`.
+- **STEP 2 — Subroute regression smoke (S47 #1 compound rule).** `deploy/smoke_portal.ps1` + `deploy/smoke_gov.ps1` extended from 3 probes to 5. Probe 4 fetches a client-side subroute and asserts the SPA shell is in the body (catches missing `staticwebapp.config.json`); Probe 5 logs in as `demo-engineer` / `demo-ciso` against the engine and makes an authed API call (catches the cross-subdomain cookie chain breaking). Credentials sourced from `$env:SMOKE_DEMO_PASSWORD_ENGINEER` / `$env:SMOKE_DEMO_PASSWORD_CISO` per Q2 decision (1Password env-vars); SKIPS when unset rather than failing. Doc headers updated.
+- **STEP 3 — `parameters.dev.json` exhaustive (per Q3).** All 16 parameters declared in `main.bicep` now have explicit values. Toggles (`deployAlerts`, `deployTeamPortal`, `deployCisoConsole`, `deployStagingSlot`) all `false`; flipping any to `true` is the single edit needed. `webAppLocation` corrected from stale `westus2` default to `eastus` to match live App Service. Acceptance: `az deployment group create --template-file main.bicep --parameters @parameters.dev.json` works with zero `--parameters KEY=VALUE` overrides for routine no-op redeploy.
+- **STEP 4 — Garak ADR-001 reconfirmed (per Q4 = Accept).** Status line amended in `docs/adr/ADR-001-garak.md` — implementation now scheduled for S50 (sidecar + Bicep) and S51 (UI + bridge + integration test). Close-as-out-of-scope was the explicit alternative and was rejected: adversarial breadth is a load-bearing pillar for the demo narrative and post-demo customer conversations.
+
+**Mid-session pivot — Entra OIDC committed for S49+S50.** User asked how to add Entra users for portal/CISO login. Today there is no path: SPAs authenticate against engine bcrypt-hashed demo-role users (`demo-engineer`, `demo-ciso`, etc.) pushed via `az webapp config appsettings set`; Entra integration with engine was the deferred `[[entra-engine-bridge]]` workstream. Locked decision after sequencing question (Q-mid-session): finish S48 first, then S49 = Entra app registration + engine OIDC (authlib/MSAL + `middleware/auth.py` rework + Key Vault for client secret + group-claim → demo-role enum mapping with bcrypt fallback for E2E/smoke), S50 = SPA login UI + cutover + post-demo demo-creds disable. Three architectural anchors locked in conversation: (1) **engine-level OIDC, not SWA-level** — SWA Entra auth would gate static files but not the API, creating two identity systems; engine-as-authority preserves the single-cookie chain on `.aigovern.sandboxhub.co`. (2) **bcrypt fallback non-negotiable for the demo window** — smoke scripts + E2E tests can't break the moment Entra ships; feature-flag `ALLOW_DEMO_AUTH=true` to disable post-demo. (3) **Key Vault enters the architecture for the Entra client secret** — global CLAUDE.md says "no Key Vault for demo builds" but long-lived Entra secrets cannot live in `appsettings.json` checked into git; small isolated KV + managed identity scope. ADR-002-entra-oidc.md to be drafted at S49 open.
+
+**Live state at S48 close:**
+- Production sha: `d6f9a8d` (engine, unchanged from S47).
+- SPA prod sha: `86a94e6` after manual `swa deploy ./dist --deployment-token $portalTok --env production` to `swa-aigovern-portal-dev` (operator step; engine slot-swap CI does not cover SPAs per locked decision).
+- V1 deprecation streak continues per S47 STEP 2 manual cadence — hard-stop `2026-07-02`.
+
+**Compound rules — none new this session.** S47 #1 was codified by STEP 2; S47 #2 ([[bash-cwd-persistence]]) held throughout (single-target SPA deploy this session, but absolute paths used).
+
+**Known open at S48 close:**
+- ARCHITECTURE.md V1 deprecation watch table needs a streak-counter row added when next probe runs (manual cadence per S47 STEP 2).
+- S48 STEP 1 deploy verification (live smoke on `https://portal.aigovern.sandboxhub.co/ai-systems/new` end-to-end submit) — pending operator deploy and post-deploy run of `deploy/smoke_portal.ps1` with `SMOKE_DEMO_PASSWORD_ENGINEER` set.
+- Entra OIDC (S49+S50) — see mid-session pivot above. S49 plan file to be authored at session open.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)

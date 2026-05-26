@@ -5,18 +5,23 @@
     "location": {
       "value": "eastus"
     },
-    "appName": {
-      "value": "app-aigovern-dev"
-    },
     "workspaceName": {
       "value": "log-aigovern-dev"
     },
     "appInsightsName": {
       "value": "appi-aigovern-dev"
     },
+    "appName": {
+      "value": "app-aigovern-dev"
+    },
     "actionGroupId": {
       "value": "/subscriptions/06E4C6FA-8B0F-4E4A-B993-E0FD21EB22A3/resourceGroups/rg-aigovern-dev/providers/microsoft.insights/actionGroups/ag-aigovern-dev"
     },
+
+    "deployAlerts": {
+      "value": false
+    },
+
     "deployTeamPortal": {
       "value": false
     },
@@ -28,6 +33,32 @@
     },
     "teamPortalSwaSku": {
       "value": "Free"
+    },
+
+    "deployCisoConsole": {
+      "value": false
+    },
+    "cisoConsoleLocation": {
+      "value": "eastus2"
+    },
+    "cisoConsoleSwaName": {
+      "value": "swa-aigovern-gov-dev"
+    },
+    "cisoConsoleSwaSku": {
+      "value": "Free"
+    },
+
+    "deployStagingSlot": {
+      "value": false
+    },
+    "webAppName": {
+      "value": "app-aigovern-dev"
+    },
+    "webAppLocation": {
+      "value": "eastus"
+    },
+    "stagingSlotName": {
+      "value": "staging"
     }
   }
 }
