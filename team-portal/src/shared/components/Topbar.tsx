@@ -2,6 +2,7 @@ import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { apiGet, apiPost } from '../api/client';
 import type { WhoAmI } from '../api/types';
+import { DataModeToggle } from './DataModeToggle';
 
 const identity = signal<WhoAmI | null>(null);
 
@@ -30,6 +31,7 @@ export function Topbar() {
         <input type="text" placeholder="Search systems, findings, policies..." />
       </div>
       <div class="topbar-right">
+        <DataModeToggle />
         <div class="user-block">
           <div class="user-avatar">{initials}</div>
           <div class="user-info">

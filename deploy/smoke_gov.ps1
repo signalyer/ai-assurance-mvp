@@ -225,6 +225,60 @@ Invoke-Probe -Name "6. Auth feature-flags (GET /api/auth/config → oidc_enabled
 }
 
 # ---------------------------------------------------------------------------
+# Probe 7 — V1/V2 data-mode contract (S52)
+# Verifies the X-Data-Mode header changes what /grc/ai-systems returns:
+#   v1 (or absent) → seeded portfolio (≥1 row in any reasonable env)
+#   v2             → only rows tagged data_source='real' (≤ count(v1))
+# The schema is identical across modes — only the row set differs.
+# Skips if $env:SMOKE_DEMO_PASSWORD_CISO is unset (auth required).
+# ---------------------------------------------------------------------------
+Invoke-Probe -Name "7. Data-mode contract (X-Data-Mode v1 vs v2 → count(v2) <= count(v1))" -ScriptBlock {
+    if (-not $DemoPass) {
+        Write-Host " (skipped — `$env:SMOKE_DEMO_PASSWORD_CISO not set)" -NoNewline -ForegroundColor DarkYellow
+        return
+    }
+    $loginBody = @{ username = $DemoUser; password = $DemoPass; next = '/' }
+    $loginResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/auth/login" `
+        -Method POST `
+        -Body $loginBody `
+        -SessionVariable smokeSession `
+        -MaximumRedirection 0 `
+        -SkipHttpErrorCheck `
+        -ErrorAction Stop
+    if ($loginResp.StatusCode -ne 200 -and $loginResp.StatusCode -ne 302 -and $loginResp.StatusCode -ne 303) {
+        throw "Login failed: HTTP $($loginResp.StatusCode)"
+    }
+
+    $v1Resp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/grc/ai-systems" `
+        -Method GET `
+        -Headers @{ "X-Data-Mode" = "v1" } `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($v1Resp.StatusCode -ne 200) { throw "V1 call returned HTTP $($v1Resp.StatusCode)" }
+    $v1Json = $v1Resp.Content | ConvertFrom-Json
+    if (-not $v1Json.PSObject.Properties['systems']) { throw "V1 response missing 'systems' field" }
+    $v1Count = @($v1Json.systems).Count
+
+    $v2Resp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/grc/ai-systems" `
+        -Method GET `
+        -Headers @{ "X-Data-Mode" = "v2" } `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($v2Resp.StatusCode -ne 200) { throw "V2 call returned HTTP $($v2Resp.StatusCode)" }
+    $v2Json = $v2Resp.Content | ConvertFrom-Json
+    if (-not $v2Json.PSObject.Properties['systems']) { throw "V2 response missing 'systems' field — schema forked on mode (bug)" }
+    $v2Count = @($v2Json.systems).Count
+
+    if ($v2Count -gt $v1Count) {
+        throw "Invariant violated: V2 returned more rows ($v2Count) than V1 ($v1Count) — filter logic inverted"
+    }
+    Write-Host " (v1=$v1Count, v2=$v2Count)" -NoNewline -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""

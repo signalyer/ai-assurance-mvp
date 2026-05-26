@@ -7,6 +7,17 @@
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '');
 
+// S52: Reads localStorage directly (not the signal) so this module has no
+// dependency on the toggle component. Tolerates absent localStorage (e.g.
+// SSR or private mode) and defaults to 'v1'.
+function readDataMode(): 'v1' | 'v2' {
+  try {
+    return window.localStorage.getItem('aigovern_data_mode') === 'v2' ? 'v2' : 'v1';
+  } catch {
+    return 'v1';
+  }
+}
+
 export type ApiOk<T> = { ok: true; status: number; data: T };
 export type ApiErr = { ok: false; status: number; detail: string; trace_id?: string };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
@@ -36,7 +47,7 @@ export async function apiRequest<T>(path: string, req: ApiRequest = {}): Promise
   const init: RequestInit = {
     method,
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', 'X-Data-Mode': readDataMode() },
   };
   if (signal) init.signal = signal;
   if (body !== undefined) {

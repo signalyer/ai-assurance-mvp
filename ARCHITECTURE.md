@@ -1590,6 +1590,42 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 - Pre-existing `tests/test_session10_hardening.py::test_rtf_index_sidecar_used` failure — RTF sidecar signature drift, still orthogonal.
 - A1 OpenAPI hardening (per-router series) — 5/25 done as of S29; resume when convenient.
 
+### Session 52 — V1/V2 data-mode toggle + real-mode intake
+
+**Theme:** Make every page in both portals consciously V1 (seeded demo portfolio) OR V2 (real customer systems). The `data_source` field on every persisted row is now an **architectural invariant** — any new domain entity MUST include it.
+
+**STEP 1 (commit [`700842a`](https://github.com/signalyer/ai-assurance-mvp/commit/700842a)) — engine field + filter dependency:**
+- [domain/models.py](domain/models.py) — `data_source: Literal["seed","real"] = "seed"` on 8 entities: AISystem, Finding, EvalResult, Evidence, Agent, AgentVersion, Policy, ReleaseGate. **Plan deviation:** plan said `source`, but `Evidence.source: str` already exists with different semantics ("tool that produced the evidence"). Renamed to `data_source` everywhere; X-Data-Mode header name unchanged.
+- [middleware/data_mode.py](middleware/data_mode.py) — NEW. `get_data_mode(request)` reads `X-Data-Mode` header (defaults `v1`, tolerant of missing/malformed). `filter_by_mode(rows, mode)` works on dicts or Pydantic models, treats missing field as `"seed"`. V1 = no filter; V2 = only `data_source=="real"`.
+- [migrations/052_source_field.sql](migrations/052_source_field.sql) — NEW. Adds `data_source TEXT NOT NULL DEFAULT 'seed'` to 5 projection tables (ai_systems, eval_runs, findings, release_decisions, policy_evaluations) + indexes on the high-volume ones. Idempotent.
+- Engine list endpoints honoring `X-Data-Mode`: [api/grc.py](api/grc.py) `/ai-systems`, `/findings`, `/policies`, `/evidence`; [api/findings_v2.py](api/findings_v2.py) `/list`; [api/agents.py](api/agents.py) `GET /agents`. Response models gained `data_source: str = "seed"` to tolerate the new field under `extra="forbid"`.
+- [api/intake.py](api/intake.py) — `_build_ai_system` carries `data_source="real"`; release gates created during `submit_intake` inherit the tag.
+
+**STEPS 3 + 4 (this commit) — SPA toggle + header injection:**
+- [ciso-console/src/shared/components/DataModeToggle.tsx](ciso-console/src/shared/components/DataModeToggle.tsx) + [team-portal/src/shared/components/DataModeToggle.tsx](team-portal/src/shared/components/DataModeToggle.tsx) — NEW, identical files. Module-level signal initialized from `localStorage.getItem('aigovern_data_mode')`. Pill-shaped button next to user-block; green dot + "Live data" when V2, slate dot + "Demo data" when V1. On flip: writes `localStorage`, updates signal, `window.location.reload()` so every list re-fetches under the new mode.
+- [ciso-console/src/shared/components/Topbar.tsx](ciso-console/src/shared/components/Topbar.tsx) + [team-portal/src/shared/components/Topbar.tsx](team-portal/src/shared/components/Topbar.tsx) — mount `<DataModeToggle />` in `topbar-right` ahead of the user-block.
+- [ciso-console/src/shared/api/client.ts](ciso-console/src/shared/api/client.ts) + [team-portal/src/shared/api/client.ts](team-portal/src/shared/api/client.ts) — `apiRequest` now injects `X-Data-Mode: v1|v2` on every request. Reads `localStorage` directly (not the signal) so the client module has no dependency on the toggle component — tolerates private-mode failures.
+
+**STEP 5 — smoke probe:**
+- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) + [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) — Probe 7: log in with demo-role, GET `/grc/ai-systems` once with `X-Data-Mode: v1` and again with `X-Data-Mode: v2`, assert `count(v2) <= count(v1)` and that both responses have the `systems` field (schema unchanged across modes). Skips when the role password env var is unset, matches the Probe 5 auth pattern. Not yet live-verified against prod — STEP 1 deployed, SPA bundles + smoke Probe 7 ready to verify next deploy cycle.
+
+**Locked decisions (from S50 close — see `memory/project_v1_to_v2_real_data_arc.md`):**
+- SDK-first telemetry, not URL-probe.
+- localStorage toggle (per-origin), not URL param, not user-profile. Default `v1`. Toggle is a kill switch.
+- One discriminator field (`data_source`), not separate tables. Architectural invariant going forward.
+- Engine filters server-side; SPA never sees seed rows in V2 mode.
+- Minimal 6-field intake; expand in S56+.
+
+**Compound rules earned this session:**
+- **S52 #1:** Field names like `source` collide silently — `Evidence.source` already meant "tool that produced the evidence" and Pydantic v2's literal validator caught the displacement only when `domain/seed.py` imported and tried to pass `"AppSec"` to the new literal field. Before adding a "generic" field name across many entities, grep first for collisions; rename your new field if there's any prior art.
+
+**Known open at S52 close:**
+- STEP 2 deferred sub-tasks: V2-mode empty-state CTAs across list pages ("Register your first system →", "Learn how to instrument →"). The toggle + filter is load-bearing; the empty-state copy is polish that can land alongside S53's SDK onboarding wizard.
+- Endpoints NOT yet wired to the data-mode filter (deferred — flag for later in the arc): `api/release_gates.py` (gate listings flow via `RELEASE_GATE_RESULTS` mock dict in grc.py and need a separate pass), `api/evidence.py` `/v2/sectioned` + `/v2/completeness` (aggregations need domain-layer plumbing), `api/frameworks.py` `/matrix` (already accepts `Request` but `framework_matrix()` aggregator needs an explicit mode param), `api/analytics.py`, `api/reports.py`, `api/agent_bindings.py` (per-system endpoints inherit filtering through their system).
+- Memory pending update: `memory/project_v1_to_v2_real_data_arc.md` should note the `source → data_source` rename.
+- Live smoke Probe 7 not yet executed against prod (S48 #1 — run smoke live before declaring done; deferred to the post-deploy verification step of this session).
+- Garak deep-scan (independent track) and bcrypt cutover (operator step) both unchanged from S50 close.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
