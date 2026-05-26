@@ -126,4 +126,39 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 
 ---
 
+### F-009 · PLATFORM-GAP · Deploy zip ships data/ — every CI deploy wipes all runtime state (P0)
+
+**Found:** P2 dry-run, 2026-05-26 — caught when a freshly-issued SDK key returned 404 from `/api/sdk-keys/{key_id}/status` after a routine CI deploy 12 minutes after issuance.
+**Where:** [deploy/build-zip.py:51](../../deploy/build-zip.py) — `INCLUDE = [..., "data"]`
+**What:** The deploy zip bakes in `data/` from the local repo. The local repo's `data/sdk_keys.jsonl` has 3 stale seed keys against `sys-payments-001`. On every CI deploy, the App Service zip extraction overwrites the prod runtime `data/sdk_keys.jsonl` (and every other writable JSONL under `data/`) with the repo's stale snapshot. Effects observed in this session:
+- Wizard-issued `slk_a0f3aae8` (P1 outcome): wiped 12 min after issuance, before P2 could call it.
+- API-issued `slk_ba951763` (debug key): wiped within the same window.
+- The deploy that wiped them was 4b91121 (S55 #1, mounting `/api/sdk/health`).
+
+**Other data lost on every deploy (inferred — full audit pending):**
+- `ai_systems.jsonl` (every real-mode AI system intake)
+- `findings_events.jsonl` (every CISO finding)
+- `assurance_audit.jsonl` (chain-of-custody for every approval / decision — the chain is supposed to be append-only and cryptographically linked; deploys break the chain)
+- `runtime_state.jsonl`, `runtime_approvals.jsonl`, `runtime_incidents.jsonl` (every production state transition)
+- `assessments.jsonl`, `events.jsonl`, `release_gates.jsonl`, `rtf_completed_index.jsonl`, `simulated_eval_runs.jsonl`, `policy_decisions.jsonl`, `guardrail_violations.jsonl`, `injection_attempts.jsonl`, `connector_*.jsonl`, ...
+
+**Why smoke didn't catch it:** Smoke Probe 8 (F-007) issues a key and revokes it in the same process invocation — never spans a deploy. Smoke 7 measures `count(v2)` against `count(v1)`, both of which are static seeds.
+
+**Impact:** CRITICAL. The platform's persistence model is broken end-to-end. Every customer-visible state — intakes, keys, findings, approvals, audit chain — is silently truncated on every push to main. The audit chain claim (cryptographic chain-of-custody) is structurally false: each deploy creates a discontinuity.
+
+**Workaround in POC:** Resolved this session — removed `"data"` from `build-zip.py` INCLUDE list. `storage._read_jsonl()` returns `[]` on missing files; `storage._append_jsonl()` creates in append mode. First request after deploy will recreate `data/` empty; new state accumulates there until the App Service container is rebuilt (which is rare; App Service plan persistence carries state across container restarts within the same plan).
+
+**Real fix (S56+):** Move runtime data off the App Service filesystem into proper persistence. Options:
+- Cosmos DB (per-JSONL-file as a container) — best fit for the existing `_append_jsonl`/`_read_jsonl` shape.
+- Azure Storage Blob (one blob per JSONL, append-blob type).
+- Azure Files mounted volume (least change to existing code).
+
+**Compound rule (memory):** Any deploy artifact that bundles "data" or "state" alongside code is a footgun on every deploy. The platform's "stateless container" assumption must apply to the artifact, not just the runtime. Sibling of S54 #2 (slot swap wipes non-sticky settings) — same class of "silent overwrite via deploy mechanism."
+
+**Status:** PARTIALLY RESOLVED 2026-05-26 — fix prevents future wipes but does NOT restore lost prod state. P1 wizard-issued key + system are gone; user must re-register if desired.
+
+**Priority:** P0 (critical correctness)
+
+---
+
 _(Append further findings below as P1-P10 progress.)_

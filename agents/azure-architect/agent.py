@@ -77,8 +77,9 @@ async def dry_run() -> None:
     print(f"[chain] {chain_result}")
 
     # Make an actual HMAC-signed request so the engine records first_seen_at.
+    # /api/sdk/health was shipped in S55 #1 to close F-008.
     client = signallayer.get_client()
-    http_result = client.get("/api/sdk/ping")
+    http_result = client.get("/api/sdk/health")
     print(f"[http]  status={http_result.status_code} payload={http_result!s}")
 
 

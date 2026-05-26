@@ -48,7 +48,15 @@ INCLUDE = [
     "report.py",
     "domains.py",
     "domains",
-    "data",
+    # S55 #2 / F-009: do NOT ship data/. Every JSONL under data/ is runtime-
+    # writable state (SDK keys, AI systems, findings, audit chain, etc.).
+    # Including the local repo's data/ in the zip overwrites all runtime
+    # state on every deploy — wiping every customer-issued SDK key, every
+    # registered AI system, every finding, etc. storage._read_jsonl()
+    # returns [] on missing files and storage._append_jsonl() creates them
+    # in append mode, so a fresh App Service container handles the empty
+    # state gracefully. Demo seed data lives in domain/seed.py (Python),
+    # not data/*.jsonl. — see POC-RETROSPECTIVE.md F-009.
 ]
 # Note: encryption.py (cryptography), run.py + ragas_evaluator.py (deepeval/ragas/garak)
 # intentionally NOT included — they pull heavy deps and aren't on the dashboard runtime path.
