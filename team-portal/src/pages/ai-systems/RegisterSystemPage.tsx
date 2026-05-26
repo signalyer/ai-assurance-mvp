@@ -289,7 +289,33 @@ function Step1() {
   );
 }
 
+// S55 F-002 patch: cloud-conditional chip catalog. Backend field `aws_services`
+// kept as-is (rename to `cloud_services` tracked as F-003); accepts any list[str].
+const CLOUD_SERVICE_CATALOG: Record<string, string[]> = {
+  AWS: [
+    'Bedrock','Lambda','ECS','EKS','S3','OpenSearch','Aurora','DynamoDB',
+    'API Gateway','Step Functions','CloudWatch','CloudTrail','KMS','IAM','VPC Endpoints',
+  ],
+  AZURE: [
+    'Azure OpenAI','AI Foundry','Functions','App Service','Container Apps','AKS',
+    'Blob Storage','Cosmos DB','AI Search','API Management','Logic Apps',
+    'Monitor','Key Vault','Entra ID','Private Endpoints',
+  ],
+  GCP: [
+    'Vertex AI','Cloud Functions','Cloud Run','GKE','Cloud Storage','BigQuery',
+    'Firestore','API Gateway','Cloud Logging','Cloud KMS','IAM','VPC Service Controls',
+  ],
+  ON_PREM: [],
+  MULTI: [],
+};
+
 function Step2() {
+  const cloud = state.value.cloud_provider || 'AWS';
+  const serviceOptions = CLOUD_SERVICE_CATALOG[cloud] ?? [];
+  const servicesLabel = cloud === 'AWS' ? 'AWS Services Used'
+                      : cloud === 'AZURE' ? 'Azure Services Used'
+                      : cloud === 'GCP' ? 'GCP Services Used'
+                      : 'Cloud Services Used';
   return (
     <>
       <div class="card-header"><div>
@@ -297,15 +323,22 @@ function Step2() {
         <div class="card-subtitle">Cloud, model, RAG, tools, external integrations</div>
       </div></div>
       <div class="form-grid">
-        <SelectField label="Cloud Provider" field="cloud_provider" required options={['AWS']} />
-        <InputField label="Model Provider" field="model_provider" placeholder="e.g. Anthropic via AWS Bedrock" />
-        <ChipsField label="AWS Services Used" field="aws_services" options={[
-          'Bedrock','Lambda','ECS','EKS','S3','OpenSearch','Aurora','DynamoDB',
-          'API Gateway','Step Functions','CloudWatch','CloudTrail','KMS','IAM','VPC Endpoints',
+        <SelectField label="Cloud Provider" field="cloud_provider" required options={[
+          { value: 'AWS', label: 'AWS' },
+          { value: 'AZURE', label: 'Azure' },
+          { value: 'GCP', label: 'GCP' },
+          { value: 'ON_PREM', label: 'On-prem' },
+          { value: 'MULTI', label: 'Multi-cloud' },
         ]} />
+        <InputField label="Model Provider" field="model_provider" placeholder="e.g. Anthropic direct, AWS Bedrock, Azure OpenAI, Vertex AI" />
+        {serviceOptions.length > 0
+          ? <ChipsField label={servicesLabel} field="aws_services" options={serviceOptions} />
+          : <InputField label={servicesLabel} field="model_provider" placeholder="No catalog for this cloud — describe services in free text via Model Provider field above" />
+        }
         <ChipsField label="Models Used" field="models_used" options={[
           'claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5',
-          'gpt-4o','amazon.titan-text-express','amazon.nova-pro','internal-fine-tune',
+          'gpt-4o','gpt-4-turbo','amazon.titan-text-express','amazon.nova-pro',
+          'gemini-1.5-pro','internal-fine-tune',
         ]} />
         <SwitchField label="RAG enabled" field="rag_enabled" help="Does this system retrieve from a knowledge base before answering?" />
         <InputField label="Vector Store" field="vector_store" span2 placeholder="e.g. OpenSearch Serverless, Aurora pgvector — leave blank if no RAG" />

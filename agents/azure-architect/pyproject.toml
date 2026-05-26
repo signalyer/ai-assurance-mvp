@@ -1,0 +1,29 @@
+[project]
+name = "azure-deployment-architect"
+version = "0.1.0"
+description = "Azure subscription architecture inference agent — V1→V2 POC for the AI Assurance Platform."
+requires-python = ">=3.12"
+dependencies = [
+    "signallayer",
+    "anthropic>=0.40",
+    "azure-identity>=1.17",
+    "azure-mgmt-resource>=23",
+    "azure-mgmt-network>=25",
+    "azure-mgmt-authorization>=4",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "deepeval>=1.0",
+]
+
+[tool.uv.sources]
+signallayer = { path = "../../sdk", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
