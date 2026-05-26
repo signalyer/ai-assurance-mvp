@@ -222,14 +222,19 @@ Final acceptance test 2026-05-26: registered `ai-sys-ede33ad4` post-DATA_ROOT-fi
 
 ---
 
-### F-013 · PLATFORM-GAP · Wizard auto-mints a new SDK key on every page mount (key proliferation)
+### F-013 · PLATFORM-GAP · Wizard auto-mints a new SDK key on every page mount (key proliferation) — FIXED IN SOURCE 2026-05-26
 
 **Found:** S55 post-mortem, 2026-05-26 — verifying first_seen_at after dry-run.
 **Where:** [team-portal/src/pages/onboarding/OnboardingPage.tsx:165](../../team-portal/src/pages/onboarding/OnboardingPage.tsx#L165) — `useEffect(... void issueKey(systemId); ...)` fires `POST /api/sdk-keys` unconditionally on every mount of `/onboarding/:system_id`.
 **What:** Every refresh / re-login / tab-restore on the onboarding wizard mints a brand-new key for the same AI system. Operator's hand-saved `.env` from a prior mount becomes silently orphaned (still HMAC-valid; just no longer the key the wizard polls). During this debug session at least 3 keys were minted for `ai-sys-bae72e75` (slk_5b4dfc09, slk_301660cb, plus the one minted on the latest reload).
-**Symptom:** Operator follows the wizard, runs dry-run, sees wizard's Step 3 stuck on "Waiting…" because the wizard is polling the *latest* mint, not the key in the operator's `.env`.
-**Fix (S56):** On mount, `GET /api/sdk-keys?ai_system_id=...` first. If the list is non-empty and contains an un-revoked key, present that key (with a "Rotate key" affordance) instead of auto-minting. Mint only when the list is empty.
-**Priority:** P1 (load-bearing UX confusion — the entire "Verify Signal" gate appears broken because of this even when the engine is healthy)
+**Symptom:** Operator follows the wizard, runs dry-run, sees wizard's Step 3 stuck on "Waiting…" because the wizard is polling the *latest* mint, not the key in the operator's `.env`. This is what made F-015 LOOK like an engine persistence bug for hours — the agent and the wizard each had a key the other side never touched.
+**Fix (this commit):** Renamed `issueKey` to `bootstrapKey`. On mount, calls `GET /api/sdk-keys?ai_system_id=...&include_revoked=false` first. If a non-revoked key exists, surfaces a "returning user" UI (key_id + issued_at + first_seen_at + a Rotate button), tells the operator to use the `.env` they saved on first visit, and points FirstSignalPanel at the EXISTING key_id so polling matches the agent's actual traffic. If `first_seen_at` is already populated on the existing key, the wizard jumps straight to Step 3 in a green state — re-opening the page after verification "just works."
+**Implementation notes:**
+- Plaintext secret is unrecoverable (only sha256 hash stored beyond issuance — by design). Returning users cannot re-reveal the secret; they MUST use the `.env` they saved or explicitly Rotate (mint a new key + revoke the old via the AI System detail page).
+- Step 2 (snippet) doesn't render in returning-user mode because there's no plaintext to inject. Operator has the snippet from their first visit; if they don't, the Rotate button is the recovery path.
+- The Rotate flow currently only mints — server-side revocation of the prior key is a separate explicit action via the AI System detail page. Auto-revoke-on-rotate could ship later but raises the risk of accidentally invalidating a working agent.
+**Verification gap:** The fix is in source; the deployed SPA still auto-mints until the team-portal SPA is rebuilt + redeployed. Runs through the same channel as F-014's pending SPA deploy.
+**Priority:** P1 (was the root cause of the misdiagnosed F-015 — the entire "Verify Signal" gate appears broken when this fires, even when the engine is healthy)
 
 ---
 
@@ -246,7 +251,23 @@ Final acceptance test 2026-05-26: registered `ai-sys-ede33ad4` post-DATA_ROOT-fi
 
 ---
 
-### F-015 · PLATFORM-GAP · `first_seen_at` does not persist despite successful HMAC verification (telemetry gap)
+### F-015 · MISDIAGNOSIS — engine is fine, this was F-013 wearing a different shirt (CLOSED 2026-05-26, NO BUG)
+
+**Found:** S55 post-mortem, 2026-05-26.
+**Root cause:** Instrumented `mark_first_seen` (S55 #10/#11), deployed, and pulled live logs. The single instrumentation line told the whole story:
+```
+sdk_keys.first_seen.noop key_id=slk_5b4dfc09 already=2026-05-26T21:55:54.189969+00:00
+```
+The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this session, still in `.env`) — and the engine had been correctly stamping `first_seen_at` on that key since 21:55:54 UTC. The wizard was polling **`slk_<latest-mint>`** — a different key — because F-013 mints a fresh key on every wizard mount. The agent and the wizard were each looking at a key the other side never touched.
+**Implication:** the engine works correctly. `mark_first_seen` writes, persists, and is read back fine. There is no telemetry persistence gap. The wizard's red ⚠ was 100% F-013's fault.
+**Why this was hard to see:** the wizard's auto-mint happens silently on mount. Operator never sees "you have N keys for this system, here's the latest one" — they see "here's your new key, copy the secret." So the operator's mental model is "one wizard visit = one key," when reality is "one wizard mount = one new key." Add to that the SPA-host-vs-engine-host confusion of F-014 and you get a debug session that touches half the codebase before the instrumented log line drops the answer in your lap.
+**Fix:** Closed by F-013's fix in this same commit — the wizard now lists existing un-revoked keys before minting, and FirstSignalPanel polls the existing key's status when present. F-015 disappears as a side effect.
+**Instrumentation:** Kept at `logger.info` level (S55 #10 + #11) — useful diagnostic for the next time something looks like a persistence gap. The four breadcrumbs (`.enter` / `.read` / `.miss` / `.noop` / `.wrote` / `.failed`) make this class of bug a one-tail diagnosis instead of a half-day deep dive.
+**Status:** CLOSED — no engine bug existed. Lesson: when the symptom looks impossible (engine returns 200 but state doesn't change), it's usually a "different keys" or "different DATA_DIR" problem before it's ever a "write silently fails" problem. Add an instrumentation breadcrumb FIRST, not last.
+
+---
+
+### F-015-orig (HISTORICAL — kept for posterity, since it was the working hypothesis for hours)
 
 **Found:** S55 post-mortem, 2026-05-26 — POC P2 acceptance test partial pass.
 **Where:** [middleware/hmac_auth.py:246-252](../../middleware/hmac_auth.py#L246-L252) and/or [domain/sdk_keys.py:246-263](../../domain/sdk_keys.py#L246-L263) — `mark_first_seen` either is not being invoked, or is being invoked and silently failing on the `_rewrite_jsonl` write. The middleware's try/except swallows the exception with a `logger.exception` that's not surfacing in the downloaded log window.

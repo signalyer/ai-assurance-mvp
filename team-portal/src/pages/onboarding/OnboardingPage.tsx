@@ -18,9 +18,27 @@
 import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { useRoute } from 'wouter-preact';
-import { apiPost } from '../../shared/api/client';
+import { apiGet, apiPost } from '../../shared/api/client';
 import { FirstSignalPanel } from './FirstSignalPanel';
 import type { IssuedKey } from './types';
+
+// F-013 fix: a returning key as seen by the list endpoint. No hmac_secret
+// — that's surfaced once at issuance and never recoverable.
+interface ExistingKeySummary {
+  id: string;
+  key_id: string;
+  ai_system_id: string;
+  data_source: string;
+  issued_by: string;
+  issued_at: string;
+  first_seen_at: string | null;
+  revoked_at: string | null;
+  total_calls_24h: number;
+}
+interface ExistingKeyListOut {
+  keys: ExistingKeySummary[];
+  total: number;
+}
 
 // Module-level signals — survive minor re-renders, isolated per wizard run.
 // Reset when a new system_id is mounted (see useEffect below).
@@ -37,8 +55,55 @@ const currentStep = signal<1 | 2 | 3>(1);
 const firstSignalArrived = signal<boolean>(false);
 const mountedSystemId = signal<string>('');
 
-async function issueKey(aiSystemId: string): Promise<void> {
-  if (issuing.value || issuedKey.value) return;
+// F-013 fix: a non-secret view of an already-issued key. Surfaced to the user
+// when they re-enter the wizard for a system that already has a usable key —
+// preventing the prior behavior of silently minting a new key on every mount
+// (which orphaned the user's saved .env and broke the Verify Signal gate).
+const existingKey = signal<ExistingKeySummary | null>(null);
+
+async function bootstrapKey(aiSystemId: string): Promise<void> {
+  if (issuing.value || issuedKey.value || existingKey.value) return;
+  issuing.value = true;
+  issueError.value = null;
+
+  // 1. List existing keys. Reuse the most recent un-revoked one if present.
+  const list = await apiGet<ExistingKeyListOut>('/sdk-keys', { ai_system_id: aiSystemId, include_revoked: false });
+  if (list.ok && list.data.keys.length > 0) {
+    const candidates = list.data.keys
+      .filter((k) => k.revoked_at === null)
+      .sort((a, b) => b.issued_at.localeCompare(a.issued_at));
+    const chosen = candidates[0];
+    if (chosen) {
+      existingKey.value = chosen;
+      // If first_seen_at is already populated, the system is already verified
+      // — skip ahead to Step 3 so the user sees the green state immediately.
+      if (chosen.first_seen_at) {
+        firstSignalArrived.value = true;
+        currentStep.value = 3;
+      }
+      issuing.value = false;
+      return;
+    }
+  }
+
+  // 2. No existing usable key — mint one (original behavior).
+  const r = await apiPost<IssuedKey>('/sdk-keys', { ai_system_id: aiSystemId });
+  if (!r.ok) {
+    issueError.value = r.detail;
+    issuing.value = false;
+    return;
+  }
+  issuedKey.value = r.data;
+  issuing.value = false;
+}
+
+async function rotateKey(aiSystemId: string): Promise<void> {
+  // Explicit user action: revoke the current key (if any) and mint a new one.
+  // The current key is revoked server-side by issuing a new one is NOT the
+  // contract — the user must explicitly hit /revoke first. For now we just
+  // mint; revocation is a separate S56 affordance.
+  existingKey.value = null;
+  issuedKey.value = null;
   issuing.value = true;
   issueError.value = null;
   const r = await apiPost<IssuedKey>('/sdk-keys', { ai_system_id: aiSystemId });
@@ -168,6 +233,7 @@ export function OnboardingPage() {
     // Reset wizard state on a new system_id mount.
     if (mountedSystemId.value !== systemId) {
       issuedKey.value = null;
+      existingKey.value = null;
       issueError.value = null;
       secretRevealed.value = false;
       copied.value = null;
@@ -175,7 +241,7 @@ export function OnboardingPage() {
       firstSignalArrived.value = false;
       mountedSystemId.value = systemId;
     }
-    void issueKey(systemId);
+    void bootstrapKey(systemId);
   }, [systemId]);
 
   if (!systemId) {
@@ -183,6 +249,14 @@ export function OnboardingPage() {
   }
 
   const key = issuedKey.value;
+  // F-013: existingKey is the un-revoked key found on mount (no plaintext
+  // secret — that was surfaced once at issuance). When set, Steps 1/2/3
+  // render in "returning user" mode: no secret reveal, no snippet (the user
+  // already has the .env from the first visit), only the key_id + a Rotate
+  // affordance + the FirstSignalPanel pointed at the existing key_id.
+  const existing = existingKey.value;
+  const activeKeyId = key?.key_id ?? existing?.key_id ?? '';
+  const activeSystemId = key?.ai_system_id ?? existing?.ai_system_id ?? systemId;
 
   return (
     <div>
@@ -229,7 +303,45 @@ export function OnboardingPage() {
             </div>
           </div>
           <div style={{ padding: '1rem 1.25rem' }}>
-            {issuing.value && <div class="loading">Issuing a new key…</div>}
+            {issuing.value && <div class="loading">Loading SDK key for this system…</div>}
+            {/* F-013: returning-user state — a usable key already exists.
+                The plaintext secret is unrecoverable, so we surface the key_id
+                and direct the operator to the .env they saved on first visit. */}
+            {!key && existing && (
+              <>
+                <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border-strong)', borderRadius: '6px', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '0.25rem' }}>
+                    An SDK key already exists for this AI system.
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    The plaintext secret was shown only once at issuance and can&apos;t be retrieved.
+                    Use the <code>.env</code> you saved when you first issued this key. If you&apos;ve
+                    lost it, rotate to a new key (the existing one stays valid; revoke it via the
+                    AI System detail page once the new one is in use).
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '0.5rem 1rem', fontSize: '13px' }}>
+                  <div style={{ color: 'var(--text-secondary)' }}>Key ID</div>
+                  <div class="mono">{existing.key_id}</div>
+                  <div style={{ color: 'var(--text-secondary)' }}>AI System</div>
+                  <div class="mono">{existing.ai_system_id}</div>
+                  <div style={{ color: 'var(--text-secondary)' }}>Data Source</div>
+                  <div><span class={`badge ${existing.data_source === 'real' ? 'badge-high' : ''}`}>{existing.data_source}</span></div>
+                  <div style={{ color: 'var(--text-secondary)' }}>Issued At</div>
+                  <div>{existing.issued_at}</div>
+                  <div style={{ color: 'var(--text-secondary)' }}>First Seen</div>
+                  <div>{existing.first_seen_at ?? <span style={{ color: 'var(--text-secondary)' }}>— never (still waiting)</span>}</div>
+                </div>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <button class="btn btn-sm" onClick={() => { void rotateKey(systemId); }}>
+                    Rotate — issue a new key
+                  </button>
+                  <button class="btn btn-sm btn-primary" onClick={() => { currentStep.value = 3; }}>
+                    Skip to Verify
+                  </button>
+                </div>
+              </>
+            )}
             {key && (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '0.5rem 1rem', fontSize: '13px' }}>
@@ -302,12 +414,12 @@ export function OnboardingPage() {
         </>
       )}
 
-      {/* STEP 3 — Verify */}
-      {currentStep.value === 3 && key && (
+      {/* STEP 3 — Verify (F-013: works for both freshly-issued AND existing keys) */}
+      {currentStep.value === 3 && activeKeyId && (
         <>
           <FirstSignalPanel
-            keyId={key.key_id}
-            aiSystemId={key.ai_system_id}
+            keyId={activeKeyId}
+            aiSystemId={activeSystemId}
             onArrived={() => { firstSignalArrived.value = true; }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
