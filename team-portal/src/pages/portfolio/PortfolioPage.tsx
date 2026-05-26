@@ -12,6 +12,7 @@ import { useEffect } from 'preact/hooks';
 import { Link } from 'wouter-preact';
 import { apiGet } from '../../shared/api/client';
 import type { AiSystemSummary } from '../ai-systems/types';
+import { dataMode } from '../../shared/components/DataModeToggle';
 
 interface AiSystemsListResponse { systems: AiSystemSummary[] }
 
@@ -125,6 +126,20 @@ export function PortfolioPage() {
 
       {loadError.value && <div class="error-banner">Failed to load systems: {loadError.value}</div>}
       {loading.value && <div class="loading">Loading portfolio…</div>}
+
+      {!loading.value && !loadError.value && dataMode.value === 'v2' && systems.value.length === 0 && (
+        <div class="card">
+          <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '0.5rem' }}>
+              No live AI systems registered.
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Your portfolio populates once an SDK-instrumented system has been registered and is producing telemetry.
+            </div>
+            <a class="btn btn-sm btn-primary" href="/ai-systems/new">Register your first system →</a>
+          </div>
+        </div>
+      )}
 
       {!loading.value && !loadError.value && (
         <>

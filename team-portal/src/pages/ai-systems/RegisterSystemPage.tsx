@@ -132,7 +132,15 @@ async function submitIntake(): Promise<void> {
   state.value = { ...initial };
   currentStep.value = 1;
   preview.value = null;
-  window.location.href = r.data.redirect_to || '/ai-systems';
+  // S53: drop the operator into the SDK onboarding wizard instead of the
+  // bare AI Systems list. The engine's `redirect_to` is ignored on purpose
+  // — onboarding is the canonical next step regardless of intake outcome.
+  const newSystemId = r.data.ai_system_id;
+  if (newSystemId) {
+    window.location.href = `/onboarding/${encodeURIComponent(newSystemId)}`;
+  } else {
+    window.location.href = r.data.redirect_to || '/ai-systems';
+  }
 }
 
 // ---------- Reusable field components ----------

@@ -288,6 +288,80 @@ Invoke-Probe -Name "7. Data-mode contract (X-Data-Mode v1 vs v2 → count(v2) <=
 }
 
 # ---------------------------------------------------------------------------
+# Probe 8 — SDK key issuance round-trip (S53)
+# Verifies the per-system SDK key endpoints introduced in Session 53:
+#   POST /api/sdk-keys                     → 201 + hmac_secret length > 32
+#   GET  /api/sdk-keys/{key_id}/status     → 200 + first_seen_at == null
+#   POST /api/sdk-keys/{key_id}/revoke     → 200 + revoked_at set
+# Skips if $env:SMOKE_DEMO_PASSWORD_ENGINEER is unset (auth required).
+# ---------------------------------------------------------------------------
+Invoke-Probe -Name "8. SDK key issuance round-trip (POST → status → revoke)" -ScriptBlock {
+    if (-not $DemoPass) {
+        Write-Host " (skipped — `$env:SMOKE_DEMO_PASSWORD_ENGINEER not set)" -NoNewline -ForegroundColor DarkYellow
+        return
+    }
+    $loginBody = @{ username = $DemoUser; password = $DemoPass; next = '/' }
+    $loginResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/auth/login" `
+        -Method POST `
+        -Body $loginBody `
+        -SessionVariable smokeSession `
+        -MaximumRedirection 0 `
+        -SkipHttpErrorCheck `
+        -ErrorAction Stop
+    if ($loginResp.StatusCode -ne 200 -and $loginResp.StatusCode -ne 302 -and $loginResp.StatusCode -ne 303) {
+        throw "Login failed: HTTP $($loginResp.StatusCode)"
+    }
+
+    $sysResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/grc/ai-systems" `
+        -Method GET `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    $sysJson = $sysResp.Content | ConvertFrom-Json
+    if (@($sysJson.systems).Count -eq 0) { throw "No AI systems available to issue a key against" }
+    $targetSystemId = $sysJson.systems[0].id
+
+    $issueBody = @{ ai_system_id = $targetSystemId } | ConvertTo-Json
+    $issueResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/sdk-keys" `
+        -Method POST `
+        -Body $issueBody `
+        -ContentType "application/json" `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($issueResp.StatusCode -ne 201) { throw "Issue returned HTTP $($issueResp.StatusCode) (expected 201)" }
+    $issued = $issueResp.Content | ConvertFrom-Json
+    if (-not $issued.key_id) { throw "Issue response missing key_id" }
+    if (-not $issued.hmac_secret -or $issued.hmac_secret.Length -le 32) {
+        throw "hmac_secret missing or too short (got length $($issued.hmac_secret.Length))"
+    }
+    $keyId = $issued.key_id
+
+    $statusResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/sdk-keys/$keyId/status" `
+        -Method GET `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($statusResp.StatusCode -ne 200) { throw "Status returned HTTP $($statusResp.StatusCode)" }
+    $statusJson = $statusResp.Content | ConvertFrom-Json
+    if ($statusJson.first_seen_at) {
+        throw "first_seen_at should be null on a freshly issued key (got '$($statusJson.first_seen_at)')"
+    }
+
+    $revokeResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/sdk-keys/$keyId/revoke" `
+        -Method POST `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($revokeResp.StatusCode -ne 200) { throw "Revoke returned HTTP $($revokeResp.StatusCode)" }
+    $revokeJson = $revokeResp.Content | ConvertFrom-Json
+    if (-not $revokeJson.revoked_at) { throw "Revoke response missing revoked_at" }
+
+    Write-Host " (key=$keyId, secret_len=$($issued.hmac_secret.Length))" -NoNewline -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""

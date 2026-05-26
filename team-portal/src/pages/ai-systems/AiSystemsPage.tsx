@@ -8,6 +8,7 @@ import { AiSystemRevisionsPanel } from './AiSystemRevisionsPanel';
 import { AiSystemFrameworksPanel } from './AiSystemFrameworksPanel';
 import { AiSystemBoundAgentsPanel } from './AiSystemBoundAgentsPanel';
 import type { AiSystemSummary, AiSystemsListResponse } from './types';
+import { dataMode } from '../../shared/components/DataModeToggle';
 
 // Page state — module-level signals so URL?id= deep-link survives navigation.
 const allSystems = signal<AiSystemSummary[]>([]);
@@ -186,7 +187,16 @@ export function AiSystemsPage() {
               <tr><td colSpan={10} class="loading">Loading…</td></tr>
             )}
             {!loading.value && rows.length === 0 && (
-              <tr><td colSpan={10} class="empty-state">No systems match filters.</td></tr>
+              <tr><td colSpan={10} class="empty-state">
+                {dataMode.value === 'v2' && allSystems.value.length === 0 ? (
+                  <>
+                    No live AI systems registered.{' '}
+                    <a href="/ai-systems/new" style={{ fontWeight: 600 }}>Register your first system →</a>
+                  </>
+                ) : (
+                  'No systems match filters.'
+                )}
+              </td></tr>
             )}
             {!loading.value && rows.map((s) => (
               <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => openSystem(s.id)}>

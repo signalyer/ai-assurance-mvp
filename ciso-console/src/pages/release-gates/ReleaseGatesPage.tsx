@@ -11,6 +11,7 @@
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { apiGet, apiPost } from '../../shared/api/client';
+import { dataMode } from '../../shared/components/DataModeToggle';
 import type {
   SystemGateSummary,
   SystemGateSummariesResponse,
@@ -178,7 +179,19 @@ export function ReleaseGatesPage() {
       )}
 
       {!loading.value && summaries.value.length === 0 && !loadError.value && (
-        <div class="empty-state">No AI systems registered.</div>
+        dataMode.value === 'v2' ? (
+          <div class="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '0.5rem' }}>
+              No gates to compute.
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '520px', margin: '0 auto 1rem' }}>
+              Gates compute once an AI system has been registered and baselined. Findings flow in via the SDK.
+            </div>
+            <a class="btn btn-sm btn-primary" href="/sdk-quickstart">Register a system →</a>
+          </div>
+        ) : (
+          <div class="empty-state">No AI systems registered.</div>
+        )
       )}
 
       {summaries.value.map((s) => (

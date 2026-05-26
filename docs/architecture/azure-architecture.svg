@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 1920 1280" width="1920" height="1280"
+     font-family="Segoe UI, Helvetica, Arial, sans-serif">
+
+  <!-- ===================== DEFINITIONS ===================== -->
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#222"/>
+    </marker>
+    <marker id="ar-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#b42318"/>
+    </marker>
+    <marker id="ar-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1f6feb"/>
+    </marker>
+    <marker id="ar-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="ar-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#067647"/>
+    </marker>
+    <!-- Subtle drop shadow used on key boxes -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="2" result="o"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.18"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ===================== BACKGROUND ===================== -->
+  <rect width="1920" height="1280" fill="#fafbfc"/>
+
+  <!-- ===================== TITLE BAR ===================== -->
+  <rect width="1920" height="76" fill="#0b3a66"/>
+  <text x="40" y="44" fill="#ffffff" font-size="26" font-weight="700">AI Assurance Platform — Azure Reference Architecture</text>
+  <text x="40" y="66" fill="#cfe3f7" font-size="12.5">aigovern.sandboxhub.co · Single-tenant v1 · rg-aigovern-dev (eastus) · SWAs in eastus2</text>
+  <text x="1880" y="44" fill="#ffffff" font-size="13" text-anchor="end">Session 53 · 2026-05-26</text>
+  <text x="1880" y="66" fill="#cfe3f7" font-size="11" text-anchor="end">Icons © Microsoft (Azure Architecture Icons V23)</text>
+
+  <!-- ===================== AZURE BOUNDARY ===================== -->
+  <rect x="280" y="100" width="1500" height="900" rx="14" fill="#eef5fc" stroke="#4a90e2" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="298" y="124" font-size="13" font-weight="700" fill="#0b3a66">Microsoft Azure · Subscription: SignalLayerDev · Resource group: rg-aigovern-dev</text>
+
+  <!-- ============================================================
+       TOP BAND — CI / CD (y = 140 → 240)
+       ============================================================ -->
+  <text x="40" y="166" font-size="13" font-weight="700" fill="#444">CI / CD pipeline</text>
+
+  <!-- GitHub Actions -->
+  <g filter="url(#shadow)" transform="translate(40, 178)">
+    <rect width="220" height="60" rx="8" fill="#24292f"/>
+    <text x="110" y="24" font-size="12" font-weight="700" text-anchor="middle" fill="#fff">GitHub Actions</text>
+    <text x="110" y="40" font-size="10" text-anchor="middle" fill="#cfd6dd">.github/workflows/deploy.yml</text>
+    <text x="110" y="52" font-size="10" text-anchor="middle" fill="#cfd6dd">push → main</text>
+  </g>
+
+  <!-- Entra app reg (federated cred) -->
+  <g filter="url(#shadow)" transform="translate(340, 178)">
+    <rect width="240" height="60" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.4"/>
+    <image href="assets/entra-id.svg" x="10" y="10" width="40" height="40"/>
+    <text x="60" y="26" font-size="12" font-weight="700">Microsoft Entra ID</text>
+    <text x="60" y="42" font-size="10" fill="#555">github-deploy-aigovern</text>
+    <text x="60" y="54" font-size="10" fill="#555">OIDC federated credential</text>
+  </g>
+
+  <!-- RBAC -->
+  <g filter="url(#shadow)" transform="translate(660, 178)">
+    <rect width="200" height="60" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.4"/>
+    <image href="assets/rbac.svg" x="10" y="10" width="40" height="40"/>
+    <text x="60" y="26" font-size="12" font-weight="700">RBAC scope</text>
+    <text x="60" y="42" font-size="10" fill="#555">Website Contributor</text>
+    <text x="60" y="54" font-size="10" fill="#555">→ app-aigovern-dev</text>
+  </g>
+
+  <!-- Deploy action -->
+  <g filter="url(#shadow)" transform="translate(940, 178)">
+    <rect width="240" height="60" rx="8" fill="#ffffff" stroke="#0b3a66" stroke-width="1.4"/>
+    <text x="120" y="24" font-size="12" font-weight="700" text-anchor="middle">azure/webapps-deploy@v3</text>
+    <text x="120" y="40" font-size="10" text-anchor="middle" fill="#555">build-zip.py → zip artifact</text>
+    <text x="120" y="54" font-size="10" text-anchor="middle" fill="#555">SHA baked into BUILD_SHA</text>
+  </g>
+
+  <!-- Health/SHA verify -->
+  <g filter="url(#shadow)" transform="translate(1260, 178)">
+    <rect width="240" height="60" rx="8" fill="#f5fbf5" stroke="#067647" stroke-width="1.4"/>
+    <text x="120" y="24" font-size="12" font-weight="700" text-anchor="middle">SHA round-trip verify</text>
+    <text x="120" y="40" font-size="10" text-anchor="middle" fill="#555">GET /api/health → match</text>
+    <text x="120" y="54" font-size="10" text-anchor="middle" fill="#555">fail-loud if drift</text>
+  </g>
+
+  <!-- CI/CD arrows -->
+  <line x1="260" y1="208" x2="340" y2="208" stroke="#7c3aed" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-purple)"/>
+  <line x1="580" y1="208" x2="660" y2="208" stroke="#7c3aed" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-purple)"/>
+  <line x1="860" y1="208" x2="940" y2="208" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+  <line x1="1180" y1="208" x2="1260" y2="208" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- Down arrow into App Service -->
+  <path d="M 1380 240 L 1380 340 L 1080 340" fill="none" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="1390" y="290" font-size="10" fill="#555">deploy artifact</text>
+
+  <!-- ============================================================
+       MAIN ROW — y = 280 → 880
+       Six columns, strict L→R flow
+       ============================================================ -->
+
+  <!-- =================== COL 1 — CLIENTS (x = 40 → 240) =================== -->
+  <text x="140" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">Clients</text>
+
+  <!-- SPA users -->
+  <g filter="url(#shadow)" transform="translate(40, 300)">
+    <rect width="200" height="92" rx="8" fill="#ffffff" stroke="#9fb4cc" stroke-width="1.2"/>
+    <image href="assets/users.svg" x="14" y="14" width="44" height="44"/>
+    <text x="68" y="30" font-size="12" font-weight="700">SPA operators</text>
+    <text x="68" y="46" font-size="10" fill="#555">CISO · Risk · Engineers</text>
+    <text x="68" y="60" font-size="10" fill="#555">Browser session cookie</text>
+    <text x="68" y="74" font-size="10" fill="#555">10-min sliding · 5 roles</text>
+  </g>
+
+  <!-- SDK consumers -->
+  <g filter="url(#shadow)" transform="translate(40, 444)">
+    <rect width="200" height="92" rx="8" fill="#fff7e0" stroke="#c89b1c" stroke-width="1.4"/>
+    <text x="100" y="22" font-size="12" font-weight="700" text-anchor="middle">Customer SDK apps</text>
+    <text x="100" y="40" font-size="10" text-anchor="middle" font-family="Consolas,monospace">pip install signallayer</text>
+    <text x="100" y="58" font-size="10" text-anchor="middle" fill="#b42318" font-weight="700">HMAC-SHA-256 signed</text>
+    <text x="100" y="74" font-size="10" text-anchor="middle" fill="#555">per-system key (S53)</text>
+    <text x="100" y="86" font-size="10" text-anchor="middle" fill="#555">→ /api/sdk/*</text>
+  </g>
+
+  <!-- DNS / domain note -->
+  <g transform="translate(40, 596)">
+    <rect width="200" height="64" rx="8" fill="#ffffff" stroke="#9fb4cc" stroke-width="1.2"/>
+    <image href="assets/dns-zones.svg" x="12" y="12" width="40" height="40"/>
+    <text x="60" y="28" font-size="12" font-weight="700">Azure DNS</text>
+    <text x="60" y="44" font-size="10" fill="#555">sandboxhub.co zone</text>
+    <text x="60" y="56" font-size="10" fill="#555">CNAME → SWA, A → App Svc</text>
+  </g>
+
+  <!-- =================== COL 2 — EDGE (x = 300 → 500) =================== -->
+  <text x="400" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">Edge · Static Web Apps (eastus2)</text>
+
+  <!-- Team Portal SWA -->
+  <g filter="url(#shadow)" transform="translate(300, 300)">
+    <rect width="200" height="92" rx="8" fill="#ffffff" stroke="#4a90e2" stroke-width="1.4"/>
+    <image href="assets/swa.svg" x="12" y="12" width="44" height="44"/>
+    <text x="68" y="28" font-size="12" font-weight="700">Team Portal SPA</text>
+    <text x="68" y="44" font-size="10" fill="#555">swa-aigovern-portal-dev</text>
+    <text x="68" y="58" font-size="10" fill="#555">Preact · Free SKU</text>
+    <text x="68" y="72" font-size="10" fill="#555">12 engineer surfaces</text>
+  </g>
+
+  <!-- CISO Console SWA -->
+  <g filter="url(#shadow)" transform="translate(300, 410)">
+    <rect width="200" height="92" rx="8" fill="#ffffff" stroke="#4a90e2" stroke-width="1.4"/>
+    <image href="assets/swa.svg" x="12" y="12" width="44" height="44"/>
+    <text x="68" y="28" font-size="12" font-weight="700">CISO Console SPA</text>
+    <text x="68" y="44" font-size="10" fill="#555">swa-aigovern-gov-dev</text>
+    <text x="68" y="58" font-size="10" fill="#555">Preact · Free SKU</text>
+    <text x="68" y="72" font-size="10" fill="#555">governance / findings</text>
+  </g>
+
+  <!-- Identity card (under SWAs) -->
+  <g filter="url(#shadow)" transform="translate(300, 530)">
+    <rect width="200" height="130" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.4"/>
+    <image href="assets/entra-id.svg" x="12" y="12" width="40" height="40"/>
+    <text x="56" y="28" font-size="12" font-weight="700">Entra ID tenant</text>
+    <text x="56" y="44" font-size="10" fill="#555">SignalLayerDev</text>
+    <text x="12" y="74" font-size="10" font-weight="600">Authentication model</text>
+    <text x="12" y="90" font-size="10" fill="#555">SPA → cookie session (engine)</text>
+    <text x="12" y="104" font-size="10" fill="#555">SDK → HMAC headers</text>
+    <text x="12" y="118" font-size="10" fill="#555">CI → OIDC federated</text>
+  </g>
+
+  <!-- =================== COL 3 — ENGINE (x = 560 → 1080) =================== -->
+  <text x="820" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">Engine tier · App Service (eastus)</text>
+
+  <g filter="url(#shadow)" transform="translate(560, 300)">
+    <rect width="520" height="560" rx="10" fill="#ffffff" stroke="#0b3a66" stroke-width="2"/>
+
+    <!-- App Service header -->
+    <image href="assets/app-service.svg" x="14" y="14" width="56" height="56"/>
+    <text x="80" y="34" font-size="15" font-weight="700">App Service · FastAPI engine</text>
+    <text x="80" y="52" font-size="11" font-family="Consolas,monospace" fill="#0b3a66">app-aigovern-dev.azurewebsites.net</text>
+    <text x="80" y="66" font-size="10" fill="#555">Linux · Python 3.12 · B1 · custom domain aigovern.sandboxhub.co</text>
+
+    <!-- App Service Plan chip -->
+    <g transform="translate(380, 14)">
+      <rect width="124" height="50" rx="6" fill="#f4f7fb" stroke="#9fb4cc" stroke-width="1"/>
+      <image href="assets/asp.svg" x="6" y="6" width="38" height="38"/>
+      <text x="50" y="22" font-size="10" font-weight="700">App Service Plan</text>
+      <text x="50" y="36" font-size="9" fill="#555">asp-aigovern-dev</text>
+    </g>
+
+    <!-- Middleware stack box -->
+    <rect x="20" y="92" width="480" height="160" rx="8" fill="#fff7e0" stroke="#c89b1c" stroke-width="1.2"/>
+    <text x="32" y="112" font-size="12" font-weight="700">Middleware (outer → inner)</text>
+    <g font-size="10.5">
+      <text x="32" y="132">① HMACAuthMiddleware  · gates /api/sdk/* · ±300s drift · nonce TTL 600s</text>
+      <text x="32" y="148">② RequestContextMiddleware  · X-Request-Id · role / request_id ContextVar</text>
+      <text x="32" y="164">③ DataModeMiddleware  · X-Data-Mode v1/v2 · filters by data_source (S52)</text>
+      <text x="32" y="180">④ SessionAuthMiddleware  · 10-min sliding · 5-role gate</text>
+    </g>
+    <text x="32" y="206" font-size="11" font-weight="700" fill="#0b3a66">Per-LLM-call decorator chain (mandatory order)</text>
+    <text x="32" y="224" font-size="11" font-family="Consolas,monospace">@policy_gate → @scrub_pii → @guardrails → @trace → @evaluate</text>
+    <text x="32" y="240" font-size="10" fill="#b42318" font-weight="700">scrub_pii MUST run before trace_call — hard invariant</text>
+
+    <!-- Routers -->
+    <rect x="20" y="266" width="480" height="118" rx="8" fill="#f5fbf5" stroke="#067647" stroke-width="1"/>
+    <text x="32" y="286" font-size="12" font-weight="700">API routers (mounted in dashboard.py)</text>
+    <g font-size="10" font-family="Consolas,monospace">
+      <text x="32" y="304">/api/grc/*   /api/runtime/v2/*   /api/findings/v2/*</text>
+      <text x="32" y="318">/api/release-gates/*   /api/agents/*   /api/memory/*</text>
+      <text x="32" y="332">/api/rag/*   /api/adversarial/*   /api/right-to-forget/*</text>
+      <text x="32" y="346">/api/audit/*   /api/projection/*</text>
+      <text x="32" y="364">/api/sdk-keys/*   ←  S53 issuance (cookie auth)</text>
+      <text x="32" y="378">/api/sdk/*        ←  HMAC-gated SDK ingress</text>
+    </g>
+
+    <!-- Security primitives -->
+    <rect x="20" y="398" width="480" height="92" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.2"/>
+    <text x="32" y="418" font-size="12" font-weight="700" fill="#b42318">Embedded security primitives</text>
+    <g font-size="10">
+      <text x="32" y="436">OPA fail-closed policy engine · in-proc Python fallback</text>
+      <text x="32" y="450">Presidio NER + Fernet de-id vault (TTL-bound)</text>
+      <text x="32" y="464">Llama Guard 3 · NeMo topic rails · injection detection</text>
+      <text x="32" y="478">Tamper-evident audit hash chain (SHA-256, portalocker)</text>
+    </g>
+
+    <!-- Local JSONL disk -->
+    <rect x="20" y="502" width="480" height="48" rx="8" fill="#f4f7fb" stroke="#9fb4cc" stroke-width="1"/>
+    <image href="assets/storage.svg" x="28" y="510" width="32" height="32"/>
+    <text x="68" y="522" font-size="11" font-weight="700">App Service local disk · JSONL via storage.py</text>
+    <text x="68" y="538" font-size="10" fill="#555" font-family="Consolas,monospace">data/events.jsonl · ai_systems.jsonl · findings.jsonl · sdk_keys.jsonl</text>
+  </g>
+
+  <!-- =================== COL 4 — INTERNAL DATA (x = 1100 → 1340) =================== -->
+  <text x="1220" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">Managed data (optional)</text>
+
+  <g filter="url(#shadow)" transform="translate(1100, 300)">
+    <rect width="240" height="120" rx="8" fill="#ffffff" stroke="#0b3a66" stroke-width="1.4"/>
+    <image href="assets/postgresql.svg" x="12" y="14" width="48" height="48"/>
+    <text x="68" y="32" font-size="12" font-weight="700">PostgreSQL Flexible</text>
+    <text x="68" y="48" font-size="10" fill="#555">Tier-2 episodic memory</text>
+    <text x="68" y="62" font-size="10" fill="#555">Projection views (S09)</text>
+    <text x="14" y="86" font-size="10">tsvector full-text search</text>
+    <text x="14" y="100" font-size="10" fill="#b42318">Off by default in dev</text>
+    <text x="14" y="114" font-size="10" fill="#555">MEMORY_BACKEND=postgres</text>
+  </g>
+
+  <g filter="url(#shadow)" transform="translate(1100, 440)">
+    <rect width="240" height="120" rx="8" fill="#ffffff" stroke="#0b3a66" stroke-width="1.4"/>
+    <image href="assets/search.svg" x="12" y="14" width="48" height="48"/>
+    <text x="68" y="32" font-size="12" font-weight="700">Azure AI Search</text>
+    <text x="68" y="48" font-size="10" fill="#555">Tier-3 RAG corpus</text>
+    <text x="68" y="62" font-size="10" fill="#555">Hybrid BM25 + vector</text>
+    <text x="14" y="86" font-size="10">text-embedding-3-small</text>
+    <text x="14" y="100" font-size="10" fill="#b42318">PII reject @ confidence 0.7</text>
+    <text x="14" y="114" font-size="10" fill="#555">RAG_BACKEND=azure_search</text>
+  </g>
+
+  <!-- App settings card -->
+  <g filter="url(#shadow)" transform="translate(1100, 580)">
+    <rect width="240" height="120" rx="8" fill="#fff" stroke="#9fb4cc" stroke-width="1.2"/>
+    <text x="120" y="22" font-size="12" font-weight="700" text-anchor="middle">App Service settings</text>
+    <text x="120" y="38" font-size="10" text-anchor="middle" fill="#555">(secrets in env vars, v1)</text>
+    <g font-size="10" font-family="Consolas,monospace">
+      <text x="14" y="62">ANTHROPIC_API_KEY</text>
+      <text x="14" y="78">SL_HMAC_SECRET (legacy)</text>
+      <text x="14" y="94">LANGFUSE_PUBLIC/SECRET_KEY</text>
+      <text x="14" y="110">EVAL_BACKEND=noop</text>
+    </g>
+  </g>
+
+  <!-- Key Vault — marked deferred -->
+  <g transform="translate(1100, 720)">
+    <rect width="240" height="78" rx="8" fill="#fff" stroke="#9fb4cc" stroke-width="1" stroke-dasharray="4,3"/>
+    <image href="assets/key-vault.svg" x="12" y="14" width="40" height="40"/>
+    <text x="60" y="30" font-size="12" font-weight="700" fill="#888">Key Vault</text>
+    <text x="60" y="46" font-size="10" fill="#b42318" font-weight="600">Not deployed in v1</text>
+    <text x="60" y="60" font-size="10" fill="#888">→ production posture</text>
+  </g>
+
+  <!-- =================== COL 5 — EXTERNAL AI (x = 1380 → 1640) =================== -->
+  <text x="1500" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">External services</text>
+
+  <!-- External boundary box -->
+  <rect x="1380" y="300" width="240" height="540" rx="10" fill="#fff" stroke="#b42318" stroke-width="1.4" stroke-dasharray="6,3"/>
+  <text x="1500" y="320" font-size="11" font-weight="700" text-anchor="middle" fill="#b42318">Outside Azure trust boundary</text>
+
+  <g transform="translate(1394, 336)">
+    <rect width="212" height="90" rx="8" fill="#efe6fb" stroke="#7c3aed" stroke-width="1.4"/>
+    <text x="106" y="22" font-size="12" font-weight="700" text-anchor="middle">Anthropic API</text>
+    <text x="106" y="40" font-size="10" text-anchor="middle">Claude Opus 4.7</text>
+    <text x="106" y="54" font-size="10" text-anchor="middle">Sonnet 4.6 · Haiku 4.5</text>
+    <text x="106" y="74" font-size="10" text-anchor="middle" fill="#067647" font-weight="700">scrubbed prompts only</text>
+  </g>
+
+  <g transform="translate(1394, 444)">
+    <rect width="212" height="90" rx="8" fill="#e6f4ea" stroke="#067647" stroke-width="1.4"/>
+    <text x="106" y="22" font-size="12" font-weight="700" text-anchor="middle">Langfuse Cloud</text>
+    <text x="106" y="40" font-size="10" text-anchor="middle">tracing + analytics</text>
+    <text x="106" y="74" font-size="10" text-anchor="middle" fill="#067647" font-weight="700">scrubbed payloads only</text>
+  </g>
+
+  <g transform="translate(1394, 552)">
+    <rect width="212" height="80" rx="8" fill="#fff3e0" stroke="#ed6c02" stroke-width="1.4"/>
+    <text x="106" y="22" font-size="12" font-weight="700" text-anchor="middle">AWS Bedrock</text>
+    <text x="106" y="40" font-size="10" text-anchor="middle" fill="#555">demo financial-advisor</text>
+    <text x="106" y="58" font-size="10" text-anchor="middle" fill="#555">isolated demo path</text>
+  </g>
+
+  <!-- Egress invariant -->
+  <g transform="translate(1394, 650)">
+    <rect width="212" height="180" rx="8" fill="#fff" stroke="#b42318" stroke-width="1"/>
+    <text x="106" y="22" font-size="11" font-weight="700" text-anchor="middle" fill="#b42318">Egress invariant</text>
+    <text x="14" y="44" font-size="10">Every external egress call must</text>
+    <text x="14" y="58" font-size="10">be preceded by:</text>
+    <text x="14" y="78" font-size="10" font-family="Consolas,monospace">@scrub_pii  vault_id</text>
+    <text x="14" y="98" font-size="10">Enforced by:</text>
+    <text x="14" y="114" font-size="10">• signallayer.guard() at</text>
+    <text x="14" y="128" font-size="10">  import time (chain order)</text>
+    <text x="14" y="144" font-size="10">• tracer refuses to emit</text>
+    <text x="14" y="158" font-size="10">  when vault_id missing</text>
+    <text x="14" y="174" font-size="10" fill="#555">SCRUBBER_ENABLED=true</text>
+  </g>
+
+  <!-- =================== COL 6 — OPS SIDEBAR (x = 1660 → 1900) =================== -->
+  <text x="1780" y="280" font-size="13" font-weight="700" text-anchor="middle" fill="#444">Trust boundaries</text>
+
+  <g transform="translate(1660, 300)">
+    <rect width="240" height="100" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.2"/>
+    <circle cx="22" cy="22" r="11" fill="#b42318"/>
+    <text x="22" y="27" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+    <text x="42" y="26" font-size="11" font-weight="700">Public internet → SWA / App Svc</text>
+    <text x="14" y="50" font-size="10">TLS terminates at proxy</text>
+    <text x="14" y="64" font-size="10">Engine reads X-Forwarded-Proto</text>
+    <text x="14" y="78" font-size="10">Secure cookies require https</text>
+    <text x="14" y="92" font-size="10" fill="#555">S49 #1 compound rule</text>
+  </g>
+
+  <g transform="translate(1660, 416)">
+    <rect width="240" height="80" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.2"/>
+    <circle cx="22" cy="22" r="11" fill="#b42318"/>
+    <text x="22" y="27" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+    <text x="42" y="26" font-size="11" font-weight="700">SWA → App Service</text>
+    <text x="14" y="50" font-size="10">SWA linked-backend proxy</text>
+    <text x="14" y="64" font-size="10">Engine-issued session cookies</text>
+  </g>
+
+  <g transform="translate(1660, 512)">
+    <rect width="240" height="116" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.4"/>
+    <circle cx="22" cy="22" r="11" fill="#b42318"/>
+    <text x="22" y="27" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+    <text x="42" y="26" font-size="11" font-weight="700">SDK → /api/sdk/* (HMAC)</text>
+    <text x="14" y="50" font-size="10" font-family="Consolas,monospace">unix_ts ⏎ METHOD ⏎ path</text>
+    <text x="14" y="64" font-size="10" font-family="Consolas,monospace">⏎ sha256(body)</text>
+    <text x="14" y="80" font-size="10">Per-system key lookup (S53)</text>
+    <text x="14" y="94" font-size="10">Legacy env-var fallback</text>
+    <text x="14" y="108" font-size="10" fill="#555">drift ±300s · nonce TTL 600s</text>
+  </g>
+
+  <g transform="translate(1660, 644)">
+    <rect width="240" height="88" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.2"/>
+    <circle cx="22" cy="22" r="11" fill="#b42318"/>
+    <text x="22" y="27" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+    <text x="42" y="26" font-size="11" font-weight="700">Engine → external egress</text>
+    <text x="14" y="50" font-size="10">Scrubber MUST precede egress</text>
+    <text x="14" y="64" font-size="10">Index-time PII reject @ 0.7</text>
+    <text x="14" y="78" font-size="10" fill="#555">Anthropic · Langfuse · Search</text>
+  </g>
+
+  <g transform="translate(1660, 748)">
+    <rect width="240" height="80" rx="8" fill="#fff" stroke="#b42318" stroke-width="1.2"/>
+    <circle cx="22" cy="22" r="11" fill="#b42318"/>
+    <text x="22" y="27" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+    <text x="42" y="26" font-size="11" font-weight="700">GitHub Actions → App Svc</text>
+    <text x="14" y="50" font-size="10">OIDC federated credential</text>
+    <text x="14" y="64" font-size="10">No long-lived secrets at rest</text>
+  </g>
+
+  <!-- ============================================================
+       MAIN FLOW ARROWS — strict L→R, no crossings
+       ============================================================ -->
+
+  <!-- Operators → Team Portal SPA -->
+  <line x1="240" y1="346" x2="300" y2="346" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+  <!-- Operators → CISO Console SPA (slight angle down) -->
+  <path d="M 240 360 L 270 360 L 270 456 L 300 456" fill="none" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- SWA Team Portal → Engine -->
+  <line x1="500" y1="346" x2="560" y2="346" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+  <!-- SWA CISO Console → Engine -->
+  <line x1="500" y1="456" x2="560" y2="456" stroke="#222" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- SDK clients → Engine (red, HMAC) -->
+  <path d="M 240 490 L 540 490 L 540 740 L 560 740" fill="none" stroke="#b42318" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#ar-red)"/>
+  <text x="280" y="484" font-size="10" fill="#b42318" font-weight="700">HMAC-signed</text>
+
+  <!-- Engine → PG -->
+  <line x1="1080" y1="360" x2="1100" y2="360" stroke="#222" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar)"/>
+  <!-- Engine → AI Search -->
+  <line x1="1080" y1="500" x2="1100" y2="500" stroke="#222" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar)"/>
+  <!-- Engine → App settings (just a notation line, no arrow) -->
+  <line x1="1080" y1="640" x2="1100" y2="640" stroke="#9fb4cc" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <!-- Engine → External AI (single arrow per service, rightward) -->
+  <!-- Engine → Anthropic -->
+  <path d="M 1080 380 L 1360 380 L 1380 380" fill="none" stroke="#067647" stroke-width="1.6" marker-end="url(#ar-green)"/>
+  <text x="1200" y="374" font-size="10" fill="#067647" font-weight="700">scrubbed prompt</text>
+  <!-- Engine → Langfuse -->
+  <path d="M 1080 490 L 1360 490 L 1380 490" fill="none" stroke="#067647" stroke-width="1.6" marker-end="url(#ar-green)"/>
+  <text x="1200" y="484" font-size="10" fill="#067647" font-weight="700">scrubbed trace</text>
+  <!-- Engine → Bedrock -->
+  <path d="M 1080 600 L 1360 600 L 1380 600" fill="none" stroke="#ed6c02" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="1220" y="594" font-size="10" fill="#ed6c02" font-weight="700">demo only</text>
+
+  <!-- ============================================================
+       BOTTOM BAND — OBSERVABILITY (y = 900 → 1010)
+       ============================================================ -->
+  <rect x="40" y="900" width="1840" height="124" rx="10" fill="#f5f0fb" stroke="#7a6bb1" stroke-width="1.4"/>
+  <text x="60" y="924" font-size="13" font-weight="700" fill="#3b2f6b">Observability &amp; Governance · all engine telemetry flows down into this layer</text>
+
+  <g transform="translate(60, 936)">
+    <image href="assets/log-analytics.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Log Analytics</text>
+    <text x="52" y="32" font-size="10" fill="#555">log-aigovern-prod</text>
+    <text x="52" y="44" font-size="10" fill="#555">PerGB2018 · 30-day</text>
+  </g>
+
+  <g transform="translate(280, 936)">
+    <image href="assets/app-insights.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Application Insights</text>
+    <text x="52" y="32" font-size="10" fill="#555">appi-aigovern-dev</text>
+    <text x="52" y="44" font-size="10" fill="#555">workspace-based · OTel</text>
+  </g>
+
+  <g transform="translate(500, 936)">
+    <image href="assets/monitor.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Azure Monitor</text>
+    <text x="52" y="32" font-size="10" fill="#555">Prometheus counters</text>
+    <text x="52" y="44" font-size="10" fill="#555">via /api/metrics</text>
+  </g>
+
+  <g transform="translate(720, 936)">
+    <image href="assets/alerts.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="14" font-size="11" font-weight="700">8 scheduled-query alerts</text>
+    <text x="52" y="28" font-size="9.5" fill="#555">pii-leak · scrub-rate · opa-unreachable</text>
+    <text x="52" y="40" font-size="9.5" fill="#555">vault-error · audit-chain-broken</text>
+    <text x="52" y="52" font-size="9.5" fill="#555">http-5xx · p95-latency · rtf-partial</text>
+  </g>
+
+  <g transform="translate(1040, 936)">
+    <image href="assets/defender.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Defender for Cloud</text>
+    <text x="52" y="32" font-size="10" fill="#555">recommendations · CSPM</text>
+  </g>
+
+  <g transform="translate(1260, 936)">
+    <image href="assets/policy.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Azure Policy</text>
+    <text x="52" y="32" font-size="10" fill="#555">tenant guardrails</text>
+  </g>
+
+  <g transform="translate(1480, 936)">
+    <image href="assets/mi.svg" x="0" y="0" width="44" height="44"/>
+    <text x="52" y="18" font-size="11" font-weight="700">Managed Identity</text>
+    <text x="52" y="32" font-size="10" fill="#b42318">deferred → prod posture</text>
+  </g>
+
+  <g transform="translate(1700, 936)">
+    <text x="0" y="14" font-size="11" font-weight="700" fill="#3b2f6b">Action group</text>
+    <text x="0" y="30" font-size="10" font-family="Consolas,monospace">ag-aigovern-dev</text>
+    <text x="0" y="44" font-size="10" fill="#555">email + webhook</text>
+    <text x="0" y="58" font-size="10" fill="#555">on alert fire</text>
+  </g>
+
+  <!-- Engine → observability flow (3 parallel dashed blue down arrows) -->
+  <line x1="700" y1="860" x2="700" y2="900" stroke="#1f6feb" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-blue)"/>
+  <line x1="820" y1="860" x2="820" y2="900" stroke="#1f6feb" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-blue)"/>
+  <line x1="940" y1="860" x2="940" y2="900" stroke="#1f6feb" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-blue)"/>
+  <text x="830" y="884" font-size="10" fill="#1f6feb" font-weight="700" text-anchor="middle">diagnostics · OTel · structured logs</text>
+
+  <!-- ============================================================
+       LEGEND (y = 1040 → 1270)
+       ============================================================ -->
+  <rect x="40" y="1040" width="1840" height="220" rx="10" fill="#ffffff" stroke="#9fb4cc" stroke-width="1"/>
+
+  <!-- COL A — Connectivity -->
+  <text x="60" y="1064" font-size="13" font-weight="700" fill="#0b3a66">Connectivity legend</text>
+  <g font-size="11">
+    <line x1="60" y1="1086" x2="106" y2="1086" stroke="#222" stroke-width="1.8" marker-end="url(#ar)"/>
+    <text x="116" y="1090">Public HTTPS · cookie-authed</text>
+    <line x1="60" y1="1108" x2="106" y2="1108" stroke="#b42318" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#ar-red)"/>
+    <text x="116" y="1112">HMAC-signed SDK ingress</text>
+    <line x1="60" y1="1130" x2="106" y2="1130" stroke="#7c3aed" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-purple)"/>
+    <text x="116" y="1134">OIDC federated (no secrets)</text>
+    <line x1="60" y1="1152" x2="106" y2="1152" stroke="#067647" stroke-width="1.6" marker-end="url(#ar-green)"/>
+    <text x="116" y="1156">Scrubbed payload egress</text>
+    <line x1="60" y1="1174" x2="106" y2="1174" stroke="#1f6feb" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar-blue)"/>
+    <text x="116" y="1178">Diagnostics → Log Analytics / App Insights</text>
+    <line x1="60" y1="1196" x2="106" y2="1196" stroke="#222" stroke-width="1.6" stroke-dasharray="4,3" marker-end="url(#ar)"/>
+    <text x="116" y="1200">Internal data fetch</text>
+    <line x1="60" y1="1218" x2="106" y2="1218" stroke="#ed6c02" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="116" y="1222">Demo-only path (Bedrock)</text>
+  </g>
+
+  <!-- COL B — Key characteristics -->
+  <text x="500" y="1064" font-size="13" font-weight="700" fill="#0b3a66">Key characteristics</text>
+  <g font-size="11">
+    <text x="500" y="1090">✓ Single-tenant v1 · dev build (no KV, no MI, no VNet)</text>
+    <text x="500" y="1112">✓ FastAPI engine on App Service Linux B1 · Python 3.12</text>
+    <text x="500" y="1134">✓ Two Preact SPAs on Static Web Apps (eastus2, Free)</text>
+    <text x="500" y="1156">✓ JSONL-primary storage; PG + AI Search optional</text>
+    <text x="500" y="1178">✓ Per-system HMAC SDK keys (S53) with legacy fallback</text>
+    <text x="500" y="1200">✓ Scrubbed-only egress to external LLM / observability</text>
+    <text x="500" y="1222">✓ CI: GitHub Actions OIDC → App Service · SHA verify</text>
+  </g>
+
+  <!-- COL C — Security invariants -->
+  <text x="970" y="1064" font-size="13" font-weight="700" fill="#0b3a66">Security invariants</text>
+  <g font-size="11">
+    <text x="970" y="1090">• Decorator order enforced at import (signallayer.guard)</text>
+    <text x="970" y="1112">• Scrubber runs BEFORE tracer/Langfuse — hard rule</text>
+    <text x="970" y="1134">• OPA fail-closed (error → DENY, never ALLOW)</text>
+    <text x="970" y="1156">• Fernet-encrypted de-id vault · TTL-bound</text>
+    <text x="970" y="1178">• Tamper-evident audit hash chain · SHA-256</text>
+    <text x="970" y="1200">• HMAC: const-time compare · nonce cap 50k · ±300s</text>
+    <text x="970" y="1222">• Right-to-Forget cascade with per-store digests (S08)</text>
+  </g>
+
+  <!-- COL D — Region/tier summary -->
+  <text x="1440" y="1064" font-size="13" font-weight="700" fill="#0b3a66">Tier &amp; region summary</text>
+  <g font-size="11">
+    <text x="1440" y="1090"><tspan font-weight="700">Edge / SPA:</tspan> Static Web Apps · eastus2</text>
+    <text x="1440" y="1112"><tspan font-weight="700">Engine:</tspan> App Service Linux B1 · eastus</text>
+    <text x="1440" y="1134"><tspan font-weight="700">Storage:</tspan> App Service local disk (JSONL)</text>
+    <text x="1440" y="1156"><tspan font-weight="700">T2 memory:</tspan> Postgres Flexible · optional</text>
+    <text x="1440" y="1178"><tspan font-weight="700">T3 RAG:</tspan> Azure AI Search · optional</text>
+    <text x="1440" y="1200"><tspan font-weight="700">Observability:</tspan> Log Analytics + App Insights</text>
+    <text x="1440" y="1222"><tspan font-weight="700">Identity:</tspan> Entra ID tenant SignalLayerDev</text>
+  </g>
+</svg>

@@ -83,3 +83,10 @@ _pytest_tmp/
 
 # Session-produced data exports (timestamped, regenerable)
 ai-systems-inventory-*.csv
+
+# Azure architecture diagram — icon pack (do not commit raw download)
+docs/architecture/azure-icons/
+docs/architecture/*.zip
+# Stray local zips (build artefacts / downloaded skill bundles)
+azure-arch-designer-skill.zip
+deploy.zip

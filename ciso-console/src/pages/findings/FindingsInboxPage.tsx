@@ -7,6 +7,7 @@
 import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
+import { dataMode } from '../../shared/components/DataModeToggle';
 import type {
   Finding, FindingsV2Response, FindingPriority, FindingStatus, FindingImpact,
 } from './types';
@@ -234,7 +235,23 @@ function FindingsTable() {
   if (loading.value && !hasData) {
     return <div class="loading" style={{ padding: '1.5rem' }}>Loading findings…</div>;
   }
-  if (rows.length === 0) return <div class="empty-state">No findings match the current filters.</div>;
+  if (rows.length === 0) {
+    if (dataMode.value === 'v2' && findings.value.length === 0) {
+      return (
+        <div class="empty-state" style={{ padding: '1.5rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '0.5rem' }}>
+            No live findings yet.
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '560px', margin: '0 auto 1rem' }}>
+            Findings appear automatically when an SDK-instrumented system produces a policy denial,
+            guardrail violation, or eval regression.
+          </div>
+          <a class="btn btn-sm btn-primary" href="/sdk-quickstart">Learn how to instrument →</a>
+        </div>
+      );
+    }
+    return <div class="empty-state">No findings match the current filters.</div>;
+  }
 
   return (
     <table class="data-table">

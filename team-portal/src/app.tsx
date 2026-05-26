@@ -11,6 +11,7 @@ import { RtfRequestPage } from './pages/rtf/RtfRequestPage';
 import { PortfolioPage } from './pages/portfolio/PortfolioPage';
 import { RagCorpusPage } from './pages/rag/RagCorpusPage';
 import { AdversarialPage } from './pages/adversarial/AdversarialPage';
+import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { LoginPage } from './pages/login/LoginPage';
 
 export function App() {
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/portfolio" component={PortfolioPage} />
         <Route path="/rag" component={RagCorpusPage} />
         <Route path="/adversarial" component={AdversarialPage} />
+        <Route path="/onboarding/:system_id" component={OnboardingPage} />
         <Route>
           <div class="empty-state">Page not found.</div>
         </Route>

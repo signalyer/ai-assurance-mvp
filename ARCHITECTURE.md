@@ -1636,6 +1636,51 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 - GitHub Actions deploy.yml not yet recovered. Next push should retry; if still 500, raise a GitHub support issue or wait for the incident to clear.
 - Garak deep-scan (independent track) and bcrypt cutover (operator step) both unchanged from S50 close.
 
+### Session 53 — Per-system SDK keys + onboarding wizard + V2 empty-state CTAs
+
+**Theme:** Close the loop between "I just registered an AI system in V2 mode" and "I see telemetry from it." S52 made V2 a tracked invariant per row; S53 makes the SDK onboarding flow explicit. Registering a real-mode system now drops the operator into a 3-step wizard that ends with a verified first SDK call.
+
+**STEP 1 — engine: SDK key model + issuance + status (commit [`0af6162`](https://github.com/signalyer/ai-assurance-mvp/commit/0af6162))**
+- [domain/sdk_keys.py](domain/sdk_keys.py) — NEW. Per-system Pydantic v2 `SdkKey` model with `key_id` (`slk_<8hex>`), plaintext `hmac_secret` (32 url-safe bytes ≈ 43 chars), `data_source: Literal["seed","real"]` inherited from the parent system at issuance, `issued_at/revoked_at/first_seen_at`, `total_calls_24h`. JSONL storage via the storage.py pattern (`_read_all` + `_append_jsonl` + atomic `_rewrite_jsonl` for mutations). `mark_first_seen` is idempotent — middleware can call on every authed request without rewriting after the first.
+- [api/sdk_keys.py](api/sdk_keys.py) — NEW. 4 endpoints under `/api/sdk-keys` (NOT HMAC-gated; session-cookie authed, mirrors the operator surface): `POST /` (201, returns plaintext secret ONCE in `IssuedKeyOut`), `GET /` (list with `KeySummaryOut` strip + V2 filter via `filter_by_mode`), `GET /{key_id}/status` (404 if absent, 200 otherwise), `POST /{key_id}/revoke` (idempotent). Distinction documented in module docstring: `/api/sdk-keys/*` is operator-facing (cookie), `/api/sdk/*` remains SDK-facing (HMAC). Both inherit the parent system's `data_source`.
+- [middleware/hmac_auth.py](middleware/hmac_auth.py) — modified. Per-key lookup FIRST via `domain.sdk_keys.lookup_secret_by_key_id(key_id)`, env-var `SL_HMAC_SECRET` fallback for legacy demo apps. On first successful HMAC-authed call, the middleware calls `mark_first_seen(key_id)` (no-op if already set). Revoked key → 401 generic.
+- [tests/test_sdk_keys.py](tests/test_sdk_keys.py) — NEW. Issue, list, revoke, status, HMAC roundtrip, first-seen idempotency.
+- [dashboard.py](dashboard.py) — mounts `api.sdk_keys.router`.
+
+**STEP 2 — Team Portal onboarding wizard (this commit)**
+- [team-portal/src/pages/onboarding/types.ts](team-portal/src/pages/onboarding/types.ts) — NEW. `IssuedKey` + `KeyStatus` mirroring `api/sdk_keys.py` response shapes.
+- [team-portal/src/pages/onboarding/OnboardingPage.tsx](team-portal/src/pages/onboarding/OnboardingPage.tsx) — NEW. 3-step wizard, route `/onboarding/:system_id` (`useRoute<{ system_id: string }>`). Step 1 auto-fires `POST /api/sdk-keys` on mount; the plaintext `hmac_secret` is held in a module-level signal (`issuedKey`) — never in localStorage, never re-fetched. Refresh = secret is gone, user must issue a new key (revokes the old one). "Show secret" toggle masks/unmasks; copy button per code block. Step 2 mirrors `SdkQuickstartPage.tsx` (S17 #2) but pre-configured for one specific system — install command, env file with the real key, Python decorator stack with `policy_gate(action="llm_call")` → `scrub_pii(scope=ai_system_id)` → `guardrails()` → `signallayer.guard()`. Step 3 mounts `<FirstSignalPanel />` and disables the "Done" button until `first_seen_at` arrives.
+- [team-portal/src/pages/onboarding/FirstSignalPanel.tsx](team-portal/src/pages/onboarding/FirstSignalPanel.tsx) — NEW. Polls `GET /api/sdk-keys/{key_id}/status` every 2500ms via `setTimeout`-then-await-then-`setTimeout` chain (NOT `setInterval`) so polls never overlap if the engine ever lags. Stops cleanly once `first_seen_at` transitions null → timestamp. Three visual states: waiting (spinner + elapsed timer), arrived (green check + link to `/runtime?system=...`), stalled (amber warning after 60s + troubleshooting checklist). Cleanup in useEffect return clears the timer + heartbeat interval on unmount.
+- [team-portal/src/pages/ai-systems/RegisterSystemPage.tsx](team-portal/src/pages/ai-systems/RegisterSystemPage.tsx) — modified. On submit success, redirects to `/onboarding/{ai_system_id}` instead of `/ai-systems`. Backend's `redirect_to` field is intentionally ignored — onboarding is the canonical next step regardless of intake outcome.
+- [team-portal/src/app.tsx](team-portal/src/app.tsx) — adds `/onboarding/:system_id` route. No sidebar link (URL-param-gated, not always visible — matches plan §STEP 2).
+
+**STEP 4 — V2 empty-state CTAs (this commit)**
+- [team-portal/src/pages/ai-systems/AiSystemsPage.tsx](team-portal/src/pages/ai-systems/AiSystemsPage.tsx) — when `dataMode === 'v2' && allSystems.value.length === 0`, replace generic "No systems match filters" with "No live AI systems registered. Register your first system →" linking `/ai-systems/new`.
+- [team-portal/src/pages/portfolio/PortfolioPage.tsx](team-portal/src/pages/portfolio/PortfolioPage.tsx) — new V2 empty-state card above the KPI row when `systems.value.length === 0`: "Your portfolio populates once an SDK-instrumented system has been registered…" + Register CTA.
+- [ciso-console/src/pages/findings/FindingsInboxPage.tsx](ciso-console/src/pages/findings/FindingsInboxPage.tsx) — V2 empty state: "No live findings yet. Findings appear automatically when an SDK-instrumented system produces a policy denial, guardrail violation, or eval regression. Learn how to instrument →" linking `/sdk-quickstart`.
+- [ciso-console/src/pages/release-gates/ReleaseGatesPage.tsx](ciso-console/src/pages/release-gates/ReleaseGatesPage.tsx) — V2 empty state: "Gates compute once an AI system has been registered and baselined." SPA code is wired correctly; engine-side filter for `/api/release-gates/*` is the remaining gap (carry-over from S52 §Known open).
+- All four gated on the existing module-level `dataMode` signal from `shared/components/DataModeToggle`; V1 mode falls back to the original generic empty state.
+
+**STEP 5 — smoke probe + ARCHITECTURE.md + deploy**
+- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) + [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) — Probe 8: log in, pick first system from `/grc/ai-systems`, POST `/api/sdk-keys` (assert 201 + `hmac_secret.Length > 32`), GET `/api/sdk-keys/{key_id}/status` (assert 200 + `first_seen_at == null`), POST `/api/sdk-keys/{key_id}/revoke` (assert 200 + `revoked_at` set). Skips when the role password env var is unset, matching the Probe 5 + Probe 7 auth pattern.
+- ARCHITECTURE.md — this section.
+- Architecture diagram: [docs/architecture/azure-architecture.svg](docs/architecture/azure-architecture.svg) + `.png` + `.md` (5-band swimlane layout, no path crossings, V23 official Azure icons).
+
+**Locked decisions (from plan §locked decisions)**
+- No new SDK transport. HMAC-SHA-256 over `/api/sdk/*` per S09 stays as-is.
+- Per-system keys, not per-tenant — granular revocation.
+- Secret shown ONCE at issuance. Server stores the plaintext (same trust boundary as the legacy `SL_HMAC_SECRET` env var); the operator UX hides it after one display.
+- First-signal probe is engine-side, not SPA-side. Short-poll 2.5s (matches V1 Memory page pattern). Long-poll skipped — adds plumbing for ~5s win that doesn't matter for the manual onboarding flow.
+
+**Compound rule earned this session**
+- **S53 #1 (from STEP 1 commit):** Secrets used to generate downstream artifacts (HMAC, JWT, etc.) CANNOT be hash-only at rest — they have to be plaintext or encrypted-at-rest with a server-managed key. Hash-only is for credentials that are only ever compared, never re-used to compute something. Grep for "hash" in any new design and sanity-check whether the read-side requires the plaintext.
+
+**Known open at S53 close**
+- CI deploy via GitHub Actions still flaky on the `azure/login@v2` archive download. S53 STEP 1 shipped via the S52 #4 fallback (manual `build-zip.py` + `deploy-and-poll.ps1`). Retry `gh workflow run deploy.yml --ref main` periodically.
+- Probes 5 + 7 + 8 SKIP without `op` creds (1Password CLI absent). Same intentional skip-path as S52.
+- Release Gates engine endpoint doesn't honour `X-Data-Mode v2` (S52 carry-over) — the SPA's new V2 empty state is wired but never triggers because the list never goes empty. Flagged as a follow-up task (S52 §Known open §2 unchanged).
+- SDK `signallayer.init()` signature does not yet accept a `key_id=` kwarg; the wizard's generated snippet shows the kwarg, but works on the env-var fallback path. Cosmetic — fix when next touching the SDK.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
