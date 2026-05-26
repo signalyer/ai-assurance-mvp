@@ -161,4 +161,23 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 
 ---
 
+### F-010 · PLATFORM-GAP · Inventory list endpoint never reads intake-written systems (P0, RESOLVED)
+
+**Found:** P2 re-registration, 2026-05-26 — user re-registered the Azure Architect AI system after F-009 wipe; SDK key issuance returned a valid `ai_system_id` (data_source=real) but the inventory page showed total=0 in V2 mode.
+**Where:** [api/grc.py:660-671](../../api/grc.py) — `GET /api/grc/ai-systems` used `AI_SYSTEMS` imported from `mock_data.py` (5 hardcoded seed dicts), NOT `domain.repository.list_ai_systems()` which concats seed + intake-written JSONL.
+**What:** The intake submit handler (`api/intake.py:417`) writes the new AISystem to `data/ai_systems.jsonl` via `_append_jsonl`. The repository's `list_ai_systems()` reads both seed + JSONL correctly. But **the SPA-facing inventory endpoint imports only the mock_data seeds and never consults the repository.** Result: every customer-registered system was invisible to the portfolio list view. Has been broken since the intake feature shipped (at least back to S52, possibly earlier).
+**Impact:** P0 — every customer onboarding through the V2 wizard produces a "phantom" system: the wizard says "submitted!", the redirect URL contains a valid `ai_system_id`, the SDK key issuance succeeds (the issuance code path correctly reads from the repository, see `api/sdk_keys.py:_resolve_system_data_source`), but the inventory page and direct GET endpoint return as if the system doesn't exist. Catastrophic onboarding UX.
+**Why it wasn't caught:** The wizard's success path redirects to `/onboarding/{ai_system_id}` (a wizard sub-page), not the portfolio. The customer only sees the gap if they navigate back to inventory. Smoke probes test the seed list (V1=5, V2=0) which is the "correct" result given there were no intake systems persisted across deploys (F-009 ensured nothing survived). F-009 + F-010 covered for each other.
+**Fix (this commit):**
+1. `api/grc.py::list_ai_systems` now merges `AI_SYSTEMS` (seed dicts) with `domain.repository.list_ai_systems()` (intake AISystem models). New helper `_intake_to_summary_view` maps the domain shape → view shape for `AiSystemSummaryOut`. Computed fields (`open_findings`, `last_assessment`, etc.) default to zero/empty for intake rows — proper enrichment is sibling S56 work.
+2. `api/grc.py::get_ai_system` (direct GET) falls back to the intake-stored row if the seed list miss, so the detail page resolves instead of 404'ing.
+**Status:** RESOLVED 2026-05-26 — lands in same commit batch as F-008/F-009 close.
+**Sibling work (S56 backlog):**
+- Enrich intake rows with computed `open_findings` / `critical_findings` / `last_assessment` (requires findings + assessments to be joined like the seed path does)
+- Migrate the seed `AI_SYSTEMS` mock dicts to the Pydantic shape so both paths go through one view-mapper
+- Audit every other `mock_data.X` import in `api/grc.py` for the same class of bug (FINDINGS, RELEASE_GATE_RESULTS, EVIDENCE, RUNTIME_EVENTS all potentially same gap)
+**Priority:** P0 (was breaking onboarding UX; fixed)
+
+---
+
 _(Append further findings below as P1-P10 progress.)_

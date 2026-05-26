@@ -21,6 +21,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from middleware.data_mode import filter_by_mode, get_data_mode
 
+# S55 #3 / F-010: intake-written AI systems live in data/ai_systems.jsonl;
+# the inventory list endpoint used to ONLY read mock_data.AI_SYSTEMS (the
+# 5 seeds), so real-mode customer intakes never appeared in the portfolio.
+# Pull the intake rows via the repository at request time and merge into
+# the view-shape AiSystemSummaryOut below.
+from domain.repository import list_ai_systems as _list_intake_systems
+
 from mock_data import (
     AI_SYSTEMS,
     FINDINGS,
@@ -663,12 +670,74 @@ async def reset_notifications() -> OkResponse:
     operation_id="ai_systems_list",
 )
 async def list_ai_systems(request: Request) -> AiSystemsListOut:
-    """List all AI systems in the portfolio. Honors X-Data-Mode (v1|v2)."""
-    rows = filter_by_mode(AI_SYSTEMS, get_data_mode(request))
+    """List all AI systems in the portfolio. Honors X-Data-Mode (v1|v2).
+
+    S55 #3 / F-010: merges the V1 mock_data seed rows (which already match
+    the AiSystemSummaryOut view shape) with intake-written rows from
+    domain.repository.list_ai_systems() (which uses the canonical AISystem
+    Pydantic shape). The intake rows are mapped to the view shape via
+    `_intake_to_summary_view` below, filling computed fields with sensible
+    zero defaults — proper enrichment from FINDINGS / GATES / EVIDENCE
+    follows the seed pattern and is a sibling improvement (S56 backlog).
+    """
+    seed_rows = list(AI_SYSTEMS)
+    intake_rows = [_intake_to_summary_view(s) for s in _list_intake_systems() if not _is_seed(s.id)]
+    merged = seed_rows + intake_rows
+    rows = filter_by_mode(merged, get_data_mode(request))
     return AiSystemsListOut(
         systems=[AiSystemSummaryOut(**s) for s in rows],
         total=len(rows),
     )
+
+
+_SEED_SYSTEM_IDS: frozenset[str] = frozenset(s["id"] for s in AI_SYSTEMS)
+
+
+def _is_seed(system_id: str) -> bool:
+    """Skip intake rows that duplicate seed IDs (defensive — never expected)."""
+    return system_id in _SEED_SYSTEM_IDS
+
+
+def _intake_to_summary_view(s: "Any") -> dict[str, Any]:
+    """Map an AISystem (Pydantic) → AiSystemSummaryOut dict shape.
+
+    Computed fields (open_findings, critical_findings, last_assessment,
+    next_assessment) default to zero/empty because FINDINGS + assessment
+    enrichment for intake-written systems is a separate workstream
+    (S56 backlog). The portfolio view will show the system with empty
+    counts until that lands — better than the prior behavior of hiding
+    the system entirely.
+    """
+    def _enum_value(v: Any) -> str:
+        return getattr(v, "value", v) if v is not None else ""
+
+    models = list(getattr(s, "models_used", []) or [])
+    model_label = models[0] if models else (getattr(s, "model_provider", "") or "")
+
+    return {
+        "id": s.id,
+        "name": s.name,
+        "business_owner": s.business_owner or "",
+        "technical_owner": s.technical_owner or "",
+        "domain": s.domain or "",
+        "description": s.description or "",
+        "risk_level": _enum_value(getattr(s, "inherent_risk", "")),
+        "autonomy_level": _enum_value(getattr(s, "autonomy_level", "")),
+        "data_classes": [_enum_value(d) for d in (getattr(s, "data_classes", []) or [])],
+        "model": model_label,
+        "runtime_status": _enum_value(getattr(s, "runtime_status", "")),
+        "release_decision": _enum_value(getattr(s, "release_decision", "")),
+        "open_findings": 0,
+        "critical_findings": 0,
+        "last_assessment": "",
+        "next_assessment": "",
+        "deployment_target": _enum_value(getattr(s, "environment", "")),
+        "use_case": getattr(s, "use_case", "") or "",
+        "human_oversight": getattr(s, "human_oversight", "") or "",
+        "data_residency": getattr(s, "data_residency", "") or "",
+        "trust_boundaries": "",
+        "data_source": getattr(s, "data_source", "real") or "real",
+    }
 
 
 @router.get(
@@ -677,8 +746,22 @@ async def list_ai_systems(request: Request) -> AiSystemsListOut:
     operation_id="ai_systems_get",
 )
 async def get_ai_system(system_id: str) -> AiSystemDetailOut:
-    """Get details of one AI system, enriched with findings, gates, evidence, events."""
+    """Get details of one AI system, enriched with findings, gates, evidence, events.
+
+    S55 #3 / F-010: falls back to intake-written rows for systems registered
+    via the wizard. Intake rows currently render with empty findings/gates/
+    evidence/events arrays — proper enrichment for these is a sibling
+    improvement (S56 backlog), but at minimum the detail page now resolves
+    instead of 404'ing.
+    """
     system = next((s for s in AI_SYSTEMS if s["id"] == system_id), None)
+    if system is None:
+        intake_system = next(
+            (s for s in _list_intake_systems() if s.id == system_id and not _is_seed(s.id)),
+            None,
+        )
+        if intake_system is not None:
+            system = _intake_to_summary_view(intake_system)
     if not system:
         raise HTTPException(status_code=404, detail="System not found")
 
