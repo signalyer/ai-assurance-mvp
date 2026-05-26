@@ -180,6 +180,10 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 
 ---
 
+**Note on numbering:** Earlier draft notes used F-012/F-013/F-014/F-015/F-016 informally during the S55 debug session; the canonical numbering on disk is F-011 (slot swap) followed by F-012 (intake AWS-only), F-013 (key proliferation), F-014 (`.env` host bug), F-015 (`first_seen_at` telemetry). The retrospective is the source of truth.
+
+---
+
 ### F-011 · PLATFORM-GAP · Slot swap wipes data/ even when zip excludes it (P0, RESOLVED)
 
 **Found:** S55, 2026-05-26 — immediately after F-009 fix. User's re-registered `ai-sys-9832577d` + key `slk_df836485` were both wiped by the S55 #3 deploy (commit 0283891), even though that zip excluded `data/`.
@@ -206,4 +210,70 @@ Final acceptance test 2026-05-26: registered `ai-sys-ede33ad4` post-DATA_ROOT-fi
 
 ---
 
-_(Append further findings below as P1-P10 progress.)_
+### F-012 · PLATFORM-GAP · Intake wizard hard-codes Cloud Provider to AWS-only (cosmetic)
+
+**Found:** S55 post-mortem, 2026-05-26 — while re-registering `ai-sys-bae72e75` for POC P2.
+**Where:** [static/ai-systems-new.html:205](../../static/ai-systems-new.html#L205) — `selectField("Cloud Provider", "cloud_provider", ["AWS"], { required: true })` and all of Step 2's chips (`AWS Services Used`, `Bedrock`, etc.).
+**What:** F-002 was logged as "PARTIALLY RESOLVED" on the API side, but the legacy static intake wizard still presents only AWS as a cloud provider with AWS-flavored service chips. An Azure (or GCP, or multi-cloud) workload has no native option; operator must pick "AWS" and stuff Azure detail into free-text fields.
+**Impact:** Cosmetic for assurance posture (`cloud_provider` is metadata, doesn't branch risk engine or control binding). Misleading for the operator and contradicts the V2 multi-cloud arc claim.
+**Workaround:** Select AWS, leave Step 2 chips empty, describe Azure detail in Description / Model Provider / Use Case.
+**Fix (S56):** Add Azure + GCP options to the cloud_provider select; replace the AWS-only service chip list with a cloud-conditional chip set.
+**Priority:** P2 (UX, not correctness)
+
+---
+
+### F-013 · PLATFORM-GAP · Wizard auto-mints a new SDK key on every page mount (key proliferation)
+
+**Found:** S55 post-mortem, 2026-05-26 — verifying first_seen_at after dry-run.
+**Where:** [team-portal/src/pages/onboarding/OnboardingPage.tsx:165](../../team-portal/src/pages/onboarding/OnboardingPage.tsx#L165) — `useEffect(... void issueKey(systemId); ...)` fires `POST /api/sdk-keys` unconditionally on every mount of `/onboarding/:system_id`.
+**What:** Every refresh / re-login / tab-restore on the onboarding wizard mints a brand-new key for the same AI system. Operator's hand-saved `.env` from a prior mount becomes silently orphaned (still HMAC-valid; just no longer the key the wizard polls). During this debug session at least 3 keys were minted for `ai-sys-bae72e75` (slk_5b4dfc09, slk_301660cb, plus the one minted on the latest reload).
+**Symptom:** Operator follows the wizard, runs dry-run, sees wizard's Step 3 stuck on "Waiting…" because the wizard is polling the *latest* mint, not the key in the operator's `.env`.
+**Fix (S56):** On mount, `GET /api/sdk-keys?ai_system_id=...` first. If the list is non-empty and contains an un-revoked key, present that key (with a "Rotate key" affordance) instead of auto-minting. Mint only when the list is empty.
+**Priority:** P1 (load-bearing UX confusion — the entire "Verify Signal" gate appears broken because of this even when the engine is healthy)
+
+---
+
+### F-014 · PLATFORM-GAP · `Copy as .env` emits SPA host as engine base URL (load-bearing UX bug, FIXED IN SOURCE)
+
+**Found:** S55 post-mortem, 2026-05-26 — explained why the dry-run hit a 200 with SPA HTML body instead of engine JSON.
+**Where:** [team-portal/src/pages/onboarding/OnboardingPage.tsx:65-72](../../team-portal/src/pages/onboarding/OnboardingPage.tsx#L65-L72) — `engineBaseUrl` derived from `window.location.host`, which is the SWA host (`portal.aigovern.sandboxhub.co`), not the engine apex (`aigovern.sandboxhub.co`).
+**What:** The S55 #8 "Copy as .env" button emitted `SL_API_BASE_URL=https://portal.aigovern.sandboxhub.co`. The SWA returns `index.html` (200) for every unknown path, so the SDK appeared to succeed but never touched the engine. HMAC middleware never ran. `first_seen_at` never populated. Every operator who used the new button got a silently-broken `.env`.
+**Impact:** Same end-state as F-008 (no traffic to the engine) but with a 200 OK that misleads diagnosis. Burned the bulk of S55's final hour.
+**Fix (in this commit):** Source `engineBaseUrl` from `import.meta.env.VITE_API_BASE_URL` (strip `/api/v*` suffix to get the origin). Fall back to `window.location` only when `VITE_API_BASE_URL` is unset.
+**Verification gap:** The fix is in source; the deployed SPA still emits the old value until the team-portal SPA is rebuilt + redeployed in S56. Operators using the wizard between now and that rebuild must manually correct `SL_API_BASE_URL` to `https://aigovern.sandboxhub.co`.
+**Sibling work (S56):** Rebuild + deploy team-portal SPA to ship the fix to operators.
+**Priority:** P1 (every operator using the wizard's headline "Copy as .env" button got broken config — UX bug, not security)
+
+---
+
+### F-015 · PLATFORM-GAP · `first_seen_at` does not persist despite successful HMAC verification (telemetry gap)
+
+**Found:** S55 post-mortem, 2026-05-26 — POC P2 acceptance test partial pass.
+**Where:** [middleware/hmac_auth.py:246-252](../../middleware/hmac_auth.py#L246-L252) and/or [domain/sdk_keys.py:246-263](../../domain/sdk_keys.py#L246-L263) — `mark_first_seen` either is not being invoked, or is being invoked and silently failing on the `_rewrite_jsonl` write. The middleware's try/except swallows the exception with a `logger.exception` that's not surfacing in the downloaded log window.
+**What:** After multiple verified-200 HMAC-signed calls to `/api/sdk/health` from the agent using `slk_301660cb`, `GET /api/v1/sdk-keys/slk_301660cb/status` continues to return `first_seen_at: null`. The handler returns the canonical `{"ok":true,"service":"aigovern-engine"}` (confirms route ran), unsigned probe returns 401 (confirms middleware is active), and `env_fallback` is mathematically excluded (cannot equal a freshly-minted 32-byte random plaintext). Therefore the registered_key branch matched and `mark_first_seen` should have fired — but didn't persist.
+**Hypotheses (S56 to root-cause):**
+1. `_rewrite_jsonl` raising an exception on `/home/data/sdk_keys.jsonl` (write permission, file lock, atomic rename across mount). Exception swallowed by middleware try/except, not surfaced in log window pulled.
+2. Multi-worker isolation: `DATA_DIR` resolved at module import per worker; if any worker booted before `DATA_ROOT` was sticky-set, it writes elsewhere. Reads from a *different* worker see no update.
+3. `SdkKey.model_validate` rejecting the on-disk row (schema drift), so `get_by_key_id` returns None → `_resolve_secret_for_key` falls through to `env_fallback` — but env_fallback then somehow accepts the per-key signature (would require global secret == per-key secret, impossible by construction). Less likely than #1 or #2.
+**Impact:** POC P2's "Verify Signal" wizard step never flips green even when the agent is fully functional. Telemetry / UX bug, not a security or correctness bug — HMAC verification itself works end-to-end. POC P2 is substantively pass (chain runs, engine accepts signed traffic, real-mode key authenticates) but the wizard's UI gate stays red.
+**Fix (S56):** Add a `logger.info("sdk_keys.mark_first_seen attempt key_id=%s", key_id)` before the write and `logger.info("sdk_keys.mark_first_seen wrote key_id=%s", key_id)` after — capture from real-time `az webapp log tail` during a dry-run to bisect read-vs-write vs worker-isolation. Likely fix is a single line (don't swallow the exception, or add an `os.fsync`).
+**Priority:** P1 (blocks the wizard's headline acceptance gate even when engine is healthy)
+
+---
+
+## POC P2 — SUBSTANTIVE CLOSE (2026-05-26)
+
+**Acceptance proven:**
+- ✅ 3-decorator chain (`policy_gate → scrub_pii → guardrails`) loads + executes in an external agent process (`agents/azure-architect/agent.py`)
+- ✅ External agent makes an HMAC-signed call to engine `/api/sdk/health` and receives the canonical handler response (`{ok: true, service: "aigovern-engine"}`)
+- ✅ Engine rejects unsigned probes with 401 (confirms HMAC middleware is the gate, not a no-auth shortcut)
+- ✅ Real-mode key (`data_source: "real"`, issued via wizard for `ai-sys-bae72e75`) authenticates the request
+- ✅ F-008, F-009, F-010, F-011 fixes all hold under the live agent traffic
+
+**Known gaps deferred to S56:** F-012 (UX), F-013 (UX), F-014 (UX, fixed in source), F-015 (telemetry).
+
+**Decision:** POC P2 advances to P3. F-015's wizard "Verify Signal" gate stays red until S56 lands the telemetry fix, but the underlying engine contract is proven and the agent is shipping signed traffic to a key it owns. P3 (upload OPA policy + verify framework matrix) is unblocked.
+
+---
+
+_(Append further findings below as P3-P10 progress.)_

@@ -50,7 +50,7 @@ def _init_sdk() -> None:
 @signallayer.policy_gate(action="llm_call")
 @signallayer.scrub_pii(scope="azure-architect")
 @signallayer.guardrails()
-async def call_llm(prompt: str, workload_id: str = "azure-architect") -> str:
+async def call_llm(prompt: str, workload_id: str = os.environ.get("SL_WORKLOAD_ID", "azure-architect")) -> str:
     """Placeholder LLM call. P4 replaces body with Anthropic Opus/Haiku synthesis.
 
     Decorator chain (outermost → innermost) — the 3 real decorators:

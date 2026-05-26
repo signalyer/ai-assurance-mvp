@@ -63,8 +63,21 @@ function workloadIdFor(systemId: string): string {
 }
 
 const engineBaseUrl = computed<string>(() => {
-  // Best effort: same-origin for prod (the SPA and engine are co-hosted via
-  // the SWA→App Service routing), localhost:8000 for local dev.
+  // F-015: the SPA (portal.aigovern.sandboxhub.co) and the engine
+  // (aigovern.sandboxhub.co) are on different origins in prod — the previous
+  // window.location.host fallback emitted the SWA host, which 200s every
+  // request with index.html and silently breaks every operator's .env.
+  // VITE_API_BASE_URL is the SPA's authoritative view of the engine
+  // (e.g. https://aigovern.sandboxhub.co/api/v1). Strip the /api/v* suffix
+  // because the SDK base_url is the origin, not the versioned API root.
+  const apiBase = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
+  if (apiBase) {
+    try {
+      return new URL(apiBase).origin;
+    } catch {
+      // fall through to legacy heuristic
+    }
+  }
   if (typeof window === 'undefined') return 'https://aigovern.sandboxhub.co';
   const h = window.location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
