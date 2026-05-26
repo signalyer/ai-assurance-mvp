@@ -1551,6 +1551,45 @@ S47 started as housekeeping (V1 deprecation watch cadence — completed) but piv
 - bcrypt cutover post-demo: flip `ALLOW_DEMO_AUTH=false` on both slots, verify 403 on `/api/auth/login`. One-way trip; flag stays false in prod permanently.
 - Pre-existing test failure flagged via spawn_task: `tests/test_session10_hardening.py::test_rtf_index_sidecar_used` — RTF sidecar signature drift, orthogonal to S49.
 
+### Session 50 — SPA-resident login pages with Entra OIDC CTA
+
+**All 5 steps shipped + a pre-S50 sweep of the same bug class as S49 #5.** Engine sha unchanged. SPA bundles redeployed to both gov + portal SWAs.
+
+**Pre-S50 sweep (commit [`f244d2f`](https://github.com/signalyer/ai-assurance-mvp/commit/f244d2f)) — applied S49 #5 render-guard pattern to 4 more CISO Console pages.** S49 closed with the Findings table fix (commit `570f975`) but the same anti-pattern existed across the rest of the surface — `{loading.value && <Loading/>}` paired with `{!loading.value && content}` hides existing data the moment a refetch flips `loading` back to true. Audited all 10 untested pages; 4 had the bug, 6 didn't (audit/evidence/analytics/reports/rtf/rtf-forensics render unconditionally).
+- [ciso-console/src/pages/portfolio/PortfolioPage.tsx](ciso-console/src/pages/portfolio/PortfolioPage.tsx) — guarded by `systems.value.length === 0`
+- [ciso-console/src/pages/release-gates/ReleaseGatesPage.tsx](ciso-console/src/pages/release-gates/ReleaseGatesPage.tsx) — guarded by `summaries.value.length === 0`
+- [ciso-console/src/pages/frameworks/FrameworksPage.tsx](ciso-console/src/pages/frameworks/FrameworksPage.tsx) — guarded by `!m`
+- [ciso-console/src/pages/policies/PoliciesPage.tsx](ciso-console/src/pages/policies/PoliciesPage.tsx) — ternary now keyed off `policies.value.length === 0`
+
+URL audit on all 10 pages was clean — every SPA path matches its router prefix exactly (no stale-URL drift after the engine refactors of S49).
+
+**S50 STEPS 1-3 (commit [`cd73aca`](https://github.com/signalyer/ai-assurance-mvp/commit/cd73aca)) — SPA-resident login pages:**
+- [ciso-console/src/shared/api/authConfig.ts](ciso-console/src/shared/api/authConfig.ts) + [team-portal/src/shared/api/authConfig.ts](team-portal/src/shared/api/authConfig.ts) — `fetchAuthConfig()` over `/api/auth/config`, module-level signal cache for the page lifetime, conservative bcrypt-only default on transient engine failure (a 5xx must not surface an OIDC button that would 404).
+- [ciso-console/src/shared/components/MicrosoftLogo.tsx](ciso-console/src/shared/components/MicrosoftLogo.tsx) + [team-portal/src/shared/components/MicrosoftLogo.tsx](team-portal/src/shared/components/MicrosoftLogo.tsx) — inline 4-square SVG, official MS brand colors, no external CDN dependency.
+- [ciso-console/src/pages/login/LoginPage.tsx](ciso-console/src/pages/login/LoginPage.tsx) + [team-portal/src/pages/login/LoginPage.tsx](team-portal/src/pages/login/LoginPage.tsx) — handles all four (`allow_demo_auth` × `oidc_enabled`) combinations: both → MS primary + demo secondary; OIDC only → MS only; demo only → bcrypt form only; neither → misconfiguration banner. STEP 3 folded in: `?next=` read on mount, validated relative path, threaded into BOTH the bcrypt form body AND the OIDC redirect URL.
+- [ciso-console/src/app.tsx](ciso-console/src/app.tsx) + [team-portal/src/app.tsx](team-portal/src/app.tsx) — `/login` short-circuits BEFORE `<Shell>` so Sidebar/Topbar (which assume an authed session) don't mount on the anonymous page.
+
+**bcrypt POST is raw `fetch` with form-urlencoded body** — the engine `/api/auth/login` endpoint takes `Form(...)` params, not JSON; the existing `apiPost` would send the wrong content-type. **OIDC click is `window.location.href`** — the browser has to perform the full redirect roundtrip so the engine can set the cookie at `.aigovern.sandboxhub.co` (a cross-origin `fetch` wouldn't get `Set-Cookie` to land in the browser jar for the parent domain).
+
+**S50 STEPS 4 + 5 (commit [`67e7efb`](https://github.com/signalyer/ai-assurance-mvp/commit/67e7efb)) — smoke probe + cutover script:**
+- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) + [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) — Probe 6 added: GET `/api/auth/config` and assert `oidc_enabled=true`. The S50 plan called for a curl-and-grep on the rendered "Sign in with Microsoft" string, but the SPA only renders the MS button after a client-side fetch of `/api/auth/config`; curling `/login` returns the empty Vite shell. Probing the engine endpoint directly is the server-measurable equivalent. **Intentionally does NOT assert `allow_demo_auth`** so the probe keeps passing through the post-demo cutover. Both scripts live-verified 6/6 PASSED against prod.
+- [deploy/disable_demo_auth.ps1](deploy/disable_demo_auth.ps1) — dry-run by default, `-Apply` opt-in with literal-string `"cutover"` confirmation gate. Flips `ALLOW_DEMO_AUTH=false` on BOTH the production slot and the staging slot of `app-aigovern-dev` (the manual-`az` hazard the script exists to remove). Post-apply waits 45s for container recycle and polls each slot's `/api/auth/config` until `allow_demo_auth=false` (90s timeout, exits 0 only when both slots confirm). One-way per ADR-002 §6. Dry-run executed live: reads both slots' current value (`ALLOW_DEMO_AUTH=true` on both), prints the planned change, exits 0 without mutating.
+
+**Live state at S50 close:**
+- Engine prod sha: `2c69a13` (unchanged — no engine work this session).
+- gov SWA bundle: `index-Dt7EwKuL.js` (CISO Console with /login + 4 render-guard fixes).
+- portal SWA bundle: `index-aTJSOabL.js` (Team Workspace with /login).
+- Both smoke scripts: 6/6 PASSED against prod.
+- `ALLOW_DEMO_AUTH=true` on both prod + staging slots (cutover not run).
+
+**Compound rules earned:** none new this session. Existing rules held: S43 #1 (full-files-only edits), S46 #1 (slot-sticky settings), S47 #2 (bash-cwd-persistence — both SWA deploys used absolute paths), S48 #1 (live-run smoke before declaring done — both scripts run live), S49 #5 (never-blank-on-refresh — applied to 4 more pages).
+
+**Known open at S50 close:**
+- bcrypt cutover (S51 or later): run `pwsh deploy/disable_demo_auth.ps1 -Apply` after demo window closes. One-way.
+- Garak deep-scan implementation (ADR-001 §7) — still deferred per S48 STEP 4 reconfirmation. Sidecar Dockerfile + Bicep + bridge + UI tab + integration test. 2 sessions estimated.
+- Pre-existing `tests/test_session10_hardening.py::test_rtf_index_sidecar_used` failure — RTF sidecar signature drift, still orthogonal.
+- A1 OpenAPI hardening (per-router series) — 5/25 done as of S29; resume when convenient.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
