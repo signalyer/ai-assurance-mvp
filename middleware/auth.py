@@ -222,8 +222,15 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
                          ip=ip, user_agent=agent, path=path)
 
         response = await call_next(request)
-        # Sliding cookie — refresh expiry on every successful authed request
-        new_token = _serializer().dumps({"u": user, "sid": sid})
+        # Sliding cookie — refresh expiry on every successful authed request.
+        # Preserve every field in the existing payload (Session 49 added `r`;
+        # rewriting without it would strip the role on the next request and
+        # cause `require_role()` to 401 with "unauthorized" — bit the audit
+        # events page first because findings doesn't gate with require_role).
+        refreshed = dict(payload)
+        refreshed["u"] = user
+        refreshed["sid"] = sid
+        new_token = _serializer().dumps(refreshed)
         _set_session_cookie(response, new_token)
         return response
 

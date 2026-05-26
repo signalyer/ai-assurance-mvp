@@ -129,6 +129,48 @@ def test_require_role_rejects_cookie_without_r_field(app_with_auth: FastAPI) -> 
     assert resp.status_code == 401
 
 
+def test_middleware_refresh_preserves_r_field(
+    app_with_auth: FastAPI, hashed_password: str
+) -> None:
+    """SessionAuthMiddleware.dispatch re-signs the cookie on every request to
+    slide the TTL. Regression guard: that refresh must preserve every field in
+    the payload — most importantly `r`, which was added in Session 49.
+
+    Hot-bug history: the initial S49 patch wrote only `{u, sid}` in the
+    refresh path, stripping `r` on the very next authenticated request. The
+    OIDC callback would issue a valid cookie with role=ciso; the user's
+    first page load (findings, which doesn't gate via require_role) would
+    succeed but rewrite the cookie without `r`; the next page load on a
+    require_role-gated endpoint (audit events) would 401 with
+    "unauthorized" — confusing because the user IS authenticated.
+    """
+    app = app_with_auth
+    # Mount the middleware so refresh runs end-to-end.
+    app.add_middleware(auth_mod.SessionAuthMiddleware)
+
+    @app.get("/refresh-probe")
+    async def _probe() -> dict:
+        return {"ok": True}
+
+    client = TestClient(app, base_url="https://testserver")
+    _login(client, "demo-ciso")
+    # The login response set the cookie with r=ciso. Make ONE authenticated
+    # request — this triggers SessionAuthMiddleware to refresh the cookie.
+    resp = client.get("/refresh-probe")
+    assert resp.status_code == 200
+
+    # The refreshed cookie must still carry `r`.
+    refreshed_token = client.cookies.get(auth_mod.SESSION_COOKIE)
+    refreshed = auth_mod._serializer().loads(refreshed_token)
+    assert refreshed.get("r") == "ciso", (
+        f"refresh path stripped `r` from cookie payload — got: {refreshed!r}"
+    )
+
+    # And the next gated call should still work.
+    resp = client.get("/protected-ciso")
+    assert resp.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # whoami exposes role and derives is_ciso from r
 # ---------------------------------------------------------------------------
