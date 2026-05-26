@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parent.parent / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 SELECTIONS_FILE = DATA_DIR / "workload_selections.jsonl"
 

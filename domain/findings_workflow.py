@@ -32,7 +32,7 @@ from domain import repository, seed
 # Event log persistence
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 _EVENTS_FILE = _DATA_DIR / "findings_events.jsonl"
 

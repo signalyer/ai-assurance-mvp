@@ -35,7 +35,7 @@ from domain.models import (
 )
 
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 RESOLVED_FILE = _DATA_DIR / "notifications_resolved.jsonl"
 

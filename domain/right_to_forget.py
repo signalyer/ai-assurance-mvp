@@ -129,8 +129,8 @@ def _verify_sidecar_entry(entry: dict) -> bool:
 # Sidecar index file for completed cascade IDs
 # ---------------------------------------------------------------------------
 
-_DATA_DIR: Path = Path(__file__).resolve().parents[1] / "data"
-_DATA_DIR.mkdir(exist_ok=True)
+_DATA_DIR: Path = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 _RTF_INDEX_FILE: Path = _DATA_DIR / "rtf_completed_index.jsonl"
 

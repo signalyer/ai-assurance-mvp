@@ -89,7 +89,7 @@ _EMBEDDING_DIMENSIONS: int = 1536
 _SEARCH_API_VERSION: str = "2023-11-01"
 
 # Storage paths
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 _REJECTIONS_FILE: Path = _DATA_DIR / "rag_rejections.jsonl"
 

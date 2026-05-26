@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # Storage
 # ---------------------------------------------------------------------------
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 KEYS_FILE = DATA_DIR / "sdk_keys.jsonl"
 

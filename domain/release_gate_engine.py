@@ -635,7 +635,7 @@ def evaluate_gates(ai_system_id: str, target_environment: str = "PILOT") -> Gate
 # Exception / waiver persistence
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 _EXCEPTIONS_FILE = _DATA_DIR / "gate_exceptions.jsonl"
 

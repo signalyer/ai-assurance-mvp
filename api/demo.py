@@ -60,7 +60,7 @@ router = APIRouter(prefix="/api/demo", tags=["demo"])
 DEMO_SYSTEM_ID = "ai-sys-001"
 DEMO_ACTOR = "demo-walkthrough"
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 _STATE_FILE = _DATA_DIR / "demo_state.json"
 _OVERLAY_FILE = _DATA_DIR / "demo_overlay.jsonl"

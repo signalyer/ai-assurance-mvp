@@ -38,7 +38,7 @@ CATEGORY_WEIGHTS = {
     "system-override": 0.5,    # Overrides are noted but not punished
 }
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 POLICY_DECISIONS_FILE = _DATA_DIR / "policy_decisions.jsonl"
 
 

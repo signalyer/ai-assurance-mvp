@@ -11,8 +11,9 @@ import threading
 _storage_lock = threading.Lock()
 
 # Storage directory
-STORAGE_DIR = Path(__file__).parent / "data"
-STORAGE_DIR.mkdir(exist_ok=True)
+import os as _os
+STORAGE_DIR = Path(_os.environ.get("DATA_ROOT") or (Path(__file__).parent / "data"))
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 RUNS_FILE = STORAGE_DIR / "runs.jsonl"
 BATCH_FILE = STORAGE_DIR / "batches.jsonl"

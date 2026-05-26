@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parent.parent / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 REVISIONS_FILE = DATA_DIR / "ai_system_revisions.jsonl"
 

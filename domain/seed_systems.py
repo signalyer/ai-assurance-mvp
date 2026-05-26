@@ -369,7 +369,7 @@ def seed_test_systems() -> list[AISystem]:
     from domain import repository
 
     _log = logging.getLogger(__name__)
-    _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+    _DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
     _DATA_DIR.mkdir(exist_ok=True)
     _SYSTEMS_FILE = _DATA_DIR / "ai_systems.jsonl"
 

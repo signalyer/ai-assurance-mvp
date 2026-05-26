@@ -28,7 +28,7 @@ from uuid import uuid4
 from domain import seed, repository
 
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 _STATE_FILE = _DATA_DIR / "runtime_state.jsonl"
 _APPROVALS_FILE = _DATA_DIR / "runtime_approvals.jsonl"

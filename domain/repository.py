@@ -17,7 +17,7 @@ from domain.models import (
 from domain import seed
 
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 SYSTEMS_FILE = _DATA_DIR / "ai_systems.jsonl"
 ASSESSMENTS_FILE = _DATA_DIR / "assessments.jsonl"
 GATES_FILE = _DATA_DIR / "release_gates.jsonl"

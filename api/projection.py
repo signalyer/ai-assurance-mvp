@@ -130,7 +130,7 @@ def _read_tailer_checkpoint() -> dict:
     Returns:
         Dict with ``byte_offset`` (int) and ``last_event_id`` (str | None).
     """
-    _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+    _DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
     cp_path = _DATA_DIR / "projection_tailer_checkpoint.json"
     if not cp_path.exists():
         return {"byte_offset": 0, "last_event_id": None}
@@ -182,7 +182,7 @@ async def projection_status() -> ProjectionStatusResponse:
     total_lines = events_line_count()
 
     # Compute approximate lag as lines after checkpoint offset
-    _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+    _DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
     events_path = _DATA_DIR / "events.jsonl"
     projected_lines = 0
     if events_path.exists() and byte_offset > 0:

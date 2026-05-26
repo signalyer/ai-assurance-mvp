@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 CST = ZoneInfo("America/Chicago")  # CST/CDT — DST-aware
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parent.parent / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 EVENTS_FILE = DATA_DIR / "usage_events.jsonl"
 SESSIONS_FILE = DATA_DIR / "usage_sessions.jsonl"

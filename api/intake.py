@@ -97,7 +97,7 @@ from domain.controls import (
 router = APIRouter(prefix="/api/grc/intake", tags=["grc-intake"])
 
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 DATA_DIR.mkdir(exist_ok=True)
 SYSTEMS_FILE = DATA_DIR / "ai_systems.jsonl"
 ASSESSMENTS_FILE = DATA_DIR / "assessments.jsonl"

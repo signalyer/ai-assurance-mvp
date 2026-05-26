@@ -371,7 +371,7 @@ PROVIDERS_BY_ID: dict[str, AssuranceProvider] = {p.provider_id: p for p in PROVI
 # Audit log — JSONL persistence
 # ===========================================================================
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR = Path(__import__("os").environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _DATA_DIR.mkdir(exist_ok=True)
 AUDIT_FILE = _DATA_DIR / "assurance_audit.jsonl"
 

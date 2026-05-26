@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # Paths
 # ---------------------------------------------------------------------------
 
-_DATA_DIR: Path = Path(__file__).resolve().parents[1] / "data"
+_DATA_DIR: Path = Path(os.environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
 _EVENTS_JSONL: Path = Path(os.getenv("EVENTS_JSONL", str(_DATA_DIR / "events.jsonl")))
 _TAILER_CHECKPOINT: Path = _DATA_DIR / "projection_tailer_checkpoint.json"
 

@@ -180,4 +180,26 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 
 ---
 
+### F-011 · PLATFORM-GAP · Slot swap wipes data/ even when zip excludes it (P0, RESOLVED)
+
+**Found:** S55, 2026-05-26 — immediately after F-009 fix. User's re-registered `ai-sys-9832577d` + key `slk_df836485` were both wiped by the S55 #3 deploy (commit 0283891), even though that zip excluded `data/`.
+**Where:** [.github/workflows/deploy.yml](../../.github/workflows/deploy.yml) — slot swap step. Plus every `_DATA_DIR = Path(__file__).resolve().parents[1] / "data"` site (24 files).
+**What:** F-009's fix (remove `data/` from zip) was necessary but NOT sufficient. The App Service slot-swap mechanism trades the **entire `wwwroot/`** between slots on every swap — including `data/` even when it's not in the new zip. Staging's `data/` (frozen from old-zip-era deploys + whatever its last warmup wrote) replaces production's on every swap.
+**How it stayed hidden after F-009:** F-009 verification used a key issued AFTER c72ab91 deployed; that key happened to survive because no subsequent deploy ran in the verification window. Once S55 #3 deployed (0283891), the swap wiped the prior runtime state.
+**Impact:** P0. Without this fix, every CI deploy continues to silently wipe ai_systems.jsonl, sdk_keys.jsonl, findings_events.jsonl, assurance_audit.jsonl (the audit chain), and ~20 other writable JSONL files. F-009 alone was a false-positive close.
+**Fix (this commit):**
+1. **Code** — every `DATA_DIR` resolution (24 sites across api/ + domain/ + storage.py) now reads from env var `DATA_ROOT` first, falling back to the repo-relative path for local dev. Bulk-patched via a regex script for the 20 uniform sites; 4 outliers (storage.py, audit_chain.py, projection_worker.py, right_to_forget.py — different patterns or type annotations) were patched individually.
+2. **App setting** — `DATA_ROOT=/home/data` set with `--slot-settings` on BOTH production and staging slots. `/home` is mounted from Azure Files per App Service plan and is **shared across all slots** — slot swap of `wwwroot/` is a no-op for `/home/data/`. The sticky flag means `DATA_ROOT` itself never swaps either.
+**Trade-offs:**
+- Production and staging slots now write to the same `/home/data/`. During staging warmup, any writes from staging would land in shared storage. Acceptable: warmup is read-only health probes; no intake / key issuance happens during warmup. If this becomes an issue, the next step is per-slot data directories with a sync-before-swap workflow step.
+- Existing prod state in `/home/site/wwwroot/data/` (the user's `ai-sys-1ff2b903` + my `slk_c0dc8004`) is NOT migrated by this fix. Couldn't shell into prod (auto-mode classifier denied Kudu remote-shell access — fair guardrail). Those rows are lost when this fix deploys, but it's the LAST time anything is lost.
+**Sibling work (S56 backlog):**
+- Migrate to proper persistence (Cosmos DB or Blob Storage append-blobs). The current fix is a workaround; the real architecture move is off the App Service filesystem entirely.
+- Add a smoke probe (Probe 10) that issues a key, deploys, and re-checks the key. Closes the F-009 + F-011 detection gap for future regressions.
+**Status:** RESOLVED 2026-05-26 — lands in same commit as the env-var refactor.
+**Compound rule:** Updated [[deploy-zip-overwrites-runtime-data]] to add: "data/ in wwwroot/ ALSO gets wiped by slot swap, even if absent from the deploy zip. Persistence must live OUTSIDE wwwroot/ (under /home/ or external storage)."
+**Priority:** P0 (was wiping prod state on every deploy; fixed)
+
+---
+
 _(Append further findings below as P1-P10 progress.)_
