@@ -197,6 +197,10 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 - Migrate to proper persistence (Cosmos DB or Blob Storage append-blobs). The current fix is a workaround; the real architecture move is off the App Service filesystem entirely.
 - Add a smoke probe (Probe 10) that issues a key, deploys, and re-checks the key. Closes the F-009 + F-011 detection gap for future regressions.
 **Status:** RESOLVED 2026-05-26 — lands in same commit as the env-var refactor.
+
+**Post-mortem update (2026-05-26, same day):** Initial verification SHOWED the fix failed (state still wiped after slot swap). I built a hypothesis that `/home` was per-slot on this plan, and switched to direct-to-production deploys (S55 #5). After that ALSO failed, the actual root cause emerged: **the `az` command that set DATA_ROOT was run in Git Bash on Windows, which path-mangled the value from `/home/data` to `C:/Program Files/Git/home/data`.** The container saw the garbled value, wrote to a nonsensical sub-path inside wwwroot, and that subpath got wiped on every deploy. Lesson: when an env var value is a Linux path, the global `MSYS_NO_PATHCONV=1` rule applies to `az` commands too, not just `az staticwebapp` / `az functionapp` as the prior memory implied. Memory rule extended.
+
+Final acceptance test 2026-05-26: registered `ai-sys-ede33ad4` post-DATA_ROOT-fix; triggered a fresh CI deploy via `gh workflow run`; confirmed `ai-sys-ede33ad4` still visible in V2 inventory after the deploy completed. F-011 is now actually fixed.
 **Compound rule:** Updated [[deploy-zip-overwrites-runtime-data]] to add: "data/ in wwwroot/ ALSO gets wiped by slot swap, even if absent from the deploy zip. Persistence must live OUTSIDE wwwroot/ (under /home/ or external storage)."
 **Priority:** P0 (was wiping prod state on every deploy; fixed)
 
