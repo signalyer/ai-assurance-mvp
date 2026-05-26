@@ -42,6 +42,12 @@
 
 Demo passwords rotated to fresh 24-char urlsafe values (bcrypt rounds=12); new hashes deployed to `app-aigovern-dev` via `az webapp config appsettings set` and verified live with form-encoded POST to `/api/auth/login` (200 for both demo-ciso and demo-engineer). Plaintexts saved to user's 1Password vault.
 
+**Slot-sticky correction (post-deploy):** The initial rotation applied settings to the **production slot non-sticky**. The S54 STEP 6 CI deploy then ran `slot swap staging → production`, which moved staging's old hashes onto production and broke the saved passwords. Caught by post-deploy smoke (gov 5/8 PASS, login probes 5/7/8 failed). Fix: re-applied both hashes via `--slot-settings KEY=VALUE` form (now `Sticky=True`); verified logins return 200 + smoke 8/8 GREEN on both portals. This is now compound rule **S54 #2** in [[slot-sticky-settings]].
+
+**Post-fix smoke audit (the run that counts):**
+- `smoke_gov.ps1` 8/8 PASS, Probe 8 key `slk_068ae6b2` issued → polled → revoked.
+- `smoke_portal.ps1` 8/8 PASS, Probe 8 key `slk_8db383af` issued → polled → revoked.
+
 ### STEP 4 — CI deploy reliability decision (~30 min)
 
 **Symptom:** `azure/login@v2` archive download has been flaky across S52 + S53. Last CI run (S53 push, `86f7978`) was in_progress at session close; need to confirm whether it succeeded or hit the same failure mode.

@@ -1705,8 +1705,9 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 - Last `deploy.yml` run on `main` (S53 / `86f7978`): SUCCESS.
 - Two prior runs (`5e52998`, `0af6162`) failed with identical root cause at the GitHub Actions runner layer, BEFORE workflow code ran: `codeload.github.com` returned `An action could not be found at the URI '.../Azure/login/tar.gz/a457da9...'`. **SHA-pinning is not a real mitigation** — the runner already SHA-resolves `azure/login@v2` internally (the SHA is in the failure URL); pinning in YAML changes the resolved SHA but not the CDN serving it. Declared transient; no workflow changes this session. S54 push will be the 4th datapoint.
 
-**Compound rule earned this session**
+**Compound rules earned this session**
 - **S54 #1 (the "Option 1 / Option 2" menu):** When I have tool access and the action is non-destructive, never present a "you do it / I defer" menu — that menu IS the deferral. Always try the command myself first; only surface a deferral when it actually fails. Updated [[feedback-run-commands-dont-defer]] to remove `op` / 1Password from the deferral list (it's a normal CLI on the user's box) and add an explicit "no menus" rule.
+- **S54 #2 (CI slot swaps wipe non-sticky settings):** Caught live this session. Rotated `DEMO_USER_*_HASH` on the production slot non-sticky; smoke 8/8 GREEN; committed unrelated code; CI ran `slot swap staging → production`; swap moved staging's OLD hashes onto production; saved passwords broke. **Rule: any setting a human or out-of-band tool touches on this web app MUST be applied with `--slot-settings KEY=VALUE` (sticky) or it WILL revert on next deploy. CI is silent about the wipe — no warning, no diff, no failed step. You only find out at the next smoke run or failed login.** Updated [[slot-sticky-settings]].
 
 **V1→V2 arc — DECLARED CLOSED**
 
