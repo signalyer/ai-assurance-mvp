@@ -3,7 +3,7 @@
 // CSM-1 wires: /findings, /audit, /rtf-approvals.
 // CSM-2/3/4 will replace stubs with real implementations.
 
-import { Route, Switch, Redirect } from 'wouter-preact';
+import { Route, Switch, Redirect, useLocation } from 'wouter-preact';
 import { Shell } from './shared/components/Shell';
 
 // CSM-1 — wired surfaces
@@ -25,7 +25,17 @@ import { RtfForensicsPage }      from './pages/rtf-forensics/RtfForensicsPage';
 import { PoliciesPage }          from './pages/policies/PoliciesPage';
 import { ReportsPage }           from './pages/reports/ReportsPage';
 
+// S50: SPA-resident login (no Shell chrome)
+import { LoginPage }             from './pages/login/LoginPage';
+
 export function App() {
+  const [location] = useLocation();
+  // /login renders standalone — Shell expects an authenticated session and
+  // its Sidebar/Topbar would either look broken or attempt to fetch behind
+  // a 401 wall.
+  if (location === '/login') {
+    return <LoginPage />;
+  }
   return (
     <Shell>
       <Switch>

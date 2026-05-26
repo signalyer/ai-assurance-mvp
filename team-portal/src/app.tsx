@@ -1,4 +1,4 @@
-import { Route, Switch } from 'wouter-preact';
+import { Route, Switch, useLocation } from 'wouter-preact';
 import { Shell } from './shared/components/Shell';
 import { AiSystemsPage } from './pages/ai-systems/AiSystemsPage';
 import { RegisterSystemPage } from './pages/ai-systems/RegisterSystemPage';
@@ -11,8 +11,16 @@ import { RtfRequestPage } from './pages/rtf/RtfRequestPage';
 import { PortfolioPage } from './pages/portfolio/PortfolioPage';
 import { RagCorpusPage } from './pages/rag/RagCorpusPage';
 import { AdversarialPage } from './pages/adversarial/AdversarialPage';
+import { LoginPage } from './pages/login/LoginPage';
 
 export function App() {
+  const [location] = useLocation();
+  // /login renders standalone — Shell expects an authenticated session and
+  // its Sidebar/Topbar would either look broken or attempt to fetch behind
+  // a 401 wall.
+  if (location === '/login') {
+    return <LoginPage />;
+  }
   return (
     <Shell>
       <Switch>
