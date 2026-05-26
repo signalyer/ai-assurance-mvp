@@ -1607,7 +1607,13 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 - [ciso-console/src/shared/api/client.ts](ciso-console/src/shared/api/client.ts) + [team-portal/src/shared/api/client.ts](team-portal/src/shared/api/client.ts) — `apiRequest` now injects `X-Data-Mode: v1|v2` on every request. Reads `localStorage` directly (not the signal) so the client module has no dependency on the toggle component — tolerates private-mode failures.
 
 **STEP 5 — smoke probe:**
-- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) + [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) — Probe 7: log in with demo-role, GET `/grc/ai-systems` once with `X-Data-Mode: v1` and again with `X-Data-Mode: v2`, assert `count(v2) <= count(v1)` and that both responses have the `systems` field (schema unchanged across modes). Skips when the role password env var is unset, matches the Probe 5 auth pattern. Not yet live-verified against prod — STEP 1 deployed, SPA bundles + smoke Probe 7 ready to verify next deploy cycle.
+- [deploy/smoke_gov.ps1](deploy/smoke_gov.ps1) + [deploy/smoke_portal.ps1](deploy/smoke_portal.ps1) — Probe 7: log in with demo-role, GET `/grc/ai-systems` once with `X-Data-Mode: v1` and again with `X-Data-Mode: v2`, assert `count(v2) <= count(v1)` and that both responses have the `systems` field (schema unchanged across modes). Skips when the role password env var is unset, matches the Probe 5 auth pattern.
+
+**Live deploy + smoke (this session, post-commit):**
+- Engine `bc4db1c` deployed to `app-aigovern-dev` via manual `build-zip.py` + `deploy-and-poll.ps1` (compound rule S19 path) — GitHub Actions dispatch endpoint returned HTTP 500 throughout the session; CI never queued a run for `700842a` or `bc4db1c`, so the engine ship went via the manual fallback.
+- CISO Console SPA built + deployed via `swa deploy --deployment-token` → bundle `index-C_voj0Qs.js` at `gov.aigovern.sandboxhub.co`. Team Portal SPA → bundle `index-Cr9O6yHz.js` at `portal.aigovern.sandboxhub.co`. Both bundles contain `DataModeToggle.tsx` and `X-Data-Mode` header injection.
+- Both smoke scripts: **7/7 PASS** against live prod. Probes 5 + 7 SKIP because `$env:SMOKE_DEMO_PASSWORD_{CISO,ENGINEER}` were not available (1Password CLI absent from the session); the SKIP path counts as a PASS per the script's intentional design (smoke must keep working after the post-demo bcrypt cutover). Run Probe 7 with passwords set whenever a real intake has happened to verify `(v1=N, v2=K)` non-spuriously.
+- [`6f94d54`](https://github.com/signalyer/ai-assurance-mvp/commit/6f94d54) — fixed smoke defaults to post-S45 canonical hosts (compound rule S52 #2).
 
 **Locked decisions (from S50 close — see `memory/project_v1_to_v2_real_data_arc.md`):**
 - SDK-first telemetry, not URL-probe.
@@ -1618,12 +1624,16 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 
 **Compound rules earned this session:**
 - **S52 #1:** Field names like `source` collide silently — `Evidence.source` already meant "tool that produced the evidence" and Pydantic v2's literal validator caught the displacement only when `domain/seed.py` imported and tried to pass `"AppSec"` to the new literal field. Before adding a "generic" field name across many entities, grep first for collisions; rename your new field if there's any prior art.
+- **S52 #2:** Smoke-script URL defaults rot silently. Post-S45 DNS cutover left `smoke_gov.ps1` / `smoke_portal.ps1` defaulting to the now-404 pre-cutover staging hostnames — failure mode only surfaces when someone runs smoke without explicitly setting `SMOKE_{GOV,PORTAL}_URL`. Fix: flip the default itself when an underlying redirect/cutover is permanent. Don't rely on env-var overrides forever.
+- **S52 #3:** `swa deploy` config-file discovery walks up from CWD; sticky bash CWD (compound rule S47 #2) silently picks up a sibling project's `staticwebapp.config.json`. Was benign here (configs are byte-identical) but would have shipped the wrong auth/routing rules to the wrong tenant in a less-fortunate codebase. Pin with `--config-name` or invoke from inside each SPA's dir freshly.
+- **S52 #4:** GitHub Actions `workflow_dispatch` endpoint can return persistent HTTP 500 with no public incident notice. The push trigger also silently failed to queue a run for my commits. When CI doesn't run within 2-3 min of a push, don't keep retrying — fall back to the manual deploy path (`build-zip.py` + `deploy-and-poll.ps1`) and let the SHA round-trip prove the result. (Sibling of S18a/S19a for webhook delivery failures.)
 
 **Known open at S52 close:**
 - STEP 2 deferred sub-tasks: V2-mode empty-state CTAs across list pages ("Register your first system →", "Learn how to instrument →"). The toggle + filter is load-bearing; the empty-state copy is polish that can land alongside S53's SDK onboarding wizard.
 - Endpoints NOT yet wired to the data-mode filter (deferred — flag for later in the arc): `api/release_gates.py` (gate listings flow via `RELEASE_GATE_RESULTS` mock dict in grc.py and need a separate pass), `api/evidence.py` `/v2/sectioned` + `/v2/completeness` (aggregations need domain-layer plumbing), `api/frameworks.py` `/matrix` (already accepts `Request` but `framework_matrix()` aggregator needs an explicit mode param), `api/analytics.py`, `api/reports.py`, `api/agent_bindings.py` (per-system endpoints inherit filtering through their system).
-- Memory pending update: `memory/project_v1_to_v2_real_data_arc.md` should note the `source → data_source` rename.
-- Live smoke Probe 7 not yet executed against prod (S48 #1 — run smoke live before declaring done; deferred to the post-deploy verification step of this session).
+- Probe 7 ran against live prod but with the SKIP branch (no role passwords in this session). Re-run with `op read` creds available to assert `(v1=N, v2=0)` non-spuriously.
+- Visual verification of the toggle pill — not done from this session (would require a logged-in browser).
+- GitHub Actions deploy.yml not yet recovered. Next push should retry; if still 500, raise a GitHub support issue or wait for the incident to clear.
 - Garak deep-scan (independent track) and bcrypt cutover (operator step) both unchanged from S50 close.
 
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
