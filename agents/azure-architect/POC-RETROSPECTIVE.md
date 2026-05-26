@@ -88,4 +88,42 @@ Default form state in `cloud_provider: 'AWS'` at line 53.
 
 ---
 
+### F-006 · DOC-GAP / PLATFORM-GAP · SDK decorator chain README is wrong (trace/evaluate are functions, not decorators)
+
+**Found:** P2 dry-run wiring, 2026-05-26
+**Where:** `sdk/README.md`, `sdk/signallayer/__init__.py` (chain assertion in `signallayer.guard()`)
+**What:** Platform README documents a 5-decorator chain `@policy_gate → @scrub_pii → @guardrails → @trace → @evaluate`. In practice `trace` and `evaluate` are SDK aliases for the `tracer.trace_call(...)` and `evaluator.evaluate_response(...)` *functions*, not decorator factories. They are called INSIDE the decorated function body with computed args, not stacked above it. `signallayer.guard()` enforces all 5 names being stamped, which is impossible to satisfy with the SDK as shipped.
+**Impact:** Anyone following the SDK quickstart literally cannot make `guard()` pass. Decorator stack appears broken until a maintainer explains the mental model. Erodes first-impression credibility of the SDK.
+**Workaround in POC:** `agent.py` uses the 3 real decorators (`policy_gate`, `scrub_pii`, `guardrails`) and inlines `signallayer.trace(...)` / `signallayer.evaluate(...)` calls inside the function body in P4. Documented the gap in `agent.py` module docstring.
+**Proposed fix (S56):** Either (a) ship `@signallayer.trace` and `@signallayer.evaluate` as real decorator factories so the docs match reality, OR (b) rewrite README to show the 3-decorator + 2-inline-call pattern and remove the all-5 enforcement from `guard()`.
+**Priority:** P1 (blocks SDK quickstart; first thing every new customer hits)
+
+---
+
+### F-007 · PLATFORM-GAP · Smoke Probe 8 never exercises HMAC end-to-end
+
+**Found:** P2 dry-run, 2026-05-26
+**Where:** [deploy/smoke_portal.ps1:291-355](../../deploy/smoke_portal.ps1), [deploy/smoke_gov.ps1](../../deploy/smoke_gov.ps1)
+**What:** Probe 8 labels itself "SDK key issuance round-trip" but only exercises the **operator** lifecycle (session-cookie auth on `/api/sdk-keys/*`: issue → status → revoke). It does NOT make any HMAC-signed call to `/api/sdk/*`. HMAC signing has been silently untested in prod for an unknown number of sessions.
+**Impact:** Two compounding effects:
+1. F-008 (no `/api/sdk/*` routes mounted) shipped to prod undetected for the full V1→V2 arc.
+2. Any HMAC signing regression in the SDK or middleware would not surface until a real agent tried to call.
+**Workaround in POC:** Hand-verified HMAC during this session against a freshly-issued key (`slk_ba951763`) — confirmed sig path is correct; the 401 on the wizard-issued key was a transcription typo from the screenshot.
+**Proposed fix (S56):** Add Probe 9 to both smoke scripts — issue a key, sign a `GET /api/sdk/health` request, assert 200 + `first_seen_at` populates within 5s, then revoke. The new F-008 endpoint is the natural target.
+**Priority:** P1 (test gap; the underlying surface was missing per F-008 which is now fixed)
+
+---
+
+### F-008 · PLATFORM-GAP · /api/sdk/* prefix had no routes mounted (was BLOCKING for P2; RESOLVED)
+
+**Found:** P2 dry-run, 2026-05-26
+**Where:** [middleware/hmac_auth.py:62](../../middleware/hmac_auth.py), [api/](../../api/) (no router with `prefix="/api/sdk"` existed)
+**What:** S09 designed and shipped the HMAC middleware to guard `/api/sdk/*`. Every reference — `sdk_keys.py:10` docstring, `middleware/auth.py:45` PUBLIC_PREFIXES, `middleware/hmac_auth.py:62` SDK_PREFIX — documents this prefix as the canonical SDK-facing surface. But **no FastAPI router was ever mounted under this prefix.** The HMAC middleware guarded a route prefix with zero endpoints — every request to `/api/sdk/*` either got 401 (signature fail) or 404 (after middleware passes). The S53 wizard's "Verify Signal" step polls `first_seen_at`, which is set by the HMAC middleware on successful auth, but the SDK had no actual endpoint to call.
+**Impact:** BLOCKED P2. Wizard's Step 3 ("Verify Signal") could never flip green. Every customer following the SDK onboarding flow would stall at "waiting for first signal".
+**Workaround in POC:** Resolved this session — shipped [api/sdk_runtime.py](../../api/sdk_runtime.py) with `GET /api/sdk/health`. Minimal 200 response; the HMAC middleware's `mark_first_seen` side-effect is the actual value. Mounted in `dashboard.py` between `sdk_keys_router` and `frameworks_router`.
+**Status:** RESOLVED 2026-05-26 — fix lands in the same S55-prep commit batch.
+**Priority:** P0 (was blocking POC; fixed)
+
+---
+
 _(Append further findings below as P1-P10 progress.)_

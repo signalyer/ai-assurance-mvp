@@ -65,6 +65,7 @@ from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
 from api.projection import router as projection_router
 from api.sdk_keys import router as sdk_keys_router
+from api.sdk_runtime import router as sdk_runtime_router
 from api.demo_control import router as demo_control_router
 from api.auth_oidc import router as auth_oidc_router
 from api._errors import register_error_handlers
@@ -355,6 +356,7 @@ app.include_router(memory_router)
 app.include_router(rag_router)
 app.include_router(adversarial_router)
 app.include_router(sdk_keys_router)
+app.include_router(sdk_runtime_router)
 app.include_router(frameworks_router)
 app.include_router(agents_router)
 app.include_router(agent_bindings_router)
