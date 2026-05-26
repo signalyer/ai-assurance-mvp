@@ -248,20 +248,36 @@ def mark_first_seen(key_id: str) -> None:
 
     Called from the HMAC middleware after signature verification. No-op
     if `first_seen_at` is already set.
+
+    F-015 instrumentation: every branch logs explicitly so the next live
+    dry-run + `az webapp log tail` will reveal which case is biting.
     """
-    rows = _read_all()
-    target_idx: Optional[int] = None
-    for i, r in enumerate(rows):
-        if r.get("key_id") == key_id:
-            target_idx = i
-            break
-    if target_idx is None:
-        return
-    if rows[target_idx].get("first_seen_at"):
-        return
-    rows[target_idx]["first_seen_at"] = datetime.now(tz=timezone.utc).isoformat()
-    _rewrite_jsonl(rows)
-    logger.info("sdk_keys.first_seen key_id=%s", key_id)
+    logger.info("sdk_keys.first_seen.enter key_id=%s KEYS_FILE=%s", key_id, KEYS_FILE)
+    try:
+        rows = _read_all()
+        logger.info("sdk_keys.first_seen.read key_id=%s rows=%d", key_id, len(rows))
+        target_idx: Optional[int] = None
+        for i, r in enumerate(rows):
+            if r.get("key_id") == key_id:
+                target_idx = i
+                break
+        if target_idx is None:
+            logger.warning(
+                "sdk_keys.first_seen.miss key_id=%s — not in JSONL at %s (rows scanned: %s)",
+                key_id, KEYS_FILE, [r.get("key_id") for r in rows],
+            )
+            return
+        if rows[target_idx].get("first_seen_at"):
+            logger.info("sdk_keys.first_seen.noop key_id=%s already=%s",
+                        key_id, rows[target_idx].get("first_seen_at"))
+            return
+        rows[target_idx]["first_seen_at"] = datetime.now(tz=timezone.utc).isoformat()
+        _rewrite_jsonl(rows)
+        logger.info("sdk_keys.first_seen.wrote key_id=%s ts=%s",
+                    key_id, rows[target_idx]["first_seen_at"])
+    except Exception:
+        logger.exception("sdk_keys.first_seen.failed key_id=%s", key_id)
+        raise
 
 
 def status_snapshot(key_id: str) -> Optional[dict]:
