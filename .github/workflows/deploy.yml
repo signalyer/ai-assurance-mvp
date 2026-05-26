@@ -70,24 +70,23 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      # S46 / A15 — Slot-based zero-downtime deploy:
-      #   1. Deploy zip to `staging` slot (does not touch live traffic)
-      #   2. Poll staging-slot /api/health until live sha == GITHUB_SHA
-      #   3. `az webapp deployment slot swap` to promote staging → production
-      #   4. Verify production /api/health now reports the new sha
-      # Rollback: re-run `az webapp deployment slot swap` to swap back; the
-      # old code is preserved in the *staging* slot post-swap.
+      # S55 #5 / F-011 follow-up: deploy DIRECT TO PRODUCTION (no slot swap).
+      # Replaces the S46 staging-slot/swap flow.
+      # Empirical test in S55 showed slot swap on this App Service plan wipes
+      # runtime state under data/ even with DATA_ROOT=/home/data — /home is
+      # per-slot on this plan, not shared. Until proper persistence (Cosmos
+      # or Blob) lands in S56, trade zero-downtime (a few seconds of 502s)
+      # for state persistence. Rollback = `git revert <sha> && git push`.
 
-      - name: Deploy to Azure App Service (staging slot)
+      - name: Deploy to Azure App Service (production)
         uses: azure/webapps-deploy@v3
         with:
           app-name: app-aigovern-dev
-          slot-name: staging
           package: deploy/app.zip
           # No publish-profile — webapps-deploy@v3 reuses the OIDC session
           # from azure/login. SCM Basic Auth stays disabled (secure default).
 
-      - name: Wait for staging-slot SHA to match commit
+      - name: Wait for production SHA to match commit
         # Poll the staging-slot /api/health until the live sha equals
         # GITHUB_SHA. A 200 alone is insufficient — during the App Service
         # zip-swap window the previous container keeps serving 200 with
@@ -97,44 +96,19 @@ jobs:
           deployed=""
           for i in $(seq 1 30); do
             sleep 10
-            body=$(curl -fsS https://app-aigovern-dev-staging.azurewebsites.net/api/health 2>/dev/null || echo "")
-            deployed=$(echo "$body" | python -c "import json,sys; print(json.loads(sys.stdin.read() or '{}').get('sha',''))" 2>/dev/null || echo "")
-            echo "[$i] staging sha: ${deployed:-<no response>}  expected: $GITHUB_SHA"
-            if [ "$deployed" = "$GITHUB_SHA" ]; then
-              echo "OK: staging sha matches commit after ${i}0s"
-              exit 0
-            fi
-          done
-          echo "::error::Staging SHA never matched commit within 5 min. Last sha: '$deployed'. Deploy likely failed silently or staging slot is unreachable. NO SWAP PERFORMED — production untouched."
-          exit 1
-
-      - name: Swap staging → production
-        # Atomic slot swap promotes staging code to production. Old code
-        # moves to the staging slot, giving instant rollback via re-swap.
-        run: |
-          az webapp deployment slot swap \
-            --name app-aigovern-dev \
-            --resource-group rg-aigovern-dev \
-            --slot staging \
-            --target-slot production
-          echo "OK: swap complete — production now serves $GITHUB_SHA"
-
-      - name: Verify production SHA after swap
-        # Belt-and-braces: confirm production /api/health reports the new
-        # sha. Swap is atomic but DNS/edge caches can briefly serve the
-        # prior container; we allow up to 2 min for the swap to fully
-        # propagate. If this fails, manual swap-back required.
-        run: |
-          deployed=""
-          for i in $(seq 1 12); do
-            sleep 10
             body=$(curl -fsS https://app-aigovern-dev.azurewebsites.net/api/health 2>/dev/null || echo "")
             deployed=$(echo "$body" | python -c "import json,sys; print(json.loads(sys.stdin.read() or '{}').get('sha',''))" 2>/dev/null || echo "")
             echo "[$i] production sha: ${deployed:-<no response>}  expected: $GITHUB_SHA"
             if [ "$deployed" = "$GITHUB_SHA" ]; then
-              echo "OK: production sha matches commit after swap"
+              echo "OK: production sha matches commit after ${i}0s"
               exit 0
             fi
           done
-          echo "::error::Production SHA did not match commit within 2 min post-swap. Swap may have stalled. Manual investigation required (consider: az webapp deployment slot swap --slot production --target-slot staging to revert)."
+          echo "::error::Production SHA never matched commit within 5 min. Last sha: '$deployed'. Deploy likely failed silently."
           exit 1
+
+      - name: Verify production reachable
+        # Sanity check — final 200 on /api/health after the SHA matched.
+        run: |
+          curl -fsS https://app-aigovern-dev.azurewebsites.net/api/health > /dev/null
+          echo "OK: production reachable"
