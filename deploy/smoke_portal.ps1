@@ -49,7 +49,9 @@ $ErrorActionPreference = "Continue"
 $BaseUrl = if ($env:SMOKE_PORTAL_URL) {
     $env:SMOKE_PORTAL_URL.TrimEnd('/')
 } else {
-    "https://swa-aigovern-portal-dev.azurestaticapps.net"
+    # S52 #2: pre-S45 staging URL `swa-aigovern-portal-dev.azurestaticapps.net`
+    # was retired after the DNS cutover; default to canonical custom-DNS host.
+    "https://portal.aigovern.sandboxhub.co"
 }
 
 # Engine API (separate origin — SPA hosts only static files; the FastAPI engine

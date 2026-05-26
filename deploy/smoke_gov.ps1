@@ -51,7 +51,9 @@ $ErrorActionPreference = "Continue"
 $BaseUrl = if ($env:SMOKE_GOV_URL) {
     $env:SMOKE_GOV_URL.TrimEnd('/')
 } else {
-    "https://swa-aigovern-gov-dev.azurestaticapps.net"
+    # S52 #2: pre-S45 staging URL `swa-aigovern-gov-dev.azurestaticapps.net`
+    # was retired after the DNS cutover; default to canonical custom-DNS host.
+    "https://gov.aigovern.sandboxhub.co"
 }
 
 # Engine API (separate origin — same chain as smoke_portal.ps1).
