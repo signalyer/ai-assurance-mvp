@@ -725,3 +725,92 @@ input:focus { outline: none; border-color: var(--border-focus); }
   color: var(--text-primary);
 }
 .data-table tr:hover td { background: var(--bg-card-hover); }
+
+/* ============================================================================
+   Register-AI-System wizard (ported from static/shared.css lines 1022-1110 — S48)
+   ============================================================================ */
+.wizard-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem; align-items: start; }
+@media (max-width: 1200px) { .wizard-layout { grid-template-columns: 1fr; } }
+
+.step-rail { display: flex; gap: 0.25rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.step-rail-item {
+  flex: 1; min-width: 130px;
+  padding: 0.625rem 0.875rem; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 6px; font-size: 12px; color: var(--text-secondary);
+  display: flex; gap: 0.5rem; align-items: center; cursor: pointer;
+}
+.step-rail-item .step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--bg-input);
+  border: 1px solid var(--border-strong); font-size: 11px; font-weight: 700;
+}
+.step-rail-item.active { border-color: var(--accent); color: var(--text-primary); background: var(--accent-bg); }
+.step-rail-item.active .step-num { background: var(--accent); color: white; border-color: var(--accent); }
+.step-rail-item.done .step-num { background: var(--pass); color: white; border-color: var(--pass); }
+.step-rail-item.done { color: var(--text-primary); }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem 1rem; }
+.form-grid.single { grid-template-columns: 1fr; }
+.form-field { display: flex; flex-direction: column; gap: 0.375rem; }
+.form-field.span-2 { grid-column: span 2; }
+.form-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.form-label .req { color: var(--critical); margin-left: 2px; }
+.form-input, .form-select, .form-textarea {
+  padding: 0.5rem 0.75rem; background: var(--bg-input); color: var(--text-primary);
+  border: 1px solid var(--border-strong); border-radius: 6px; font-size: 13px;
+  font-family: inherit; width: 100%; box-sizing: border-box;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.form-textarea { min-height: 80px; resize: vertical; }
+.form-help { font-size: 11px; color: var(--text-tertiary); }
+
+.chip-group { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.chip.selected { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.chip.selected.critical { background: var(--critical-bg); color: var(--critical); border-color: rgba(239,68,68,0.3); }
+
+.switch-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.625rem 0.75rem; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.switch-row .switch-label { font-size: 13px; color: var(--text-primary); }
+.switch-row .switch-help { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.switch {
+  position: relative; width: 36px; height: 20px; flex-shrink: 0;
+  background: var(--bg-input); border: 1px solid var(--border-strong);
+  border-radius: 999px; cursor: pointer; transition: background 0.15s;
+}
+.switch::after {
+  content: ''; position: absolute; top: 1px; left: 1px;
+  width: 16px; height: 16px; border-radius: 50%; background: var(--text-secondary);
+  transition: transform 0.15s, background 0.15s;
+}
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch.on::after { transform: translateX(16px); background: white; }
+
+.wizard-footer { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 1.25rem; }
+.wizard-footer .left, .wizard-footer .right { display: flex; gap: 0.5rem; }
+
+.risk-panel { position: sticky; top: 1rem; }
+.risk-pill {
+  display: inline-block; padding: 0.5rem 1rem; border-radius: 999px;
+  font-weight: 700; font-size: 18px; letter-spacing: 0.02em;
+}
+.risk-pill.LOW { background: var(--pass-bg); color: var(--pass); border: 1px solid rgba(16,185,129,0.3); }
+.risk-pill.MEDIUM { background: var(--medium-bg); color: var(--medium); border: 1px solid rgba(245,158,11,0.3); }
+.risk-pill.HIGH { background: var(--high-bg); color: var(--high); border: 1px solid rgba(249,115,22,0.3); }
+.risk-pill.CRITICAL { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.3); }
+.rule-row {
+  font-size: 12px; padding: 0.5rem 0; border-bottom: 1px solid var(--border); color: var(--text-secondary);
+  display: flex; gap: 0.5rem; align-items: start;
+}
+.rule-row:last-child { border-bottom: none; }
+.rule-row .rule-tag {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; padding: 0 0.375rem; height: 18px;
+  line-height: 18px; border-radius: 4px; background: var(--bg-input);
+  color: var(--text-primary); flex-shrink: 0;
+}
+.drawer-section { padding: 0.75rem 0; border-top: 1px solid var(--border); }
+.drawer-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 0.5rem; }
