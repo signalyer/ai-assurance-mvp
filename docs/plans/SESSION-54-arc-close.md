@@ -36,6 +36,12 @@
 
 **Touched:** No code. Just verification.
 
+**Executed 2026-05-26 (S54):** Both `smoke_gov.ps1` and `smoke_portal.ps1` ran 8/8 PASS, zero SKIPs, against `https://gov.aigovern.sandboxhub.co` + `https://portal.aigovern.sandboxhub.co` + `https://aigovern.sandboxhub.co` (engine). Probe 8 audit:
+- gov-side key:    `slk_52ddb2ab` — issued → status polled → revoked
+- portal-side key: `slk_b25264b4` — issued → status polled → revoked
+
+Demo passwords rotated to fresh 24-char urlsafe values (bcrypt rounds=12); new hashes deployed to `app-aigovern-dev` via `az webapp config appsettings set` and verified live with form-encoded POST to `/api/auth/login` (200 for both demo-ciso and demo-engineer). Plaintexts saved to user's 1Password vault.
+
 ### STEP 4 — CI deploy reliability decision (~30 min)
 
 **Symptom:** `azure/login@v2` archive download has been flaky across S52 + S53. Last CI run (S53 push, `86f7978`) was in_progress at session close; need to confirm whether it succeeded or hit the same failure mode.
@@ -47,6 +53,15 @@
 **Acceptance:** Last 3 CI runs all green, or workflow file commits SHA-pinned with a green run on the new pin.
 
 **Touched:** Possibly `.github/workflows/deploy.yml` (1 SHA pin).
+
+**Executed 2026-05-26 (S54):** Declared **transient**. Last run on `main` (S53 / `86f7978`) is green. The two prior failures (`5e52998`, `0af6162`) share an identical root cause at the **GitHub Actions runner layer**, BEFORE any workflow code executes:
+
+> `##[error]An action could not be found at the URI 'https://codeload.github.com/Azure/login/tar.gz/a457da9ea143d694b1b9c7c869ebb04ebe844ef5' (F028:5135E:...)`
+> `##[error]Failed to download archive ... after 1 attempts.`
+
+The runner already SHA-resolves `azure/login@v2` internally (the SHA `a457da9…` is visible in the failure URL). Adding a SHA pin in `deploy.yml` would change the resolved SHA but not the CDN serving the archive — `codeload.github.com` is the same regardless of how the version is expressed. **Pinning is not a real mitigation for this failure mode.**
+
+Real mitigation options if it recurs: (a) auto-retry the failed run, (b) wrap setup with `nick-fields/retry`, (c) self-host a runner. (a) is the right call for a pre-POC platform. The S54 STEP 6 push will be the 4th data point — if it's also green, we have 2 consecutive greens after the flaky window and can close this out.
 
 ### STEP 5 — Intake-mode decision: 5-step vs 6-field (~20 min, deciding only)
 

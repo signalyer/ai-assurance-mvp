@@ -180,9 +180,17 @@ class SignalLayerClient:
         base_url: str,
         tenant: str | None = None,
         timeout_s: float = 30.0,
+        key_id: str | None = None,
     ) -> None:
-        """Initialise client.  Never logs api_key or secret."""
-        self._key_id, self._secret = _parse_key(api_key)
+        """Initialise client.  Never logs api_key or secret.
+
+        When ``key_id`` is provided explicitly, it overrides the key_id
+        portion parsed from ``api_key``. This supports the S53 per-system
+        key model where the wizard issues a ``slk_*`` key_id separately
+        from the HMAC secret, and the snippet passes both to ``init()``.
+        """
+        parsed_id, self._secret = _parse_key(api_key)
+        self._key_id = key_id or parsed_id
         self._base_url = base_url.rstrip("/")
         self._tenant = tenant
         self._timeout = httpx.Timeout(timeout_s)

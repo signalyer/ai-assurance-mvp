@@ -529,3 +529,23 @@ Decision: `pytest.ini` pins `--basetemp=./_pytest_tmp` so the Python 3.14 +
 Why: documented locally so future contributors don't hit the same wall. The
      project tmp dir is gitignored.
 Constrains: Linux CI is unaffected.
+
+## 2026-05-26 — V2 intake stays the 5-step / 30+-field wizard (S54)
+Decision: Reject the S50 "minimal 6-field intake" goal. Keep
+     `team-portal/src/pages/ai-systems/RegisterSystemPage.tsx` (5 steps,
+     30+ fields) as the V2 AI-system intake permanently.
+Alternatives: ship a parallel 6-field "lite" intake · gate the long wizard
+     behind an "advanced" toggle · replace the wizard entirely
+Why: the live risk-classification panel needs most of the 30+ fields to
+     fire its rules correctly. The risk panel is one of the strongest
+     demo affordances in the team-portal SPA. A 6-field intake would
+     either (a) leave risk classification as "Unknown" until follow-up,
+     killing the demo moment, or (b) silently default the missing
+     fields, undermining the trust the panel is meant to convey.
+     The S50 "6-field" target was an aspirational simplification, not a
+     measured requirement.
+Constrains: `[[project-v1-to-v2-real-data-arc]]` memory file updated
+     to drop the 6-field claim. Any future intake simplification must
+     preserve the live risk-classification surface — no silent defaulting
+     of risk-relevant fields. POC P3 (Architect runbook) will use the
+     full wizard.

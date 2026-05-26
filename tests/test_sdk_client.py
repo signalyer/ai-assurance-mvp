@@ -396,3 +396,39 @@ class TestInit:
         monkeypatch.setenv("SL_API_BASE_URL", "http://env.local")
         signallayer.init()
         assert signallayer._config["base_url"] == "http://env.local"
+
+
+# ---------------------------------------------------------------------------
+# S54 STEP 2 — explicit key_id= kwarg (per-system slk_* keys, S53 wizard)
+# ---------------------------------------------------------------------------
+
+class TestKeyIdKwarg:
+    def test_client_explicit_key_id_overrides_parsed(self) -> None:
+        """SignalLayerClient(key_id=...) overrides the key_id parsed from api_key."""
+        c = SignalLayerClient(
+            api_key="legacy_kid:thesecret",
+            base_url="http://fake.local",
+            key_id="slk_explicit",
+        )
+        assert c._key_id == "slk_explicit"
+        assert c._secret == "thesecret"
+        headers = c._build_headers("GET", "/api/health", b"")
+        assert headers["X-SL-Key-Id"] == "slk_explicit"
+
+    def test_init_accepts_key_id_kwarg(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """signallayer.init(key_id=...) works without SL_KEY_ID env var.
+
+        Mirrors the S53 onboarding wizard snippet, which passes the
+        slk_* key_id and a bare secret as api_key.
+        """
+        import signallayer
+
+        monkeypatch.delenv("SL_KEY_ID", raising=False)
+        signallayer.init(
+            api_key="bare_secret_no_colon",
+            base_url="http://fake.local",
+            key_id="slk_wizard",
+        )
+        assert signallayer._config["key_id"] == "slk_wizard"
+        client = signallayer.get_client()
+        assert client._key_id == "slk_wizard"

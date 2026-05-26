@@ -1681,6 +1681,44 @@ URL audit on all 10 pages was clean — every SPA path matches its router prefix
 - Release Gates engine endpoint doesn't honour `X-Data-Mode v2` (S52 carry-over) — the SPA's new V2 empty state is wired but never triggers because the list never goes empty. Flagged as a follow-up task (S52 §Known open §2 unchanged).
 - SDK `signallayer.init()` signature does not yet accept a `key_id=` kwarg; the wizard's generated snippet shows the kwarg, but works on the env-var fallback path. Cosmetic — fix when next touching the SDK.
 
+### Session 54 — V1→V2 arc close
+
+**Theme:** Defensive cleanup, not new surface. Five S53-carryover items, then declare the V1→V2 real-data arc (S52–S54) formally complete.
+
+**Outcome:** Arc closed. The platform contract is now stable enough to take the enterprise Architect POC (see [docs/plans/AZURE-ARCHITECT-POC.md](docs/plans/AZURE-ARCHITECT-POC.md)).
+
+**Changes shipped this session**
+- [api/release_gates.py](api/release_gates.py) — `/systems` endpoint now honours `X-Data-Mode` via `middleware.data_mode.filter_by_mode`. Closes S52 §Known open §2: CISO Console `/release-gates` V2 empty state now renders until a real-mode system is registered. (V1 behaviour unchanged.)
+- [sdk/signallayer/__init__.py](sdk/signallayer/__init__.py) + [sdk/signallayer/client.py](sdk/signallayer/client.py) — `init()` and `SignalLayerClient` accept an explicit `key_id: str | None = None` kwarg. When supplied, overrides the key_id parsed from `api_key`; falls back to `SL_KEY_ID` env var. Matches the S53 wizard's generated snippet shape. Backward-compatible: legacy `kid:secret` callers unchanged when `key_id` is `None`.
+- [tests/test_release_gates_v2.py](tests/test_release_gates_v2.py) — 2 tests: V1 returns seed systems, V2 returns `{systems: []}`.
+- [tests/test_sdk_client.py](tests/test_sdk_client.py) — 2 new tests in `TestKeyIdKwarg`: explicit kwarg overrides parsed key_id; `init(key_id=...)` works without env vars.
+- [DECISIONS.md](DECISIONS.md) — 2026-05-26 entry recording the rejection of the "minimal 6-field intake" target. V2 intake remains the 5-step / 30+-field wizard permanently because the live risk-classification panel needs most of the 30+ fields to fire its rules.
+
+**Smoke results (run live against prod, post-deploy)**
+- `smoke_gov.ps1`: 8/8 PASS, zero SKIPs. Probe 7 = `(v1=5, v2=0)`. Probe 8 audit key: `slk_52ddb2ab` (issued → polled → revoked).
+- `smoke_portal.ps1`: 8/8 PASS, zero SKIPs. Probe 7 = `(v1=5, v2=0)`. Probe 8 audit key: `slk_b25264b4` (issued → polled → revoked).
+
+**Operational changes**
+- Demo user passwords rotated to fresh 24-char urlsafe values. New bcrypt hashes (rounds=12) deployed to `app-aigovern-dev` via `az webapp config appsettings set` (`DEMO_USER_CISO_HASH`, `DEMO_USER_ENGINEER_HASH`). Plaintexts saved to user's 1Password vault. Previous passwords no longer accepted.
+
+**CI status**
+- Last `deploy.yml` run on `main` (S53 / `86f7978`): SUCCESS.
+- Two prior runs (`5e52998`, `0af6162`) failed with identical root cause at the GitHub Actions runner layer, BEFORE workflow code ran: `codeload.github.com` returned `An action could not be found at the URI '.../Azure/login/tar.gz/a457da9...'`. **SHA-pinning is not a real mitigation** — the runner already SHA-resolves `azure/login@v2` internally (the SHA is in the failure URL); pinning in YAML changes the resolved SHA but not the CDN serving it. Declared transient; no workflow changes this session. S54 push will be the 4th datapoint.
+
+**Compound rule earned this session**
+- **S54 #1 (the "Option 1 / Option 2" menu):** When I have tool access and the action is non-destructive, never present a "you do it / I defer" menu — that menu IS the deferral. Always try the command myself first; only surface a deferral when it actually fails. Updated [[feedback-run-commands-dont-defer]] to remove `op` / 1Password from the deferral list (it's a normal CLI on the user's box) and add an explicit "no menus" rule.
+
+**V1→V2 arc — DECLARED CLOSED**
+
+The 4-session arc locked at S50 ([[project-v1-to-v2-real-data-arc]]) is delivered:
+- S52 ✓ V1/V2 data-mode toggle + `data_source` field invariant on every persisted row.
+- S53 ✓ Per-system SDK keys (`slk_*`) + 3-step onboarding wizard + V2 empty-state CTAs in both SPAs.
+- S54 ✓ Carryover cleanup: release-gates V2 filter, SDK `key_id=` kwarg, smoke 8/8 GREEN with no SKIPs, CI flake declared transient, intake-mode decision logged.
+
+The "Real baselines" work originally targeted for S54 (flip `EVAL_BACKEND=deepeval`) was moved into the [docs/plans/SESSIONS-55-60-P0-HARDENING.md](docs/plans/SESSIONS-55-60-P0-HARDENING.md) roadmap — it's a separate risk class (token cost, latency) and deserves its own session.
+
+**Next: S55 POC retrospective + first P0 hardening pass.**
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)

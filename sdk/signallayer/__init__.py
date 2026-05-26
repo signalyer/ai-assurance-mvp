@@ -36,6 +36,7 @@ _config: dict[str, Any] = {
     "api_key": None,
     "base_url": None,
     "tenant": None,
+    "key_id": None,
 }
 
 
@@ -43,6 +44,7 @@ def init(
     api_key: str | None = None,
     base_url: str | None = None,
     tenant: str | None = None,
+    key_id: str | None = None,
 ) -> None:
     """Initialise the SDK with platform credentials.
 
@@ -65,6 +67,11 @@ def init(
             Falls back to ``SL_API_BASE_URL``.
         tenant: Optional tenant identifier sent as ``X-SL-Tenant`` header.
             Falls back to ``SL_TENANT``.
+        key_id: Optional explicit key_id (S53 per-system ``slk_*`` form).
+            When supplied, overrides the key_id parsed from ``api_key``
+            and is sent as ``X-SL-Key-Id`` on every request. Falls back to
+            ``SL_KEY_ID``. Backward-compatible: ``None`` => legacy
+            ``api_key`` parsing path.
 
     Raises:
         ValueError: If ``api_key`` or ``base_url`` cannot be resolved from
@@ -73,6 +80,7 @@ def init(
     resolved_key = api_key or os.getenv("SL_API_KEY")
     resolved_url = base_url or os.getenv("SL_API_BASE_URL")
     resolved_tenant = tenant or os.getenv("SL_TENANT")
+    resolved_key_id = key_id or os.getenv("SL_KEY_ID")
 
     if not resolved_key:
         raise ValueError(
@@ -86,6 +94,7 @@ def init(
     _config["api_key"] = resolved_key
     _config["base_url"] = resolved_url
     _config["tenant"] = resolved_tenant
+    _config["key_id"] = resolved_key_id
 
     logger.info(
         "signallayer.init: SDK configured — base_url=%s tenant=%s version=%s",
@@ -117,6 +126,7 @@ def get_client() -> "SignalLayerClient":  # noqa: F821
         api_key=_config["api_key"],
         base_url=_config["base_url"],
         tenant=_config.get("tenant"),
+        key_id=_config.get("key_id"),
     )
 
 

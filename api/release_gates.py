@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain.release_gate_engine import (
     evaluate_gates, apply_exception, list_exceptions, define_gates,
 )
 from domain.repository import list_ai_systems
+from middleware.data_mode import filter_by_mode, get_data_mode
 
 from api._models import ConflictDetail
 
@@ -174,10 +175,15 @@ async def catalog() -> GateCatalogOut:
     response_model=SystemGateSummariesOut,
     operation_id="release_gates_v2_systems_summary",
 )
-async def systems_summary() -> SystemGateSummariesOut:
-    """One-line gate summary per AI system, for the index view."""
+async def systems_summary(request: Request) -> SystemGateSummariesOut:
+    """One-line gate summary per AI system, for the index view.
+
+    Honors X-Data-Mode (v1|v2): V2 hides seed systems so the SPA's
+    empty-state copy renders until a real system is registered.
+    """
     out: list[SystemGateSummaryOut] = []
-    for s in list_ai_systems():
+    systems = filter_by_mode(list_ai_systems(), get_data_mode(request))
+    for s in systems:
         try:
             r = evaluate_gates(s.id, target_environment="PILOT")
         except Exception as e:                            # noqa: BLE001
