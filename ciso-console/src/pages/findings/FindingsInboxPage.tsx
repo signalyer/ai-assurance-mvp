@@ -223,8 +223,17 @@ function Kpi({ label, value, tone, sub }: { label: string; value: number; tone?:
 
 function FindingsTable() {
   const rows = filtered.value;
+  const hasData = findings.value.length > 0;
 
-  if (loading.value) return <div class="loading" style={{ padding: '1.5rem' }}>Loading findings…</div>;
+  // Show the loading placeholder ONLY when we have nothing to show yet.
+  // Once data has arrived, a subsequent refresh (Refresh button, periodic
+  // re-fetch) must NOT hide the existing rows — that conflates "fetch in
+  // flight" with "no data" and produces the "stuck loading…" UX we hit in
+  // prod when `loading` flipped back to true after the initial load
+  // resolved (e.g. user clicked Refresh, or a stray re-mount fired loadFindings).
+  if (loading.value && !hasData) {
+    return <div class="loading" style={{ padding: '1.5rem' }}>Loading findings…</div>;
+  }
   if (rows.length === 0) return <div class="empty-state">No findings match the current filters.</div>;
 
   return (
