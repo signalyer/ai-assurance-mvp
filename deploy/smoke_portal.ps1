@@ -107,7 +107,7 @@ Invoke-Probe -Name "1. Index HTML reachable (GET /)" -ScriptBlock {
     }
     $script:indexHtml = "$($resp.Content)"
     if ($script:indexHtml -notmatch '<div\s+id="app"') {
-        throw "index.html does not contain the SPA root element ('<div id=\"app\">') — SPA shell missing"
+        throw 'index.html does not contain the SPA root element (<div id="app">) — SPA shell missing'
     }
 }
 
@@ -175,18 +175,18 @@ Invoke-Probe -Name "5. Authenticated API (login as $DemoUser → GET /grc/ai-sys
         Write-Host " (skipped — `$env:SMOKE_DEMO_PASSWORD_ENGINEER not set)" -NoNewline -ForegroundColor DarkYellow
         return
     }
-    $loginBody = @{ username = $DemoUser; password = $DemoPass } | ConvertTo-Json -Compress
+    $loginBody = @{ username = $DemoUser; password = $DemoPass; next = '/' }
     $loginResp = Invoke-WebRequest `
         -Uri "$ApiBaseUrl/api/auth/login" `
         -Method POST `
-        -ContentType "application/json" `
         -Body $loginBody `
         -SessionVariable smokeSession `
+        -MaximumRedirection 0 `
+        -SkipHttpErrorCheck `
         -ErrorAction Stop
-    if ($loginResp.StatusCode -ne 200) {
+    if ($loginResp.StatusCode -ne 200 -and $loginResp.StatusCode -ne 302 -and $loginResp.StatusCode -ne 303) {
         throw "Login failed: HTTP $($loginResp.StatusCode)"
     }
-
     $apiResp = Invoke-WebRequest `
         -Uri "$ApiBaseUrl/api/v1/grc/ai-systems" `
         -Method GET `
