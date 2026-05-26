@@ -1509,6 +1509,48 @@ S47 started as housekeeping (V1 deprecation watch cadence — completed) but piv
 - S48 STEP 1 deploy verification (live smoke on `https://portal.aigovern.sandboxhub.co/ai-systems/new` end-to-end submit) — pending operator deploy and post-deploy run of `deploy/smoke_portal.ps1` with `SMOKE_DEMO_PASSWORD_ENGINEER` set.
 - Entra OIDC (S49+S50) — see mid-session pivot above. S49 plan file to be authored at session open.
 
+### Session 49 — Engine-level Entra OIDC (live in prod)
+
+**ADR locked then implemented end-to-end in one session.** [ADR-002](docs/adr/ADR-002-entra-oidc.md) and [SESSION-49 plan](docs/plans/SESSION-49-entra-oidc-engine.md) drafted at session open; locked decisions: **engine-level OIDC** (not SWA — preserves single parent-domain cookie chain from S25); **authlib** (not MSAL — purpose-built for inbound OIDC web-login); **2 roles 1:1 with portals** (`ciso`→gov, `engineer`→portal — the 7-role demo taxonomy was stagecraft); **bcrypt one-way cutover** via `ALLOW_DEMO_AUTH` flag (default `true` through demo window).
+
+**New files:**
+- [middleware/oidc.py](middleware/oidc.py) — pure helpers + lazy authlib client. `resolve_role_from_groups` (CISO wins ties), `extract_upn_from_claims` (preferred_username → upn → email), `is_group_overage` (200+ groups → deny). `_GROUP_ROLE_MAP` is single-tier (portal-group OID → role); sub-role refinement deferred until a 4th launch user needs it. authlib lazy-imported inside `_oauth_registry()` so import-time cost stays zero when OIDC unused.
+- [api/auth_oidc.py](api/auth_oidc.py) — `GET /auth/oidc/login` (authorize_redirect with deep-link stashed in starlette session) and `GET /auth/oidc/callback` (token exchange → claim resolution → cookie issuance). `_callback_redirect_uri` reads `X-Forwarded-Proto` to force https when App Service's reverse proxy terminates TLS (caught on first live smoke probe). Denial page rendered when no portal group matches — no session cookie issued.
+- [tests/test_oidc_middleware.py](tests/test_oidc_middleware.py) — 21 unit tests on the pure helpers.
+- [tests/test_auth_payload_r_field.py](tests/test_auth_payload_r_field.py) — 13 tests on cookie-shape change, `require_role` reading `r` from payload, `ALLOW_DEMO_AUTH` gate, `/api/auth/config` feature flags.
+
+**Surgical edits to [middleware/auth.py](middleware/auth.py):**
+- `PUBLIC_PREFIXES` += `/auth/oidc/` + `/api/auth/config`.
+- New `_allow_demo_auth()` helper reading `ALLOW_DEMO_AUTH` (default true).
+- `POST /api/auth/login` gated by it (403 `demo_auth_disabled` when off); success path writes `r = username.replace("demo-", "", 1)` into the cookie.
+- **Cookie payload shape change**: `{"u","sid"}` → `{"u","sid","r"}`. `require_role._check` now reads `payload["r"]` directly instead of parsing the username. Old-shape cookies (no `r`) → 401, not silent allow.
+- `whoami` exposes `role`; `is_ciso` derived from `r` (OIDC sessions carry real UPNs, not `demo-ciso`).
+- New `GET /api/auth/config` returns `{allow_demo_auth, oidc_enabled}` so the SPA login pages (S50) render the right CTA.
+
+**Infrastructure (provisioned via `az` automation 2026-05-26):**
+- Entra app registration `aigovern-engine-oidc` in `signallayer.ai` tenant. Tenant `4d71a5ab-…`, client `bdc7b0d2-…`, SP `32585f93-…`. `groupMembershipClaims=SecurityGroup`. 24-month client secret.
+- 2 security groups: `aigovern-ciso-console` (praveen@) and `aigovern-team-portal` (pravdev@ + rajesh@).
+- **Key Vault `kv-aigovern-sl-dev`** (eastus, RBAC). The original ADR-002 name `kv-aigovern-dev` was globally taken; `-sl-` disambiguator added. Stores `entra-oidc-client-secret`. App Service managed identity (`e09c20a6-…`) granted `Key Vault Secrets User` via `az rest` direct (S19b workaround for `az role assignment create` MissingSubscription bug).
+- 6 App Service settings pushed to **both** production + staging slots so future slot-swap deploys preserve them: `OIDC_TENANT_ID`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (KV reference), 2 group OIDs, `ALLOW_DEMO_AUTH=true`.
+
+**[dashboard.py](dashboard.py) wire-up:** mounted `api.auth_oidc.router` adjacent to `auth_router`. Conditionally installed starlette `SessionMiddleware` (distinct `aigovern_oauth_dance` cookie, 10-min fixed max_age, https_only) — gated on `is_oidc_enabled()` so dev environments without OIDC env vars still boot. Fail-loudly when SESSION_SECRET is missing while OIDC env is set.
+
+**Smoke probes ([deploy/smoke_api.ps1](deploy/smoke_api.ps1)):** new Scenario 8 (engine-side, no Entra round-trip): 8a verifies `/api/auth/config` feature flags; 8b verifies `/auth/oidc/login` 302s to login.microsoftonline.com with `redirect_uri=https%3A%2F%2F…` (regression guard for the X-Forwarded-Proto bug); 8c verifies bcrypt path still authenticates. Uses `curl.exe` for redirect inspection because PS 7's `Invoke-WebRequest -MaximumRedirection 0` errors out on the first redirect instead of returning the response.
+
+**[requirements.txt + requirements-deploy.txt](requirements-deploy.txt):** + `authlib>=1.3.0`. Both files updated per S12 lesson (slim deploy file is source of truth; requirements.txt mirror keeps CI imports green).
+
+**Live verification 2026-05-26:** prod sha `2c69a13`. `/api/auth/config` returns `{"allow_demo_auth":true,"oidc_enabled":true}`. `/auth/oidc/login` 302s to Microsoft with `redirect_uri=https://aigovern.sandboxhub.co/auth/oidc/callback`. **End-to-end Entra login confirmed by operator for all 3 launch users** — praveen@ lands on gov.aigovern.sandboxhub.co; pravdev@ and rajesh@ land on portal.aigovern.sandboxhub.co. Bcrypt path still works.
+
+**Compound rules earned:**
+- **S49 #1:** App Service containers see http upstream because the reverse proxy terminates TLS. Any URL/cookie code that depends on scheme must read `X-Forwarded-Proto` explicitly. `request.url_for` returns http://, not https://. Caught on first live smoke — would have 400'd every Entra login with `AADSTS50011` redirect URI mismatch.
+- **S49 #2:** httpx TestClient with `secure=True` cookies needs `base_url="https://testserver"`. Otherwise cookies are stored but not sent on subsequent requests (silent failure mode — login succeeds, follow-up auth-required calls return 401 with no explanation).
+- **S49 #3:** PS 7's `Invoke-WebRequest -MaximumRedirection 0` raises an error on the first redirect instead of returning the 302 response. For redirect inspection in PowerShell, use `curl.exe -sS -o NUL -w "%{http_code} %{redirect_url}"` — works on every platform CI runs on.
+
+**Known open at S49 close:**
+- SPA login UX (S50): "Sign in with Microsoft" button on both `team-portal/src/pages/login/LoginPage.tsx` and `ciso-console/src/pages/login/LoginPage.tsx`, consuming `GET /api/auth/config` to choose primary CTA. See [docs/plans/SESSION-50-spa-entra-login-cta.md](docs/plans/SESSION-50-spa-entra-login-cta.md).
+- bcrypt cutover post-demo: flip `ALLOW_DEMO_AUTH=false` on both slots, verify 403 on `/api/auth/login`. One-way trip; flag stays false in prod permanently.
+- Pre-existing test failure flagged via spawn_task: `tests/test_session10_hardening.py::test_rtf_index_sidecar_used` — RTF sidecar signature drift, orthogonal to S49.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
@@ -1552,6 +1594,14 @@ Six-step plan deferred to a future session pending ADR-001 acceptance: Dockerfil
 - `RAG_ENABLED=true|false` — Tier 3 RAG retrieval active (Azure AI Search)
 - `RAG_HYBRID_SEMANTIC_WEIGHT=0.6` — Hybrid scoring weight (0.6 semantic + 0.4 BM25)
 - (Existing, now active: `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY`, `AZURE_SEARCH_INDEX`, `RAG_EMBEDDING_MODEL`, `RAG_TOP_K`, `DATABASE_URL`)
+
+### Added (Session 49, applied to both prod + staging slots)
+- `OIDC_TENANT_ID=4d71a5ab-7797-4816-8082-74b3159f1bb0` — signallayer.ai tenant
+- `OIDC_CLIENT_ID=bdc7b0d2-b87c-428c-bb6b-3df596c83c69` — aigovern-engine-oidc app
+- `OIDC_CLIENT_SECRET=@Microsoft.KeyVault(SecretUri=https://kv-aigovern-sl-dev.vault.azure.net/secrets/entra-oidc-client-secret)` — KV reference; resolved by App Service managed identity
+- `OIDC_CISO_CONSOLE_GROUP_OID=a7f5a389-2ca1-4010-905b-eade07086d46` — grants role=ciso
+- `OIDC_TEAM_PORTAL_GROUP_OID=a35db759-3337-43b5-81a9-2f817728820b` — grants role=engineer
+- `ALLOW_DEMO_AUTH=true` — bcrypt path live through demo window; one-way flip to false post-demo
 
 ### To add (per upcoming sessions)
 - `SCRUBBER_BACKEND=presidio` (Session 05)
@@ -1597,6 +1647,8 @@ python -c "from api.demo_control import router; print('demo_control OK')"       
 python -c "from middleware.guardrails import _extract_text; assert _extract_text({'response_text':'x'})=='x'; print('extract_text OK')"  # after Session 12B
 python -c "from guardrails.llama_guard_adapter import LlamaGuardEvaluator; r=LlamaGuardEvaluator.evaluate('discuss execution of allocation strategy'); assert r.safe, 'FAIL: word-boundary regression'; print('word-boundary OK')"  # after Session 12B
 python -c "import logging,audit; logging.getLogger('any').warning('no action key needed'); print('audit no-root-mutation OK')"  # after Session 12B
+python -c "from middleware.oidc import resolve_role_from_groups, extract_upn_from_claims; print('oidc OK')"  # after Session 49
+python -c "from api.auth_oidc import router; assert any(r.path=='/auth/oidc/callback' for r in router.routes); print('oidc routes OK')"  # after Session 49
 python -m pytest tests/ -v                                                     # after Session 10 — expect 252 passed
 pwsh deploy/smoke_api.ps1                                                      # engine API + A6/A7 login redirect (7 probes)
 pwsh deploy/smoke_portal.ps1                                                   # Team Workspace SPA (3 probes)

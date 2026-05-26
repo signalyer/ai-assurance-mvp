@@ -17,7 +17,7 @@
   - `pravdev@signallayer.ai` — Dev 1 → `aigovern-team-portal` → lands on portal.aigovern.sandboxhub.co
   - `rajesh@signallayer.ai` — Dev 2 → `aigovern-team-portal` → lands on portal.aigovern.sandboxhub.co
 - **Cookie payload extends `{u,sid}` → `{u,sid,r}`.** `u` = UPN, `r` = role. `require_role` reads `payload["r"]` directly. Drops the `demo-{role}` username-parsing hack.
-- **Key Vault for the Entra client secret only** (`kv-aigovern-dev`, eastus). Documented exception to the global CLAUDE.md "no KV for demo" rule, scoped to this one secret. Managed identity for engine → KV read.
+- **Key Vault for the Entra client secret only** (`kv-aigovern-sl-dev`, eastus). Documented exception to the global CLAUDE.md "no KV for demo" rule, scoped to this one secret. Managed identity for engine → KV read.
 - **bcrypt one-way cutover.** `ALLOW_DEMO_AUTH=true` through demo window, flipped to `false` after final stakeholder demo. Stays false in prod permanently.
 - **Redirect URI:** `https://aigovern.sandboxhub.co/auth/oidc/callback`.
 - **Logout:** clears engine session cookie only. Entra single-sign-out deferred.
@@ -46,7 +46,7 @@ In Azure Portal / Entra admin center (`signallayer.ai` tenant):
 
 ```powershell
 $rg = "rg-aigovern-dev"
-$kv = "kv-aigovern-dev"
+$kv = "kv-aigovern-sl-dev"
 $app = "app-aigovern-dev"
 
 # 1. Provision KV in eastus
@@ -72,7 +72,7 @@ $secUri = az keyvault secret show --vault-name $kv --name entra-oidc-client-secr
 Write-Host "OIDC_CLIENT_SECRET reference: @Microsoft.KeyVault(SecretUri=$secUri)"
 ```
 
-**Acceptance:** `az keyvault secret show --vault-name kv-aigovern-dev --name entra-oidc-client-secret` returns the value. RBAC role assignment confirmed via `az role assignment list --assignee $mi --scope $kvId`.
+**Acceptance:** `az keyvault secret show --vault-name kv-aigovern-sl-dev --name entra-oidc-client-secret` returns the value. RBAC role assignment confirmed via `az role assignment list --assignee $mi --scope $kvId`.
 
 ## STEP 3 — App Service settings (~10 min, after STEPs 1 + 2)
 
@@ -194,6 +194,35 @@ All resolved 2026-05-26:
 ## Target end-state (S49)
 
 Entra OIDC live at `https://aigovern.sandboxhub.co/auth/oidc/login`. 3 launch users can sign in via Entra and land on the correct portal. bcrypt path still works (demo window). `/api/auth/config` exposes feature flags for S50 SPA work. Client secret in Key Vault, not app settings. ARCHITECTURE.md and S50 plan written.
+
+## Provisioned values (2026-05-26)
+
+Captured during automated execution of STEPs 1-3. Recorded here so future
+sessions can find them without grepping `az` output. **Client secret value
+is NOT included** — it lives only in `kv-aigovern-sl-dev`.
+
+| Identifier | Value |
+|---|---|
+| Tenant ID (`signallayer.ai`) | `4d71a5ab-7797-4816-8082-74b3159f1bb0` |
+| App (client) ID | `bdc7b0d2-b87c-428c-bb6b-3df596c83c69` |
+| App object ID | `88885ee3-f924-4038-89b2-0001cdb1d3b8` |
+| Service principal object ID | `32585f93-4506-4bf6-b757-be7005fe8544` |
+| CISO Console group OID | `a7f5a389-2ca1-4010-905b-eade07086d46` |
+| Team Portal group OID | `a35db759-3337-43b5-81a9-2f817728820b` |
+| Key Vault | `kv-aigovern-sl-dev` (eastus, RBAC) |
+| Secret URI | `https://kv-aigovern-sl-dev.vault.azure.net/secrets/entra-oidc-client-secret` |
+| App MI principal ID | `e09c20a6-dfd4-4bb7-8e25-6e753475871c` |
+| Client secret name | `aigovern-engine-oidc-s49` (24-month expiry) |
+
+**Live verification 2026-05-26:** `/api/auth/config` returns
+`{"allow_demo_auth":true,"oidc_enabled":true}`; `/auth/oidc/login` 302s
+to `login.microsoftonline.com` with `redirect_uri=https://aigovern.sandboxhub.co/auth/oidc/callback`;
+end-to-end Entra login confirmed by operator for all 3 launch users.
+
+**Deviation from ADR-002:** KV name changed from `kv-aigovern-dev` to
+`kv-aigovern-sl-dev`. Global KV name `kv-aigovern-dev` was taken by a
+different tenant; added `-sl-` (signallayer) disambiguator. ADR-002 §7
+updated to match.
 
 ## Working rules in effect
 

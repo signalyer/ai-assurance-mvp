@@ -156,7 +156,7 @@ sub-decisions:
    (`/auth/saml/callback`).
 
 3. **Secret storage:** Entra client secret lives in **Azure Key Vault**
-   (`kv-aigovern-dev`, eastus). App Service managed identity gets a
+   (`kv-aigovern-sl-dev`, eastus). App Service managed identity gets a
    `Key Vault Secrets User` role assignment. The engine reads the secret
    at startup via the App Service Key Vault reference syntax
    (`@Microsoft.KeyVault(SecretUri=...)`) so the secret never appears in
@@ -262,7 +262,7 @@ sub-decisions:
 - bcrypt cutover is a one-way config flip, not a redeploy.
 
 ### Negative
-- New Azure resource (`kv-aigovern-dev`) to provision and manage. Cost is
+- New Azure resource (`kv-aigovern-sl-dev`) to provision and manage. Cost is
   trivial (~$0.03/10k operations) but it's one more thing to monitor.
 - Cookie payload shape change (`{"u","sid"}` → `{"u","sid","r"}`) means
   in-flight sessions at cutover are invalidated. Real impact: users bounce
@@ -307,7 +307,7 @@ Summary:
    users: 1 CISO → `aigovern-ciso-console`; 2 developers →
    `aigovern-team-portal`. Capture both group OIDs. Sub-role groups are
    NOT created at launch (see §1 — Tier 2 ships empty).
-3. Provision `kv-aigovern-dev` in eastus. Store client secret as
+3. Provision `kv-aigovern-sl-dev` in eastus. Store client secret as
    `entra-oidc-client-secret`. Grant `app-aigovern-dev` managed identity
    the `Key Vault Secrets User` role on the vault.
 4. App Service settings:
@@ -347,7 +347,7 @@ the ADR above. Confirm or correct before code lands:
 1. **Tenant:** assumed `signallayer.ai`. Confirm.
 2. **Redirect URI:** chosen `/auth/oidc/callback`. Confirm (vs. the handoff's
    alternative `/auth/callback/entra`).
-3. **Key Vault name:** chosen `kv-aigovern-dev` in eastus. Confirm (vs.
+3. **Key Vault name:** chosen `kv-aigovern-sl-dev` in eastus. Confirm (vs.
    co-locating in an existing vault).
 4. **Group OIDs:** TBD — 2 OIDs needed (`aigovern-ciso-console`,
    `aigovern-team-portal`). Group creation can be done out-of-band during

@@ -317,6 +317,65 @@ Invoke-Scenario -Name "7. A6/A7 login redirect (POST /api/auth/login)" -ScriptBl
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 8 — Entra OIDC wiring (Session 49 / ADR-002)
+#
+# Engine-side verification only — does NOT perform a real Entra round-trip
+# (that needs a human browser). Three sub-checks:
+#   8a. GET /api/auth/config returns the two feature-flag booleans.
+#   8b. GET /auth/oidc/login 302s to login.microsoftonline.com with the
+#       correct client_id and redirect_uri=https://... (catches the
+#       X-Forwarded-Proto bug that bit S49 STEP 3).
+#   8c. Bcrypt login still works when ALLOW_DEMO_AUTH=true (regression).
+#
+# All sub-checks SKIP gracefully when AUTH_ENABLED=false (config endpoint
+# is still reachable but oidc_enabled may be false in dev).
+# ---------------------------------------------------------------------------
+Invoke-Scenario -Name "8. OIDC wiring (engine-side, no Entra round-trip)" -ScriptBlock {
+    # 8a — feature flags
+    $cfg = Invoke-RestMethod -Uri "$BaseUrl/api/auth/config" -Method GET -ErrorAction Stop
+    if ($null -eq $cfg.allow_demo_auth) {
+        throw "/api/auth/config missing allow_demo_auth field; got: $($cfg | ConvertTo-Json -Compress)"
+    }
+    if ($null -eq $cfg.oidc_enabled) {
+        throw "/api/auth/config missing oidc_enabled field; got: $($cfg | ConvertTo-Json -Compress)"
+    }
+
+    # 8b — login redirect (only if OIDC is actually enabled on this target).
+    # Use curl.exe rather than Invoke-WebRequest: PS 7's WebClient errors out
+    # on -MaximumRedirection 0 instead of returning the 302 — quirk first
+    # noted during S49 smoke authoring. curl is reliable + ships with Windows
+    # 11 and every Linux distro the CI runs on.
+    if ($cfg.oidc_enabled) {
+        $curlOut = & curl.exe -sS -o NUL -w "%{http_code} %{redirect_url}" "$BaseUrl/auth/oidc/login" 2>&1
+        $parts = "$curlOut".Trim().Split(" ", 2)
+        $code = [int]$parts[0]
+        $loc = if ($parts.Count -gt 1) { $parts[1] } else { "" }
+        if ($code -ne 302) {
+            throw "/auth/oidc/login expected 302, got $code"
+        }
+        if ($loc -notmatch "^https://login\.microsoftonline\.com/") {
+            throw "/auth/oidc/login Location not Microsoft OIDC; got: $loc"
+        }
+        if ($loc -notmatch "redirect_uri=https%3A%2F%2F") {
+            throw "/auth/oidc/login redirect_uri not https-encoded — X-Forwarded-Proto regression? Location: $loc"
+        }
+    } else {
+        Write-Host " (8b skipped — OIDC not enabled on target)" -NoNewline -ForegroundColor DarkYellow
+    }
+
+    # 8c — bcrypt regression (only if creds + ALLOW_DEMO_AUTH=true)
+    if ($cfg.allow_demo_auth -and $env:SMOKE_ENGINEER_PW) {
+        $body = @{ username = "demo-engineer"; password = $env:SMOKE_ENGINEER_PW; next = "/" }
+        $resp = Invoke-RestMethod -Uri "$BaseUrl/api/auth/login" -Method POST -Body $body -ErrorAction Stop
+        if (-not $resp.ok) {
+            throw "bcrypt login regression — demo-engineer did not get ok=true; got: $($resp | ConvertTo-Json -Compress)"
+        }
+    } else {
+        Write-Host " (8c skipped — demo auth disabled or SMOKE_ENGINEER_PW unset)" -NoNewline -ForegroundColor DarkYellow
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
