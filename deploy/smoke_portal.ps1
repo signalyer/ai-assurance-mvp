@@ -201,6 +201,37 @@ Invoke-Probe -Name "5. Authenticated API (login as $DemoUser → GET /grc/ai-sys
 }
 
 # ---------------------------------------------------------------------------
+# Probe 6 — Auth feature-flags endpoint (S50)
+# The SPA's /login page reads /api/auth/config on mount and decides which
+# CTAs to render. Curling /login itself only returns the empty SPA shell —
+# the MS button is JS-rendered. Probing /api/auth/config is the
+# server-measurable equivalent: if oidc_enabled is false here, the SPA
+# falls back to bcrypt-only regardless of what the bundle ships.
+# allow_demo_auth is intentionally NOT asserted — it flips to false during
+# the post-demo cutover and the smoke script must keep passing.
+# ---------------------------------------------------------------------------
+Invoke-Probe -Name "6. Auth feature-flags (GET /api/auth/config → oidc_enabled=true)" -ScriptBlock {
+    $resp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/auth/config" `
+        -Method GET `
+        -ErrorAction Stop
+    if ($resp.StatusCode -ne 200) {
+        throw "Expected HTTP 200; got $($resp.StatusCode)"
+    }
+    $body = "$($resp.Content)"
+    $json = $null
+    try { $json = $body | ConvertFrom-Json -ErrorAction Stop } catch {
+        throw "Response not JSON: $body"
+    }
+    if (-not $json.PSObject.Properties['oidc_enabled']) {
+        throw "Response missing 'oidc_enabled' field: $body"
+    }
+    if (-not $json.oidc_enabled) {
+        throw "oidc_enabled is false — 'Sign in with Microsoft' will not render on /login"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
