@@ -117,9 +117,11 @@ export function PortfolioPage() {
         <div class="error-banner">Failed to load portfolio: {loadError.value}</div>
       )}
 
-      {loading.value && <div class="loading" style={{ padding: '1.5rem' }}>Loading portfolio…</div>}
+      {loading.value && systems.value.length === 0 && (
+        <div class="loading" style={{ padding: '1.5rem' }}>Loading portfolio…</div>
+      )}
 
-      {!loading.value && !loadError.value && (
+      {(systems.value.length > 0 || (!loading.value && !loadError.value)) && (
         <>
           {/* KPI strip */}
           <div class="kpi-row">

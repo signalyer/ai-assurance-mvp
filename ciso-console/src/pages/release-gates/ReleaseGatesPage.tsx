@@ -173,13 +173,15 @@ export function ReleaseGatesPage() {
         <div class="error-banner">Failed to load release gates: {loadError.value}</div>
       )}
 
-      {loading.value && <div class="loading" style={{ padding: '1.5rem' }}>Loading gate summaries…</div>}
+      {loading.value && summaries.value.length === 0 && (
+        <div class="loading" style={{ padding: '1.5rem' }}>Loading gate summaries…</div>
+      )}
 
       {!loading.value && summaries.value.length === 0 && !loadError.value && (
         <div class="empty-state">No AI systems registered.</div>
       )}
 
-      {!loading.value && summaries.value.map((s) => (
+      {summaries.value.map((s) => (
         <SystemGateRow key={s.ai_system_id} summary={s} />
       ))}
 

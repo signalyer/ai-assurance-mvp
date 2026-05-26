@@ -153,9 +153,11 @@ export function FrameworksPage() {
         <div class="error-banner">Export error: {exportError.value}</div>
       )}
 
-      {loading.value && <div class="loading" style={{ padding: '1.5rem' }}>Loading coverage matrix…</div>}
+      {loading.value && !m && (
+        <div class="loading" style={{ padding: '1.5rem' }}>Loading coverage matrix…</div>
+      )}
 
-      {!loading.value && m && (
+      {m && (
         <>
           {/* Export buttons row */}
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -176,7 +178,7 @@ export function FrameworksPage() {
         </>
       )}
 
-      {!loading.value && m && m.rows.length === 0 && (
+      {m && m.rows.length === 0 && (
         <div class="empty-state">No AI systems registered.</div>
       )}
 

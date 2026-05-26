@@ -256,9 +256,9 @@ export function PoliciesPage() {
         </select>
       </div>
 
-      {loading.value ? (
+      {loading.value && policies.value.length === 0 ? (
         <div class="loading" style={{ padding: '2rem' }}>Loading policies…</div>
-      ) : loadError.value ? (
+      ) : loadError.value && policies.value.length === 0 ? (
         <div class="error-banner" style={{ margin: '1rem' }}>Failed: {loadError.value}</div>
       ) : items.length === 0 ? (
         <div class="empty-state">No policies match the current filters.</div>
