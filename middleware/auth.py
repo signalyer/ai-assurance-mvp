@@ -38,10 +38,12 @@ PUBLIC_PREFIXES = (
     "/login",
     "/api/auth/login",
     "/api/auth/logout",
+    "/api/auth/config",  # Feature-flag query: tells SPAs which CTA to render
     "/api/health",
     "/static/",
     "/favicon.ico",
     "/api/sdk/",  # SDK paths are authenticated by HMACAuthMiddleware, not session cookies
+    "/auth/oidc/",  # Entra OIDC login + callback (Session 49, ADR-002)
 )
 
 ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER")
@@ -99,6 +101,17 @@ def _default_target_for_user(user: str) -> str:
 
 def _is_enabled() -> bool:
     return os.getenv("AUTH_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+
+
+def _allow_demo_auth() -> bool:
+    """Return True if the bcrypt demo-login form endpoint is permitted.
+
+    Session 49 / ADR-002: the bcrypt path stays live through the demo
+    window (default True) and is flipped to False post-demo via App Service
+    config. Once False in prod, it stays False — this is a one-way cutover,
+    not a toggle.
+    """
+    return os.getenv("ALLOW_DEMO_AUTH", "true").strip().lower() in ("1", "true", "yes")
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -235,6 +248,12 @@ async def login_submit(
     if not _is_enabled():
         return JSONResponse({"error": "auth_disabled"}, status_code=400)
 
+    # Session 49 / ADR-002: one-way cutover. When ALLOW_DEMO_AUTH=false,
+    # the bcrypt path is hard-gated off and users must authenticate via
+    # Entra OIDC at /auth/oidc/login instead.
+    if not _allow_demo_auth():
+        return JSONResponse({"error": "demo_auth_disabled"}, status_code=403)
+
     user = _verify(username, password)
     ip, agent = _ip_and_ua(request)
     if not user:
@@ -246,7 +265,12 @@ async def login_submit(
     ua.session_start(sid, user=user, ip=ip, user_agent=agent)
     ua.log_event("LOGIN", user=user, session_id=sid, ip=ip, user_agent=agent)
 
-    token = _serializer().dumps({"u": user, "sid": sid})
+    # Cookie payload includes `r` so RBAC checks read role from a stable
+    # field instead of parsing the username string. Bcrypt usernames encode
+    # the role as the suffix after `demo-` (e.g. `demo-ciso` → `ciso`);
+    # OIDC sessions write `r` from the resolved group-OID mapping.
+    role = user.replace("demo-", "", 1).lower()
+    token = _serializer().dumps({"u": user, "sid": sid, "r": role})
     # Role-aware default landing (V2-PORTAL-SPLIT A6/A7):
     # - If the user was bounced from a deep link, `next` is the original path
     #   (starts with "/") — honour it.
@@ -335,13 +359,17 @@ def require_role(*allowed_roles: str):
                 )
             return
 
-        # AUTH_ENABLED=true: role is embedded in session cookie.
+        # AUTH_ENABLED=true: role is embedded in session cookie payload `r`
+        # (Session 49 / ADR-002 cookie shape: {"u","sid","r"}). Reading `r`
+        # directly decouples role from username string format so OIDC
+        # sessions carrying a real UPN (e.g. praveen@signallayer.ai) work
+        # the same as bcrypt sessions carrying demo-<role> usernames.
         payload = _read_cookie(request)
         if not payload:
             raise HTTPException(status_code=401, detail="unauthorized")
-        user: str = (payload.get("u") or "").lower()
-        # Role is the suffix after "demo-" (e.g. "demo-ciso" -> "ciso").
-        role = user.replace("demo-", "", 1)
+        role = (payload.get("r") or "").lower()
+        if not role:
+            raise HTTPException(status_code=401, detail="unauthorized")
         if role not in allowed:
             raise HTTPException(status_code=403, detail="insufficient_role")
 
@@ -355,6 +383,35 @@ async def whoami(request: Request):
     payload = _read_cookie(request)
     sid = (payload or {}).get("sid")
     user = (payload or {}).get("u")
+    role = (payload or {}).get("r", "")
     if not sid or not user or not ua.is_session_active(sid):
         return JSONResponse({"error": "unauthorized", "is_ciso": False}, status_code=401)
-    return {"user": user, "session_id": sid, "is_ciso": user == "demo-ciso"}
+    # Session 49: derive is_ciso from cookie `r` field instead of matching
+    # username string. OIDC sessions carry a real UPN, not `demo-ciso`.
+    return {
+        "user": user,
+        "role": role,
+        "session_id": sid,
+        "is_ciso": role.lower() == "ciso",
+    }
+
+
+@router.get("/api/auth/config")
+async def auth_config():
+    """Public feature-flag endpoint consumed by the SPAs to render the right CTA.
+
+    Returns booleans for the two auth paths so the login pages can render
+    a "Sign in with Microsoft" button (oidc_enabled) and/or the demo
+    password form (allow_demo_auth). Both can be true simultaneously
+    during the demo window; both false would be a misconfiguration we
+    don't expect to ship.
+
+    No auth gate — the SPA needs this before the user has signed in.
+    """
+    # Local import to avoid pulling middleware/oidc.py (and authlib's lazy
+    # import path) into the dashboard's startup when OIDC is unused.
+    from middleware import oidc as oidc_mod
+    return {
+        "allow_demo_auth": _allow_demo_auth(),
+        "oidc_enabled": oidc_mod.is_oidc_enabled(),
+    }

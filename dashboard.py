@@ -65,10 +65,12 @@ from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
 from api.projection import router as projection_router
 from api.demo_control import router as demo_control_router
+from api.auth_oidc import router as auth_oidc_router
 from api._errors import register_error_handlers
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
 from middleware.api_version_alias import ApiVersionAliasMiddleware
+from middleware import oidc as oidc_mod
 from __version__ import __version__
 
 # Metrics router -- 404 when METRICS_ENABLED != "true"
@@ -233,6 +235,28 @@ app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), na
 if _HAS_REQUEST_CTX:
     app.add_middleware(RequestContextMiddleware)
 
+# Starlette SessionMiddleware -- gives authlib's OIDC handlers a place to stash
+# state/nonce/PKCE values across the redirect roundtrip. Distinct from our
+# SessionAuthMiddleware: this is a short-lived signed cookie, not an auth gate.
+# Only added when OIDC is actually configured (Session 49 / ADR-002) so dev
+# environments without OIDC_* env vars don't fail to boot.
+if oidc_mod.is_oidc_enabled():
+    from starlette.middleware.sessions import SessionMiddleware
+    _oauth_secret = os.getenv("SESSION_SECRET")
+    if not _oauth_secret:
+        raise RuntimeError(
+            "SESSION_SECRET is required when OIDC is enabled "
+            "(consumed by both SessionAuthMiddleware and the OIDC redirect cookie)."
+        )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=_oauth_secret,
+        session_cookie="aigovern_oauth_dance",
+        max_age=600,  # 10 min — only needs to survive the redirect roundtrip
+        same_site="lax",  # required: callback is top-level redirect from MS
+        https_only=True,
+    )
+
 # Session-cookie auth gate (no-op unless AUTH_ENABLED=true)
 app.add_middleware(SessionAuthMiddleware)
 
@@ -292,6 +316,13 @@ async def v1_surface_deprecation(request, call_next):
 
 
 app.include_router(auth_router)
+
+# OIDC login + callback routes (Session 49 / ADR-002). Mounted unconditionally
+# so /auth/oidc/login is reachable for diagnostics even pre-config; the routes
+# themselves will 500 with a clear "Missing required env var" error rather
+# than silently 404. SessionMiddleware above is the gate that requires
+# OIDC_* env vars at startup.
+app.include_router(auth_oidc_router)
 
 # Include API routers
 app.include_router(traces_router)
