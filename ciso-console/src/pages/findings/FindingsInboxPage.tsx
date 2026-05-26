@@ -1,6 +1,6 @@
 // Surface 1: Findings Inbox (CSM-1)
 // V1 ancestor: static/findings.html
-// Data: GET /api/findings/v2/
+// Data: GET /api/grc/findings/v2/list (router prefix /api/grc/findings/v2; S49 fix).
 // Pattern: table of findings, click row to open detail drawer.
 // Read-only this session. Acknowledge/resolve mutation is CSM-2 scope.
 
@@ -78,7 +78,7 @@ const systemIds = computed<string[]>(() => {
 async function loadFindings(): Promise<void> {
   loading.value = true;
   loadError.value = null;
-  const r = await apiGet<FindingsV2Response>('/findings/v2/');
+  const r = await apiGet<FindingsV2Response>('/grc/findings/v2/list');
   if (r.ok) {
     findings.value = r.data.findings ?? [];
   } else {
