@@ -27,7 +27,11 @@ import type { IssuedKey } from './types';
 const issuedKey = signal<IssuedKey | null>(null);
 const issueError = signal<string | null>(null);
 const issuing = signal<boolean>(false);
-const secretRevealed = signal<boolean>(false);
+// S55 #8: default the secret to revealed. It's shown ONCE; masking by default
+// adds friction without a real security gain (the user already authenticated
+// to reach this page, and the secret is on screen either way). The Hide
+// button remains for shoulder-surf scenarios.
+const secretRevealed = signal<boolean>(true);
 const copied = signal<'secret' | 'install' | 'env' | 'snippet' | null>(null);
 const currentStep = signal<1 | 2 | 3>(1);
 const firstSignalArrived = signal<boolean>(false);
@@ -236,6 +240,11 @@ export function OnboardingPage() {
                       </button>
                       <button class="btn btn-sm" onClick={() => copyTo(key.hmac_secret, 'secret')}>
                         {copied.value === 'secret' ? 'Copied!' : 'Copy secret'}
+                      </button>
+                      {/* S55 #8: one-click .env bundle so the operator doesn't have to */}
+                      {/* hand-assemble SL_KEY_ID / SL_API_KEY / SL_API_BASE_URL / SL_WORKLOAD_ID. */}
+                      <button class="btn btn-sm btn-primary" onClick={() => copyTo(envFor(key), 'env')}>
+                        {copied.value === 'env' ? 'Copied!' : 'Copy as .env'}
                       </button>
                     </div>
                   </div>

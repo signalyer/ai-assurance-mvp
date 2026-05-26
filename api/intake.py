@@ -59,15 +59,23 @@ class IntakePreviewOut(BaseModel):
 
 
 class IntakeSubmitOut(BaseModel):
-    """Result of POST /api/grc/intake/submit -- the new system_id + redirect."""
+    """Result of POST /api/grc/intake/submit -- the new system_id + redirect.
+
+    S55 #7: `status` distinguishes "active" (system + assessment + gates all
+    persisted) from "draft" (system persisted but downstream creation failed —
+    operator can recover from the inventory page; F-009/F-010-style data
+    loss is no longer possible at the intake layer).
+    """
     model_config = ConfigDict(extra="forbid")
 
     ai_system_id: str
-    assessment_id: str
-    gate_count: int
+    assessment_id: str | None = None  # None on draft saves
+    gate_count: int = 0
     inherent_risk: str
     rules_fired: list[str]
     redirect_to: str
+    status: str = "active"  # "active" | "draft"
+    draft_reason: str | None = None  # populated when status == "draft"
 
 
 class IntakeSystemsListOut(BaseModel):
@@ -413,11 +421,60 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
             last_evaluated=now,
         ))
 
-    # Persist (JSON-mode dumps handle enums and datetimes)
+    # Persist (JSON-mode dumps handle enums and datetimes).
+    #
+    # S55 #7 (save-as-draft contract): the AI system itself MUST be persisted
+    # first; if any downstream step fails (assessment write, individual gate
+    # write), we return the row as a "draft" rather than 500-ing and losing
+    # the operator's intake work entirely. The system is fully recoverable
+    # from the inventory page; the operator can re-trigger assessment + gate
+    # creation later. F-009/F-010-style silent data loss is no longer possible
+    # at the intake layer.
     _append_jsonl(SYSTEMS_FILE, system.model_dump(mode="json"))
-    _append_jsonl(ASSESSMENTS_FILE, assessment.model_dump(mode="json"))
+
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    try:
+        _append_jsonl(ASSESSMENTS_FILE, assessment.model_dump(mode="json"))
+    except Exception as e:  # noqa: BLE001 — intentionally broad: any failure becomes a draft, never a 500
+        _log.exception("intake_submit: assessment write failed for %s; saving as draft", system_id)
+        return IntakeSubmitOut(
+            ai_system_id=system_id,
+            assessment_id=None,
+            gate_count=0,
+            inherent_risk=rc.risk_level.value,
+            rules_fired=rc.rules_fired,
+            redirect_to=f"/ai-systems?id={system_id}",
+            status="draft",
+            draft_reason=f"Assessment creation failed: {type(e).__name__}. System saved; retry from inventory page.",
+        )
+
+    gates_written = 0
+    gates_failed_reason: str | None = None
     for g in gates:
-        _append_jsonl(GATES_FILE, g.model_dump(mode="json"))
+        try:
+            _append_jsonl(GATES_FILE, g.model_dump(mode="json"))
+            gates_written += 1
+        except Exception as e:  # noqa: BLE001
+            _log.exception("intake_submit: gate write failed for %s/%s; partial draft", system_id, g.id)
+            gates_failed_reason = (
+                f"{gates_written}/{len(gates)} gates persisted before {type(e).__name__}. "
+                "Retry from inventory page."
+            )
+            break
+
+    if gates_failed_reason is not None:
+        return IntakeSubmitOut(
+            ai_system_id=system_id,
+            assessment_id=assessment.id,
+            gate_count=gates_written,
+            inherent_risk=rc.risk_level.value,
+            rules_fired=rc.rules_fired,
+            redirect_to=f"/ai-systems?id={system_id}",
+            status="draft",
+            draft_reason=gates_failed_reason,
+        )
 
     return IntakeSubmitOut(
         ai_system_id=system_id,
@@ -426,6 +483,7 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
         inherent_risk=rc.risk_level.value,
         rules_fired=rc.rules_fired,
         redirect_to=f"/ai-systems?id={system_id}",
+        status="active",
     )
 
 
