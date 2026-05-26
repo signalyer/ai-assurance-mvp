@@ -52,11 +52,22 @@ def _callback_redirect_uri(request: Request) -> str:
     """Compute the absolute redirect URI for the Entra callback.
 
     Must exactly match the redirect URI registered in the Entra app
-    registration. We construct it from `request.url_for` so the scheme +
-    host + path are all consistent with how the engine is being reached
-    (handles localhost dev and the prod custom domain identically).
+    registration. We construct it from `request.url_for` and then force
+    the scheme to `https` if the request looks like it came through a TLS-
+    terminating proxy (App Service in prod, where the upstream request to
+    gunicorn is http:// but the public URL is https://). `X-Forwarded-Proto`
+    is the canonical signal; if it's absent we fall back to the host name —
+    aigovern.sandboxhub.co is HTTPS-only in prod.
+
+    Local dev (uvicorn on http://127.0.0.1) keeps http and the Entra app
+    registration would need a localhost-specific redirect URI for an end-
+    to-end test, but the typical dev path is to test against the prod URL.
     """
-    return str(request.url_for("oidc_callback"))
+    base = str(request.url_for("oidc_callback"))
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    if forwarded_proto == "https" and base.startswith("http://"):
+        base = "https://" + base[len("http://"):]
+    return base
 
 
 def _safe_next(value: str | None) -> str | None:
