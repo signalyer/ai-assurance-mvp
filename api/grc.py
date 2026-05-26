@@ -16,8 +16,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+
+from middleware.data_mode import filter_by_mode, get_data_mode
 
 from mock_data import (
     AI_SYSTEMS,
@@ -262,6 +264,7 @@ class AiSystemSummaryOut(BaseModel):
     human_oversight: str
     data_residency: str
     trust_boundaries: str
+    data_source: str = "seed"
 
 
 class AiSystemsListOut(BaseModel):
@@ -316,6 +319,7 @@ class FindingOut(BaseModel):
     discovered: str
     description: str
     evidence_ids: list[str]
+    data_source: str = "seed"
 
 
 class FindingsListOut(BaseModel):
@@ -475,6 +479,7 @@ class PolicyOut(BaseModel):
     automation_status: str
     compliant_systems: int
     non_compliant_systems: int
+    data_source: str = "seed"
 
 
 class PoliciesOut(BaseModel):
@@ -501,6 +506,7 @@ class EvidenceOut(BaseModel):
     linked_findings: list[str]
     author: str
     format: str
+    data_source: str = "seed"
 
 
 class EvidenceListOut(BaseModel):
@@ -656,11 +662,12 @@ async def reset_notifications() -> OkResponse:
     response_model=AiSystemsListOut,
     operation_id="ai_systems_list",
 )
-async def list_ai_systems() -> AiSystemsListOut:
-    """List all AI systems in the portfolio."""
+async def list_ai_systems(request: Request) -> AiSystemsListOut:
+    """List all AI systems in the portfolio. Honors X-Data-Mode (v1|v2)."""
+    rows = filter_by_mode(AI_SYSTEMS, get_data_mode(request))
     return AiSystemsListOut(
-        systems=[AiSystemSummaryOut(**s) for s in AI_SYSTEMS],
-        total=len(AI_SYSTEMS),
+        systems=[AiSystemSummaryOut(**s) for s in rows],
+        total=len(rows),
     )
 
 
@@ -699,12 +706,16 @@ async def get_ai_system(system_id: str) -> AiSystemDetailOut:
     operation_id="findings_list",
 )
 async def list_findings(
+    request: Request,
     severity: str = Query(None),
     status: str = Query(None),
     system_id: str = Query(None),
 ) -> FindingsListOut:
-    """List findings with optional filters, sorted CRITICAL first then by SLA remaining."""
-    findings = FINDINGS
+    """List findings with optional filters, sorted CRITICAL first then by SLA remaining.
+
+    Honors X-Data-Mode (v1|v2) via the data-mode middleware.
+    """
+    findings = filter_by_mode(FINDINGS, get_data_mode(request))
 
     if severity:
         findings = [f for f in findings if f["severity"] == severity.upper()]
@@ -852,11 +863,12 @@ async def get_runtime_events(limit: int = Query(50, ge=1, le=500)) -> RuntimeEve
     response_model=PoliciesOut,
     operation_id="policies_list",
 )
-async def list_policies() -> PoliciesOut:
-    """List all policy controls."""
+async def list_policies(request: Request) -> PoliciesOut:
+    """List all policy controls. Honors X-Data-Mode (v1|v2)."""
+    rows = filter_by_mode(POLICIES, get_data_mode(request))
     return PoliciesOut(
-        policies=[PolicyOut(**p) for p in POLICIES],
-        total=len(POLICIES),
+        policies=[PolicyOut(**p) for p in rows],
+        total=len(rows),
     )
 
 
@@ -883,11 +895,12 @@ async def get_policy(policy_id: str) -> PolicyOut:
     operation_id="evidence_list",
 )
 async def list_evidence(
+    request: Request,
     system_id: str = Query(None),
     evidence_type: str = Query(None),
 ) -> EvidenceListOut:
-    """List evidence with optional filters."""
-    evidence = EVIDENCE
+    """List evidence with optional filters. Honors X-Data-Mode (v1|v2)."""
+    evidence = filter_by_mode(EVIDENCE, get_data_mode(request))
     if system_id:
         evidence = [e for e in evidence if e["system_id"] == system_id]
     if evidence_type:

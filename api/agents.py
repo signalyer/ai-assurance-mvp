@@ -16,8 +16,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from middleware.data_mode import filter_by_mode, get_data_mode
 
 # Session 13 typing: loosely-typed Agent/Version/Subscriber response models.
 # Underlying domain models (domain.agents.Agent etc.) carry the authoritative
@@ -165,12 +167,14 @@ def _to_iso(val: object) -> str | None:
     operation_id="agents_list",
 )
 async def list_agents(
+    request: Request,
     team: str | None = Query(None, description="Filter by team"),
     owner_type: str | None = Query(None, description="Filter by owner_type (CUSTOM|REUSABLE)"),
 ) -> list[dict[str, object]]:
     """Return a list of agents, optionally filtered by team and/or owner_type.
 
     Returns serialised Agent dicts. Delegates to domain.agents.list_agents().
+    Honors X-Data-Mode (v1|v2): V2 hides seed agents.
     """
     start = datetime.now(tz=timezone.utc)
     logger.info("agents.list.enter team=%s owner_type=%s", team, owner_type)
@@ -178,6 +182,7 @@ async def list_agents(
     mod = _agents()
     try:
         agents = await asyncio.to_thread(mod.list_agents, team=team, owner_type=owner_type)
+        agents = filter_by_mode(agents, get_data_mode(request))
     except HTTPException:
         raise
     except Exception as exc:

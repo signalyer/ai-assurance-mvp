@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, date
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -414,6 +414,10 @@ class AISystem(BaseModel):
     use_case: Optional[str] = None
     human_oversight: Optional[str] = None
     data_residency: Optional[str] = None
+    data_source: Literal["seed", "real"] = Field(
+        default="seed",
+        description="Data provenance: 'seed' = demo/portfolio fixture; 'real' = live customer system. V1/V2 toggle filters on this. (Named data_source to avoid collision with Evidence.source which already means 'tool that produced the evidence'.)",
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -492,6 +496,7 @@ class EvalResult(BaseModel):
     sample_failures: list[str] = Field(default_factory=list, description="Short, redacted excerpts illustrating failures")
     sample_size: Optional[int] = None                # legacy alias for test_count
     notes: Optional[str] = None
+    data_source: Literal["seed", "real"] = "seed"
     run_at: datetime
 
 
@@ -513,6 +518,7 @@ class Finding(BaseModel):
     status: FindingStatus
     remediation: Optional[str] = None
     evidence_ids: list[str] = []
+    data_source: Literal["seed", "real"] = "seed"
     discovered: date
 
 
@@ -526,6 +532,7 @@ class ReleaseGate(BaseModel):
     failed_reason: Optional[str] = None
     blocking: bool = True
     evidence_id: Optional[str] = None
+    data_source: Literal["seed", "real"] = "seed"
     last_evaluated: datetime
 
 
@@ -543,6 +550,7 @@ class Evidence(BaseModel):
     linked_control_ids: list[str] = Field(default_factory=list, description="Control ids this evidence supports")
     linked_finding_ids: list[str] = Field(default_factory=list, description="Finding ids this evidence pertains to")
     linked_frameworks: list[str] = Field(default_factory=list, description="Framework names this evidence informs")
+    data_source: Literal["seed", "real"] = "seed"
 
 
 class RemediationItem(BaseModel):
@@ -586,6 +594,7 @@ class Policy(BaseModel):
     status: PolicyStatus
     framework_mappings: list[FrameworkMapping] = []
     owner_role: ApproverRole
+    data_source: Literal["seed", "real"] = "seed"
     last_updated: datetime
 
 
@@ -689,6 +698,7 @@ class Agent(BaseModel):
     latest_version_id: Optional[str] = None
     inherent_risk: RiskLevel
     framework_refs: list[str] = Field(default_factory=list)
+    data_source: Literal["seed", "real"] = "seed"
     created_at: datetime
     updated_at: datetime
 
@@ -707,6 +717,7 @@ class AgentVersion(BaseModel):
     changelog: str
     status: AgentStatus = AgentStatus.DRAFT
     config: dict = Field(default_factory=dict, description="Prompt, tools, model settings")
+    data_source: Literal["seed", "real"] = "seed"
     published_at: Optional[datetime] = None
     published_by: Optional[str] = None
 

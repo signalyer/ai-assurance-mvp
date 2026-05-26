@@ -277,6 +277,7 @@ def _build_ai_system(p: IntakePayload, *, system_id: str, risk: RiskLevel) -> AI
         use_case=p.use_case,
         human_oversight="Required" if p.human_approval_required else "Not specified",
         data_residency="us-east-1",
+        data_source="real",  # S52: intake creates real customer systems, not demo seed data
         created_at=now,
         updated_at=now,
     )
@@ -408,6 +409,7 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
             status=EvalStatus.NOT_RUN,
             failed_reason=None,
             blocking=control.priority == Priority.P0,
+            data_source="real",  # S52: inherits real-mode tag from the intake-created system
             last_evaluated=now,
         ))
 

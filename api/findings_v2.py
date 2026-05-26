@@ -9,13 +9,14 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain.findings_workflow import (
     list_findings, get_finding, apply_event, list_events,
     ALLOWED_EVENT_TYPES,
 )
+from middleware.data_mode import filter_by_mode, get_data_mode
 
 
 router = APIRouter(prefix="/api/grc/findings/v2", tags=["findings-workflow"])
@@ -160,8 +161,10 @@ def _event_to_out(e: object) -> FindingEventOut:
 # ---------------------------------------------------------------------------
 
 @router.get("/list", response_model=FindingsListOut, operation_id="findings_v2_list")
-async def list_(scope: str = "ALL") -> FindingsListOut:
+async def list_(request: Request, scope: str = "ALL") -> FindingsListOut:
+    """List findings. Honors X-Data-Mode (v1|v2): V2 hides seed rows."""
     rows = list_findings(scope=scope)
+    rows = filter_by_mode(rows, get_data_mode(request))
     return FindingsListOut(
         scope=scope,
         findings=[_finding_to_out(r) for r in rows],
