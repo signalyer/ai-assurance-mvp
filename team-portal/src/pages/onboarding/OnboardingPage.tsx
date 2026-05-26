@@ -69,9 +69,20 @@ async function bootstrapKey(aiSystemId: string): Promise<void> {
   // 1. List existing keys. Reuse the most recent un-revoked one if present.
   const list = await apiGet<ExistingKeyListOut>('/sdk-keys', { ai_system_id: aiSystemId, include_revoked: false });
   if (list.ok && list.data.keys.length > 0) {
+    // F-013 follow-up: prefer keys already verified (first_seen_at populated)
+    // over merely-recent ones. F-013 left a trail of orphan keys on systems
+    // where the operator visited the wizard multiple times before this fix;
+    // "most recent un-revoked" would pick a never-used orphan and FirstSignalPanel
+    // would poll a key the agent's .env doesn't sign with. Verified-first means
+    // the wizard finds the key the operator's agent is actually using.
     const candidates = list.data.keys
       .filter((k) => k.revoked_at === null)
-      .sort((a, b) => b.issued_at.localeCompare(a.issued_at));
+      .sort((a, b) => {
+        const aVerified = a.first_seen_at !== null ? 1 : 0;
+        const bVerified = b.first_seen_at !== null ? 1 : 0;
+        if (aVerified !== bVerified) return bVerified - aVerified;
+        return b.issued_at.localeCompare(a.issued_at);
+      });
     const chosen = candidates[0];
     if (chosen) {
       existingKey.value = chosen;
