@@ -9,8 +9,18 @@ Verification steps (all must pass; any failure -> 401 with generic message):
   3. Nonce not replayed (TTL cache evicts entries older than NONCE_CACHE_TTL_S = 600s)
   4. HMAC-SHA-256 signature matches (constant-time compare via hmac.compare_digest)
 
+Secret resolution (S53):
+  Look up the secret by X-SL-Key-Id via domain.sdk_keys first. If no
+  registered key matches, fall back to the legacy single-tenant
+  SL_HMAC_SECRET env var (preserves backward compat for the demo apps
+  built before per-system keys existed). If neither resolves -> 401
+  (or 500 if no secret is available *at all*).
+
+  After successful HMAC verification, mark_first_seen() is called on
+  the resolved key — idempotent, no-op for the env-var fallback path.
+
 Failure policy: fail-closed.
-  - Missing SL_HMAC_SECRET env var -> 500, never 200.
+  - Missing SL_HMAC_SECRET AND no registered key match -> 500.
   - Any verification failure -> 401, never 200.
   - Which check failed is NEVER disclosed in the response body.
 
@@ -159,24 +169,6 @@ class HMACAuthMiddleware(BaseHTTPMiddleware):
         if not path.startswith(SDK_PREFIX):
             return await call_next(request)
 
-        # Fail-closed: use module-level cached secret.
-        # If _SECRET was None at import time (env var absent at startup), attempt
-        # a single lazy read so tests that set os.environ in fixtures still work.
-        # In production with STRICT_HMAC_BOOT=true, the server never starts without
-        # the secret, so this branch is unreachable in prod.
-        # single-worker only; multi-worker requires Redis (see DECISIONS.md Session 10).
-        secret = _SECRET if _SECRET is not None else _read_secret_env()
-        if secret is None:
-            logger.error(
-                "HMACAuthMiddleware: SL_HMAC_SECRET is not configured. "
-                "Returning 500 for path=%s",
-                path,
-            )
-            return JSONResponse(
-                {"error": "server_configuration_error"},
-                status_code=500,
-            )
-
         # Extract required headers
         key_id = request.headers.get("X-SL-Key-Id", "")
         ts_str = request.headers.get("X-SL-Timestamp", "")
@@ -185,6 +177,26 @@ class HMACAuthMiddleware(BaseHTTPMiddleware):
 
         if not (key_id and ts_str and nonce and provided_sig):
             logger.warning("HMACAuthMiddleware: missing required headers path=%s", path)
+            return _generic_401()
+
+        # S53: per-key lookup first; env-var fallback for legacy demos.
+        # `_resolve_secret` returns bytes or None. None means neither a
+        # registered key nor the env-var secret was usable — that's a
+        # config error → 500. Otherwise the caller treats a None return
+        # later as 401 (revoked key, etc.) via the matched_via flag.
+        secret, matched_via = _resolve_secret_for_key(key_id)
+        if secret is None:
+            if matched_via == "no_config":
+                logger.error(
+                    "HMACAuthMiddleware: no per-key match and SL_HMAC_SECRET not configured. "
+                    "Returning 500 for path=%s",
+                    path,
+                )
+                return JSONResponse(
+                    {"error": "server_configuration_error"},
+                    status_code=500,
+                )
+            # matched_via == "revoked_or_unknown" — fail closed without disclosing why.
             return _generic_401()
 
         # Timestamp drift check
@@ -228,9 +240,68 @@ class HMACAuthMiddleware(BaseHTTPMiddleware):
         # All checks passed -- record nonce
         _nonce_cache[nonce] = now
 
+        # S53: mark first-seen on the resolved per-key record (idempotent).
+        # No-op for the env-var fallback path (key_id won't match any
+        # registered key, lookup returns None inside mark_first_seen).
+        if matched_via == "registered_key":
+            try:
+                from domain.sdk_keys import mark_first_seen as _mark_first_seen
+                _mark_first_seen(key_id)
+            except Exception:
+                # Never fail the request because of telemetry.
+                logger.exception("HMACAuthMiddleware: mark_first_seen failed key_id=%s", key_id)
+
         return await call_next(request)
 
 
 def _generic_401() -> JSONResponse:
     """Return a generic 401 that does not disclose which check failed."""
     return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+
+# ---------------------------------------------------------------------------
+# Secret resolution (S53)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_secret_for_key(key_id: str) -> tuple[bytes | None, str]:
+    """Resolve the HMAC secret for a given X-SL-Key-Id.
+
+    Order of resolution:
+      1. Per-key lookup via domain.sdk_keys. Match + active → secret.
+         Match + revoked → (None, "revoked_or_unknown").
+      2. No per-key match → fall back to env-var SL_HMAC_SECRET if set.
+         Match → (env_secret, "env_fallback").
+      3. Neither → (None, "no_config"), surfaces as 500.
+
+    Returns:
+        Tuple of (utf-8-encoded secret bytes or None, status string).
+    """
+    # Lazy import keeps middleware load order safe (domain layer pulls
+    # in pydantic; middleware should stay light at import time).
+    try:
+        from domain.sdk_keys import get_by_key_id, lookup_secret_by_key_id
+        registered = get_by_key_id(key_id)
+        if registered is not None:
+            # Found a registered key. If revoked, fail closed; otherwise
+            # use its secret.
+            if registered.revoked_at is not None:
+                return None, "revoked_or_unknown"
+            plain = lookup_secret_by_key_id(key_id)
+            if plain is None:
+                # Shouldn't happen given we just confirmed not revoked,
+                # but treat defensively as unknown.
+                return None, "revoked_or_unknown"
+            return plain.encode("utf-8"), "registered_key"
+    except Exception:
+        # Domain layer transient failure (disk read, JSON parse). Don't
+        # block legitimate env-var-fallback traffic just because the
+        # sdk_keys store is unhappy — log and continue to fallback.
+        logger.exception("HMACAuthMiddleware: per-key lookup failed; falling back to env var")
+
+    # Env-var fallback.
+    env_secret = _SECRET if _SECRET is not None else _read_secret_env()
+    if env_secret is not None:
+        return env_secret, "env_fallback"
+
+    return None, "no_config"
