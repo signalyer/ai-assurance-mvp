@@ -362,6 +362,139 @@ Invoke-Probe -Name "8. SDK key issuance round-trip (POST → status → revoke)"
 }
 
 # ---------------------------------------------------------------------------
+# Probe 9 — HMAC end-to-end (S55 #16 / closes F-007)
+#
+# Probe 8 verified the OPERATOR-side lifecycle (POST/GET/revoke via session
+# cookie) but never made an HMAC-signed call. Without that, every gap in the
+# signed transport ships invisibly: F-008 (no /api/sdk/* routes mounted),
+# F-014 (Copy-as-.env emitted SPA host instead of engine apex — 200/HTML
+# masquerade), F-015-style telemetry gaps (mark_first_seen never firing).
+# Probe 9 exercises the real surface end-to-end and asserts on the parts
+# that matter:
+#   - Response is JSON, not SPA HTML (catches F-014)
+#   - Response is HTTP 200 (catches F-008 + any HMAC-side rejections)
+#   - body matches the canonical {ok:true,service:"aigovern-engine"}
+#   - first_seen_at flips on the key after the signed call (catches the
+#     F-015-shape "engine accepts but doesn't update telemetry" class)
+# Issues + revokes its OWN key so Probe 9 is independent of Probe 8.
+# ---------------------------------------------------------------------------
+Invoke-Probe -Name "9. HMAC end-to-end (sign /api/sdk/health → JSON + first_seen flips)" -ScriptBlock {
+    if (-not $DemoPass) {
+        Write-Host " (skipped — `$env:SMOKE_DEMO_PASSWORD_ENGINEER not set)" -NoNewline -ForegroundColor DarkYellow
+        return
+    }
+    $loginBody = @{ username = $DemoUser; password = $DemoPass; next = '/' }
+    $loginResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/auth/login" `
+        -Method POST `
+        -Body $loginBody `
+        -SessionVariable smokeSession `
+        -MaximumRedirection 0 `
+        -SkipHttpErrorCheck `
+        -ErrorAction Stop
+    if ($loginResp.StatusCode -ne 200 -and $loginResp.StatusCode -ne 302 -and $loginResp.StatusCode -ne 303) {
+        throw "Login failed: HTTP $($loginResp.StatusCode)"
+    }
+
+    $sysResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/grc/ai-systems" `
+        -Method GET `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    $sysJson = $sysResp.Content | ConvertFrom-Json
+    if (@($sysJson.systems).Count -eq 0) { throw "No AI systems available to issue an HMAC test key" }
+    $targetSystemId = $sysJson.systems[0].id
+
+    $issueBody = @{ ai_system_id = $targetSystemId } | ConvertTo-Json
+    $issueResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/sdk-keys" `
+        -Method POST `
+        -Body $issueBody `
+        -ContentType "application/json" `
+        -WebSession $smokeSession `
+        -ErrorAction Stop
+    if ($issueResp.StatusCode -ne 201) { throw "Issue returned HTTP $($issueResp.StatusCode)" }
+    $issued = $issueResp.Content | ConvertFrom-Json
+    $keyId = $issued.key_id
+    $secret = $issued.hmac_secret
+    if (-not $keyId -or -not $secret) { throw "Issue response missing key_id/hmac_secret" }
+
+    # Build the HMAC-signed GET /api/sdk/health request.
+    # Canonical signing input (must match middleware/hmac_auth.py + sdk/signallayer/client.py):
+    #   "{ts}\n{METHOD}\n{path}\n{sha256_hex(body)}"
+    $ts = [string][int][double]::Parse((Get-Date -UFormat %s))
+    $nonceBytes = New-Object byte[] 16
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($nonceBytes)
+    $nonce = -join ($nonceBytes | ForEach-Object { $_.ToString('x2') })
+    $method = "GET"
+    $path = "/api/sdk/health"
+    $bodyBytes = [byte[]]@()  # empty body for GET
+    $bodyHashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash($bodyBytes)
+    $bodyHashHex = -join ($bodyHashBytes | ForEach-Object { $_.ToString('x2') })
+    $signingInput = "$ts`n$method`n$path`n$bodyHashHex"
+    $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($secret)
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256
+    $hmac.Key = $secretBytes
+    $sigBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signingInput))
+    $sigHex = -join ($sigBytes | ForEach-Object { $_.ToString('x2') })
+
+    # Engine URL — apex, NOT the SPA host (F-014 lesson — never use $PortalBaseUrl here).
+    $signedResp = Invoke-WebRequest `
+        -Uri "$ApiBaseUrl$path" `
+        -Method $method `
+        -Headers @{
+            "X-SL-Key-Id"      = $keyId
+            "X-SL-Timestamp"   = $ts
+            "X-SL-Nonce"       = $nonce
+            "X-SL-Signature"   = $sigHex
+        } `
+        -SkipHttpErrorCheck `
+        -ErrorAction Stop
+
+    if ($signedResp.StatusCode -ne 200) {
+        throw "HMAC-signed GET $path returned HTTP $($signedResp.StatusCode) (expected 200). Body: $($signedResp.Content.Substring(0, [Math]::Min(200, $signedResp.Content.Length)))"
+    }
+    # F-014 guard: SPA-host masquerade would return text/html starting with <!DOCTYPE.
+    $contentType = $signedResp.Headers['Content-Type']
+    if ($contentType -and ($contentType -match 'text/html' -or $signedResp.Content -match '^\s*<!DOCTYPE')) {
+        throw "Response was HTML, not JSON — engine route shadowed by SPA fallback (F-014 regression). Content-Type=$contentType"
+    }
+    $bodyJson = $signedResp.Content | ConvertFrom-Json
+    if (-not $bodyJson.ok) { throw "Response JSON missing 'ok:true' (got: $($signedResp.Content))" }
+    if ($bodyJson.service -ne 'aigovern-engine') {
+        throw "Response service field wrong (expected 'aigovern-engine', got '$($bodyJson.service)')"
+    }
+
+    # F-015-class guard: after a verified signed call, first_seen_at must be set.
+    # mark_first_seen is async-free / idempotent; the engine writes before returning,
+    # so no sleep should be needed — but allow one retry in case of clock skew.
+    $seenTimestamp = $null
+    foreach ($_attempt in 1..3) {
+        $statusResp = Invoke-WebRequest `
+            -Uri "$ApiBaseUrl/api/v1/sdk-keys/$keyId/status" `
+            -Method GET `
+            -WebSession $smokeSession `
+            -ErrorAction Stop
+        $statusJson = $statusResp.Content | ConvertFrom-Json
+        if ($statusJson.first_seen_at) { $seenTimestamp = $statusJson.first_seen_at; break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not $seenTimestamp) {
+        throw "first_seen_at never populated after a verified-200 HMAC call (F-015-class regression). key=$keyId"
+    }
+
+    # Clean up — revoke the test key so it doesn't accumulate.
+    Invoke-WebRequest `
+        -Uri "$ApiBaseUrl/api/v1/sdk-keys/$keyId/revoke" `
+        -Method POST `
+        -WebSession $smokeSession `
+        -SkipHttpErrorCheck `
+        -ErrorAction Stop | Out-Null
+
+    Write-Host " (key=$keyId, first_seen=$seenTimestamp)" -NoNewline -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
