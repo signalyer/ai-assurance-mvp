@@ -28,8 +28,27 @@ except ImportError:
             """Local no-op fallback."""
 
 
-class PolicyDeniedError(Exception):
-    """Raised when a policy_gate evaluates to DENY."""
+# F-025: subclass the SDK class so consumers can write
+#   `except signallayer.errors.PolicyDeniedError:` and catch real engine
+# denies. Before this, the SDK class and the engine class were unrelated
+# `Exception` subclasses sharing only a name — every external SDK consumer
+# would silently miss denies.
+#
+# The SDK class takes a single `message` string; we synthesise that from
+# (policy_name, reason) so existing engine raise sites stay untouched.
+# isinstance(engine_err, SDKPolicyDeniedError) is now True.
+try:
+    from signallayer.errors import PolicyDeniedError as _SDKPolicyDeniedError
+except ImportError:  # SDK not on the path — fall back to the original shape
+    _SDKPolicyDeniedError = Exception  # type: ignore[misc,assignment]
+
+
+class PolicyDeniedError(_SDKPolicyDeniedError):
+    """Raised when a policy_gate evaluates to DENY.
+
+    Subclasses signallayer.errors.PolicyDeniedError (F-025) so the SDK-
+    advertised error class is what external consumers actually catch.
+    """
 
     def __init__(self, policy_name: str, reason: str, metadata: Optional[dict] = None):
         self.policy_name = policy_name

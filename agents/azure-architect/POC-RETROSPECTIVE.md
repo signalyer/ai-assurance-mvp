@@ -519,15 +519,16 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
-### F-025 · PLATFORM-MEDIUM · `PolicyDeniedError` class mismatch SDK vs engine (DEFERRED)
+### F-025 · PLATFORM-MEDIUM · `PolicyDeniedError` class mismatch SDK vs engine (RESOLVED in S60)
 
 **Found:** S60 STEP 1, 2026-05-27 — `except signallayer.errors.PolicyDeniedError:` failed to catch a real deny because the engine raises `middleware.policy.PolicyDeniedError` — an *unrelated* class, not a subclass. MROs share only `Exception`.
 **Where:**
   - [signallayer/errors.py](../../signallayer/errors.py) — `class PolicyDeniedError(SignalLayerError)`. Advertised in SDK `__all__`.
   - [middleware/policy.py](../../middleware/policy.py) — `class PolicyDeniedError(Exception)`. Raised by every `@policy_gate` decorator.
 **Blast radius:** LOW now — error messages, policy_name, reason still surface. Only `except` discrimination is broken. Becomes MEDIUM once external SDK consumers exist.
-**Fix sketch:** Make `middleware.policy.PolicyDeniedError` subclass `signallayer.errors.PolicyDeniedError`, or re-export the same class. ~15 min + one rebuild.
-**Status:** OPEN — deferred.
+**Fix (same session):** [middleware/policy.py:31](../../middleware/policy.py#L31) — engine `PolicyDeniedError` now subclasses `signallayer.errors.PolicyDeniedError` (lazy-imported with `Exception` fallback so middleware stays importable when the SDK isn't on the path). `isinstance(engine_err, SDKPolicyDeniedError)` is now True. Existing engine raise sites (`raise PolicyDeniedError(policy_name=..., reason=..., metadata=...)`) untouched — SDK base takes a single message string, synthesised from `policy_name + reason` in `__init__`.
+**Verified:** SDK class catches engine deny ✓ · engine class still catches (no regression) ✓ · allowlisted ALLOW path unchanged ✓ · org-mandatory PII deny still wins for `llm_call` action (no F-024 layering regression) ✓.
+**Status:** RESOLVED.
 
 ---
 
