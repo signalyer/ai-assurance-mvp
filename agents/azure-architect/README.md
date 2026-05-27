@@ -27,7 +27,7 @@ Each phase exit-gate output is captured here as the runbook (`docs/plans/AZURE-A
 - [ ] P3 — Governance scaffolding
 - [ ] P4 — Agent core dev
 - [ ] P5 — Memory + RAG
-- [ ] P6 — Evaluation suite
+- [ ] P6 — Evaluation suite (offline runner shipped; live calibration still open)
 - [ ] P7 — Adversarial probing
 - [ ] P8 — Release gates
 - [ ] P9 — Runtime readiness
@@ -49,7 +49,8 @@ agents/azure-architect/
 │   └── per_resource.md             # Haiku per-resource prompt
 ├── eval/
 │   ├── dataset.jsonl               # 5 worked-example manifests
-│   └── mermaid_compiles_metric.py  # custom DeepEval metric
+│   ├── mermaid_compiles_metric.py  # custom DeepEval metric
+│   └── run_eval.py                 # offline candidate-output scorer
 ├── policies/
 │   └── azure-architect.rego        # OPA read-only allowlist
 ├── examples/                       # P4 exit-gate outputs (2 topologies)
@@ -60,3 +61,27 @@ agents/azure-architect/
 ```
 
 See `docs/plans/AZURE-ARCHITECT-POC.md` for the full P1-P10 runbook.
+
+## Eval harness
+
+The P6 offline runner scores generated candidate outputs against
+`eval/dataset.jsonl` without spending model tokens:
+
+```
+python agents/azure-architect/eval/run_eval.py --outputs path/to/outputs.jsonl
+```
+
+Each output row is keyed to a dataset id and carries the agent's JSON envelope:
+
+```
+{"id":"simple-1rg","actual_output":"{\"mermaid_source\":\"graph TD...\",\"manifest\":[...]}"}
+```
+
+The suite validates the strict output schema, expected Mermaid terms, manifest
+coverage, expected notes, PII leakage, and the custom `mermaid_compiles` metric.
+Run summaries persist to `data/azure_architect_eval_runs.jsonl` through the
+canonical `storage._append_jsonl()` helper.
+
+Edge-case coverage includes malformed/extra-key envelopes, missing candidate
+rows, duplicate candidate reruns, required notes for broken topologies, PII in
+otherwise-valid output, and Mermaid compiler failures.
