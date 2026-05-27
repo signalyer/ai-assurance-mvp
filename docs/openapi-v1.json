@@ -449,6 +449,11 @@
             "title": "Data Residency",
             "type": "string"
           },
+          "data_source": {
+            "default": "seed",
+            "title": "Data Source",
+            "type": "string"
+          },
           "deployment_target": {
             "title": "Deployment Target",
             "type": "string"
@@ -608,6 +613,11 @@
           },
           "data_residency": {
             "title": "Data Residency",
+            "type": "string"
+          },
+          "data_source": {
+            "default": "seed",
+            "title": "Data Source",
             "type": "string"
           },
           "deployment_target": {
@@ -3650,6 +3660,39 @@
         "title": "EvalOverviewRowOut",
         "type": "object"
       },
+      "EvalRecordOut": {
+        "additionalProperties": true,
+        "properties": {
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "results": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Results",
+            "type": "object"
+          },
+          "timestamp": {
+            "default": "",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "workload_id": {
+            "default": "",
+            "title": "Workload Id",
+            "type": "string"
+          }
+        },
+        "title": "EvalRecordOut",
+        "type": "object"
+      },
       "EvalResultOut": {
         "additionalProperties": false,
         "description": "One eval result with framework/control mappings + sample failures.\n\nWire shape from seed.EVAL_RESULTS[*].model_dump(mode='json') + computed\npass_rate.",
@@ -3872,6 +3915,33 @@
           }
         },
         "title": "EvalScoreEntry",
+        "type": "object"
+      },
+      "EvalsListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvalRecordOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "count",
+          "source"
+        ],
+        "title": "EvalsListOut",
         "type": "object"
       },
       "EvalsOverviewOut": {
@@ -4490,6 +4560,11 @@
         "additionalProperties": false,
         "description": "A single governance finding.",
         "properties": {
+          "data_source": {
+            "default": "seed",
+            "title": "Data Source",
+            "type": "string"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -6701,17 +6776,36 @@
       },
       "IntakeSubmitOut": {
         "additionalProperties": false,
-        "description": "Result of POST /api/grc/intake/submit -- the new system_id + redirect.",
+        "description": "Result of POST /api/grc/intake/submit -- the new system_id + redirect.\n\nS55 #7: `status` distinguishes \"active\" (system + assessment + gates all\npersisted) from \"draft\" (system persisted but downstream creation failed \u2014\noperator can recover from the inventory page; F-009/F-010-style data\nloss is no longer possible at the intake layer).",
         "properties": {
           "ai_system_id": {
             "title": "Ai System Id",
             "type": "string"
           },
           "assessment_id": {
-            "title": "Assessment Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "draft_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Reason"
           },
           "gate_count": {
+            "default": 0,
             "title": "Gate Count",
             "type": "integer"
           },
@@ -6729,12 +6823,15 @@
             },
             "title": "Rules Fired",
             "type": "array"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
           "ai_system_id",
-          "assessment_id",
-          "gate_count",
           "inherent_risk",
           "rules_fired",
           "redirect_to"
@@ -6767,6 +6864,209 @@
           }
         },
         "title": "IntakeSystemsListOut",
+        "type": "object"
+      },
+      "IssueRequest": {
+        "additionalProperties": false,
+        "description": "Body for POST /api/sdk-keys.",
+        "properties": {
+          "ai_system_id": {
+            "description": "Parent AI system this key belongs to.",
+            "title": "Ai System Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ai_system_id"
+        ],
+        "title": "IssueRequest",
+        "type": "object"
+      },
+      "IssuedKeyOut": {
+        "additionalProperties": false,
+        "description": "Response shape for POST /api/sdk-keys \u2014 contains the plaintext secret ONCE.\n\nThe secret is never recoverable after this response is returned. The\nSPA wizard must surface it to the user immediately and discard it\nfrom memory after display.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "data_source": {
+            "title": "Data Source",
+            "type": "string"
+          },
+          "hmac_secret": {
+            "description": "Plaintext HMAC secret. Shown ONCE; never stored, never returned again.",
+            "title": "Hmac Secret",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issued_at": {
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issued_by": {
+            "title": "Issued By",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key_id",
+          "hmac_secret",
+          "ai_system_id",
+          "data_source",
+          "issued_by",
+          "issued_at"
+        ],
+        "title": "IssuedKeyOut",
+        "type": "object"
+      },
+      "KeyListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeySummaryOut"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "keys",
+          "total"
+        ],
+        "title": "KeyListOut",
+        "type": "object"
+      },
+      "KeyStatusOut": {
+        "additionalProperties": false,
+        "description": "Polling-friendly status payload for the SPA first-signal panel.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "issued_at": {
+            "title": "Issued At",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "total_calls_24h": {
+            "default": 0,
+            "title": "Total Calls 24H",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key_id",
+          "ai_system_id",
+          "issued_at"
+        ],
+        "title": "KeyStatusOut",
+        "type": "object"
+      },
+      "KeySummaryOut": {
+        "additionalProperties": false,
+        "description": "List-view shape \u2014 no plaintext, no hash exposed to clients.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "data_source": {
+            "title": "Data Source",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issued_at": {
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issued_by": {
+            "title": "Issued By",
+            "type": "string"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "total_calls_24h": {
+            "default": 0,
+            "title": "Total Calls 24H",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key_id",
+          "ai_system_id",
+          "data_source",
+          "issued_by",
+          "issued_at"
+        ],
+        "title": "KeySummaryOut",
         "type": "object"
       },
       "KillSwitchRequest": {
@@ -7585,6 +7885,11 @@
             "title": "Compliant Systems",
             "type": "integer"
           },
+          "data_source": {
+            "default": "seed",
+            "title": "Data Source",
+            "type": "string"
+          },
           "evidence_required": {
             "items": {
               "type": "string"
@@ -8211,6 +8516,72 @@
         "title": "RefreshedEvalOut",
         "type": "object"
       },
+      "RegoListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RegoPolicyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source_dir": {
+            "title": "Source Dir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "count",
+          "source_dir"
+        ],
+        "title": "RegoListOut",
+        "type": "object"
+      },
+      "RegoPolicyOut": {
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "filename",
+          "size_bytes",
+          "sha256",
+          "package",
+          "summary"
+        ],
+        "title": "RegoPolicyOut",
+        "type": "object"
+      },
       "RejectCascadeIn": {
         "additionalProperties": false,
         "description": "Body for POST /api/right-to-forget/{cascade_id}/reject.\n\nReason is required \u2014 rejection without justification breaks the audit\nintent of the workflow. Mirrors CascadeRequest.reason constraints\n(1-1024 chars, str_strip_whitespace).",
@@ -8558,6 +8929,30 @@
           "count"
         ],
         "title": "RevisionsListOut",
+        "type": "object"
+      },
+      "RevokeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "revoked_at": {
+            "title": "Revoked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "revoked_at"
+        ],
+        "title": "RevokeOut",
         "type": "object"
       },
       "RotateKeyOut": {
@@ -8923,6 +9318,26 @@
           "scenarios"
         ],
         "title": "ScenariosResponse",
+        "type": "object"
+      },
+      "SdkHealthOut": {
+        "additionalProperties": false,
+        "description": "Health-probe response. Stable across versions.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "service": {
+            "default": "aigovern-engine",
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "SdkHealthOut",
         "type": "object"
       },
       "SearchControlHit": {
@@ -10817,6 +11232,11 @@
             "title": "Created",
             "type": "string"
           },
+          "data_source": {
+            "default": "seed",
+            "title": "Data Source",
+            "type": "string"
+          },
           "format": {
             "title": "Format",
             "type": "string"
@@ -11319,7 +11739,7 @@
     },
     "/api/agents": {
       "get": {
-        "description": "Return a list of agents, optionally filtered by team and/or owner_type.\n\nReturns serialised Agent dicts. Delegates to domain.agents.list_agents().",
+        "description": "Return a list of agents, optionally filtered by team and/or owner_type.\n\nReturns serialised Agent dicts. Delegates to domain.agents.list_agents().\nHonors X-Data-Mode (v1|v2): V2 hides seed agents.",
         "operationId": "agents_list",
         "parameters": [
           {
@@ -12651,6 +13071,26 @@
         ]
       }
     },
+    "/api/auth/config": {
+      "get": {
+        "description": "Public feature-flag endpoint consumed by the SPAs to render the right CTA.\n\nReturns booleans for the two auth paths so the login pages can render\na \"Sign in with Microsoft\" button (oidc_enabled) and/or the demo\npassword form (allow_demo_auth). Both can be true simultaneously\nduring the demo window; both false would be a misconfiguration we\ndon't expect to ship.\n\nNo auth gate \u2014 the SPA needs this before the user has signed in.",
+        "operationId": "auth_config_api_auth_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Auth Config",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "login_submit_api_auth_login_post",
@@ -13749,7 +14189,7 @@
     },
     "/api/grc/ai-systems": {
       "get": {
-        "description": "List all AI systems in the portfolio.",
+        "description": "List all AI systems in the portfolio. Honors X-Data-Mode (v1|v2).\n\nS55 #3 / F-010: merges the V1 mock_data seed rows (which already match\nthe AiSystemSummaryOut view shape) with intake-written rows from\ndomain.repository.list_ai_systems() (which uses the canonical AISystem\nPydantic shape). The intake rows are mapped to the view shape via\n`_intake_to_summary_view` below, filling computed fields with sensible\nzero defaults \u2014 proper enrichment from FINDINGS / GATES / EVIDENCE\nfollows the seed pattern and is a sibling improvement (S56 backlog).",
         "operationId": "ai_systems_list",
         "responses": {
           "200": {
@@ -13771,7 +14211,7 @@
     },
     "/api/grc/ai-systems/{system_id}": {
       "get": {
-        "description": "Get details of one AI system, enriched with findings, gates, evidence, events.",
+        "description": "Get details of one AI system, enriched with findings, gates, evidence, events.\n\nS55 #3 / F-010: falls back to intake-written rows for systems registered\nvia the wizard. Intake rows currently render with empty findings/gates/\nevidence/events arrays \u2014 proper enrichment for these is a sibling\nimprovement (S56 backlog), but at minimum the detail page now resolves\ninstead of 404'ing.",
         "operationId": "ai_systems_get",
         "parameters": [
           {
@@ -14135,7 +14575,7 @@
     },
     "/api/grc/evidence": {
       "get": {
-        "description": "List evidence with optional filters.",
+        "description": "List evidence with optional filters. Honors X-Data-Mode (v1|v2).",
         "operationId": "evidence_list",
         "parameters": [
           {
@@ -14350,7 +14790,7 @@
     },
     "/api/grc/findings": {
       "get": {
-        "description": "List findings with optional filters, sorted CRITICAL first then by SLA remaining.",
+        "description": "List findings with optional filters, sorted CRITICAL first then by SLA remaining.\n\nHonors X-Data-Mode (v1|v2) via the data-mode middleware.",
         "operationId": "findings_list",
         "parameters": [
           {
@@ -14432,6 +14872,7 @@
     },
     "/api/grc/findings/v2/list": {
       "get": {
+        "description": "List findings. Honors X-Data-Mode (v1|v2): V2 hides seed rows.",
         "operationId": "findings_v2_list",
         "parameters": [
           {
@@ -15228,7 +15669,7 @@
     },
     "/api/grc/policies": {
       "get": {
-        "description": "List all policy controls.",
+        "description": "List all policy controls. Honors X-Data-Mode (v1|v2).",
         "operationId": "policies_list",
         "responses": {
           "200": {
@@ -15513,7 +15954,7 @@
     },
     "/api/grc/release-gates/v2/systems": {
       "get": {
-        "description": "One-line gate summary per AI system, for the index view.",
+        "description": "One-line gate summary per AI system, for the index view.\n\nHonors X-Data-Mode (v1|v2): V2 hides seed systems so the SPA's\nempty-state copy renders until a real system is registered.",
         "operationId": "release_gates_v2_systems_summary",
         "responses": {
           "200": {
@@ -15578,7 +16019,7 @@
     },
     "/api/grc/runtime/events": {
       "get": {
-        "description": "Get recent runtime events, newest first.",
+        "description": "Get recent runtime events, newest first.\n\nS55 #15 / F-010-class fix: pre-fix this endpoint read ONLY from the V1\nmock RUNTIME_EVENTS collection \u2014 runtime actions, approvals, and\nincidents written to the JSONL stores in `domain/runtime_engine.py`\n(runtime_state.jsonl / runtime_approvals.jsonl / runtime_incidents.jsonl)\nwere invisible to operators. Now merges all four sources, mapped to the\nRuntimeEventOut view shape via `_*_to_event_view` helpers, sorted by\ntimestamp desc, then limited.",
         "operationId": "runtime_events_list",
         "parameters": [
           {
@@ -17835,6 +18276,211 @@
         ]
       }
     },
+    "/api/sdk-keys": {
+      "get": {
+        "description": "List SDK keys. Honors X-Data-Mode (v1|v2) via the data-mode middleware.\n\nNote: V2 filter applies to the KEYS themselves (each key inherits\nthe parent system's `data_source` at issuance). A V1 client sees all\nkeys; a V2 client sees only keys issued against real-mode systems.",
+        "operationId": "sdk_keys_list",
+        "parameters": [
+          {
+            "description": "Filter to one system's keys.",
+            "in": "query",
+            "name": "ai_system_id",
+            "required": false,
+            "schema": {
+              "description": "Filter to one system's keys.",
+              "title": "Ai System Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Include revoked keys.",
+            "in": "query",
+            "name": "include_revoked",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Include revoked keys.",
+              "title": "Include Revoked",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List ",
+        "tags": [
+          "sdk-keys"
+        ]
+      },
+      "post": {
+        "description": "Issue a new SDK key for an AI system. Secret returned ONCE.",
+        "operationId": "sdk_keys_issue",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedKeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue",
+        "tags": [
+          "sdk-keys"
+        ]
+      }
+    },
+    "/api/sdk-keys/{key_id}/revoke": {
+      "post": {
+        "description": "Mark a key as revoked. Subsequent HMAC calls fail. Idempotent.",
+        "operationId": "sdk_keys_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "sdk-keys"
+        ]
+      }
+    },
+    "/api/sdk-keys/{key_id}/status": {
+      "get": {
+        "description": "Polling endpoint for the SPA first-signal panel.\n\nReturns 404 if the key doesn't exist. 200 with `first_seen_at: null`\nuntil the SDK has produced a trace; 200 with the timestamp once it\nhas.",
+        "operationId": "sdk_keys_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "sdk-keys"
+        ]
+      }
+    },
+    "/api/sdk/health": {
+      "get": {
+        "description": "HMAC-signed health probe.\n\nAuthentication is performed by HMACAuthMiddleware before this handler\nruns \u2014 the middleware also calls `domain.sdk_keys.mark_first_seen()`\nfor the resolved key on success. Reaching this handler at all means\nthe caller is a recognized SDK key and `first_seen_at` is now set.",
+        "operationId": "sdk_runtime_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SdkHealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "sdk-runtime"
+        ]
+      }
+    },
     "/api/security/adversarial/categories": {
       "get": {
         "description": "Get available adversarial test categories.",
@@ -18405,6 +19051,106 @@
         ]
       }
     },
+    "/api/v1/evals": {
+      "get": {
+        "description": "List persisted eval records, most recent first.\n\nFilters apply in this order: trace_id (exact), workload_id (exact), then limit.",
+        "operationId": "evals_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "trace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trace Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workload_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workload Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalsListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evals",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/api/v1/policies/rego": {
+      "get": {
+        "description": "Enumerate active .rego bundles on disk. Read-only \u2014 never accepts uploads.",
+        "operationId": "policies_rego_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegoListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Rego Policies",
+        "tags": [
+          "policies-rego"
+        ]
+      }
+    },
     "/assessment": {
       "get": {
         "operationId": "page_assessment_assessment_get",
@@ -18452,6 +19198,74 @@
           }
         },
         "summary": "Page Audit Events"
+      }
+    },
+    "/auth/oidc/callback": {
+      "get": {
+        "description": "Complete the OIDC flow: exchange code \u2192 resolve role \u2192 issue cookie.",
+        "operationId": "oidc_callback_auth_oidc_callback_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Oidc Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/oidc/login": {
+      "get": {
+        "description": "Kick off the OIDC authorization-code flow.\n\nStashes a sanitised `next` deep-link in the Starlette session (a\nshort-lived cookie used only for the redirect roundtrip; NOT the\nlong-lived `aigovern_session` cookie) and 302s to Entra.\n\nauthlib handles state + nonce + PKCE generation; we don't reinvent it.",
+        "operationId": "oidc_login_auth_oidc_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Oidc Login",
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/compare": {
