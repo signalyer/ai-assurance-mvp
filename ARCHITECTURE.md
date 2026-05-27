@@ -1720,6 +1720,56 @@ The "Real baselines" work originally targeted for S54 (flip `EVAL_BACKEND=deepev
 
 **Next: S55 POC retrospective + first P0 hardening pass.**
 
+### Session 55 — Azure-Architect POC live + first telemetry gap audit
+
+**Theme:** Drive the POC end-to-end, capture the findings, get the agent talking to Anthropic for real.
+
+**Outcome:** POC P2 closed at the compute layer (live HMAC → policy_gate → scrub_pii → guardrails → Anthropic → trace_call → evaluate_response). POC P3 .rego artifact (`policies/azure-architect.rego`) shipped and verified active on prod via a successful `--review` round-trip. Three observability gaps surfaced and logged (F-016 / F-017 / F-018) — all fixed in S56.
+
+**Built / fixed this session**
+- [policies/azure-architect.rego](policies/azure-architect.rego) — NEW, 6-rule workload policy for the Azure architect agent (read-only tool allowlist + mutation denylist). Loads via `domain/policy_engine.py` from `wwwroot/policies/` on the live engine. Verified active by a successful `--review` round-trip with no `PolicyDenied` / 500.
+- [agents/azure-architect/agent.py](agents/azure-architect/agent.py) — NEW. `--dry-run` (HMAC probe), `--review`/`--review-file`/`--review -` (real Anthropic-backed WAF review), `--fast` (Sonnet vs Opus). Calibration bugs fixed: `load_dotenv(override=True, dotenv_path=...)` for cwd-independent .env; synthetic vault_id fallback when SCRUBBER_ENABLED is false; UTF-8 stdout reconfigure for Windows cp1252.
+- [agents/azure-architect/POC-RETROSPECTIVE.md](agents/azure-architect/POC-RETROSPECTIVE.md) — F-001 through F-018 logged. F-008/F-009/F-010/F-011/F-013 closed in S55; F-015 marked as misdiagnosis (the engine was always fine — wizard auto-mint-on-mount was the real bug). F-016/F-017/F-018 logged but left open for S56.
+- Closed F-010 class on [api/grc/runtime/events](api/runtime_v2.py) — endpoint had been hiding SDK-written runtime state; 3 of 4 other endpoints audited clean.
+- Probe 9 (HMAC end-to-end smoke) added; closes the F-007 detection gap.
+- Wizard auto-mint-on-mount fix (F-013) — `team-portal/src/pages/onboarding/OnboardingPage.tsx` now lists existing keys before issuing.
+
+**Compound rules earned this session (in memory)**
+- **S55 #1** [[two-origins-spa-vs-engine]] — `portal.aigovern.sandboxhub.co` returns SPA `index.html` (200) for unknown paths; engine lives at apex `aigovern.sandboxhub.co`. Confusing them produces fake 200s. Check response BODY, not just status. (F-014.)
+- **S55 #2** [[wizard-mounts-create-resources]] — never unconditionally `POST` on `useEffect` mount. List-then-create only when empty AND user consents. (F-013 silently orphaned the user's saved `.env` and looked like a 3-hour engine bug.)
+
+**Known open at S55 close (all fixed in S56)**
+- F-016 (P1) — silent telemetry drop when Langfuse unset.
+- F-017 (P0) — eval scores have zero persistence path.
+- F-018 (P2) — `docs/plans/AZURE-ARCHITECT-POC.md §P3 step 2` promised a CISO Console policy upload UI that doesn't exist.
+
+### Session 56 — Observability gaps closed (F-016 + F-017 + F-018)
+
+**Theme:** Make policy enforcement + telemetry **visible and persistent**. The three S55 findings form one coherent gap: "the system does the thing, but operators can't see/persist/inspect it."
+
+**Outcome:** All three findings CLOSED. Plus a bonus catch — Langfuse SDK 4.x rename had been silently no-op'ing remote tracing in prod since the SDK upgrade; the old `except: pass` was hiding it.
+
+**Shipped (3 commits on `main`)**
+- `c73bc70` (S56 #1) — F-016 + F-017
+  - [tracer.py](tracer.py) — every trace appended to `data/traces.jsonl` regardless of Langfuse availability; loud warning at module-load when `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` absent; **Langfuse 4.x fix**: `client.start_as_current_observation(as_type="generation", ...)` replaces the renamed `create_generation`. `langfuse_sent` field in the JSONL now reflects actual API success, not just "client constructed."
+  - [evaluator.py](evaluator.py) — `evaluate_response()` extended with `trace_id` / `workload_id` / `model` kwargs; every result appended to `data/evals.jsonl` (joinable with traces via `trace_id`); each non-skipped metric pushed via `client.create_score(...)` (the 4.x rename — same root cause as F-016).
+  - [agents/azure-architect/agent.py](agents/azure-architect/agent.py) — threads `trace_id` from `trace_call` into `evaluate_response`.
+  - [api/evals.py](api/evals.py) — NEW. `GET /api/v1/evals?trace_id=&workload_id=&limit=` reads the JSONL back.
+- `02de720` (S56 #2) — F-018
+  - [api/policies_rego.py](api/policies_rego.py) — NEW. `GET /api/v1/policies/rego` enumerates `policies/*.rego` with `filename`, `package`, `summary`, `size_bytes`, `sha256`. Read-only by design.
+  - [ciso-console/src/pages/policies/PoliciesPage.tsx](ciso-console/src/pages/policies/PoliciesPage.tsx) — new `RegoBundlesPanel` rendered above the existing GRC control-library table. Read-only — no upload UI (deliberate; .rego is code, not data).
+  - [docs/plans/AZURE-ARCHITECT-POC.md §P3 step 2](docs/plans/AZURE-ARCHITECT-POC.md#L79) rewritten to remove the bogus "upload via CISO Console" instruction.
+- `1cc989c` (S56 #3) — regenerate `docs/openapi-v1.json` (S56 #1+#2 + inherited drift from S55 #19; CI contract-tests back to green).
+- `3c77aa2` (S56 #4) — POC retrospective updated; F-016/F-017/F-018 marked CLOSED with commit refs and the bonus SDK-drift writeup.
+
+**Compound rule earned (in memory)**
+- **S56 #1** [[bare-except-hides-broken-integrations]] — Replacing `except: pass` with `except as exc: logger.warning(...)` is also a bug-detector. Caught Langfuse 4.x SDK drift that had been failing in prod silently. Make success flags reflect API outcome, not "client constructed."
+
+**Known open at S56 close**
+- Probe 10 (key-survives-deploy synthetic test) deferred — F-009's static fix in [deploy/build-zip.py:51-60](deploy/build-zip.py:51) is intact; today's two CI deploys also serve as in-the-wild evidence the prod state survives.
+- CISO Console SPA pipeline not yet triggered for S56 #2 — `RegoBundlesPanel` is in the bundle but waits on the next SPA deploy run to go live at `gov.aigovern.sandboxhub.co`.
+- Remaining POC P3 UI walkthrough (framework drill / EU AI Act PDF / intake evidence URLs), F-012 multi-cloud intake, output-guardrails false-positive retro, POC P4 agent core — all deferred to S57.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
