@@ -932,9 +932,142 @@ async def get_owasp_agentic() -> OwaspListOut:
     operation_id="runtime_events_list",
 )
 async def get_runtime_events(limit: int = Query(50, ge=1, le=500)) -> RuntimeEventsOut:
-    """Get recent runtime events, newest first."""
-    events = sorted(RUNTIME_EVENTS, key=lambda e: e["timestamp"], reverse=True)[:limit]
+    """Get recent runtime events, newest first.
+
+    S55 #15 / F-010-class fix: pre-fix this endpoint read ONLY from the V1
+    mock RUNTIME_EVENTS collection — runtime actions, approvals, and
+    incidents written to the JSONL stores in `domain/runtime_engine.py`
+    (runtime_state.jsonl / runtime_approvals.jsonl / runtime_incidents.jsonl)
+    were invisible to operators. Now merges all four sources, mapped to the
+    RuntimeEventOut view shape via `_*_to_event_view` helpers, sorted by
+    timestamp desc, then limited.
+    """
+    seed_rows = list(RUNTIME_EVENTS)
+    repo_rows = _list_intake_runtime_events()
+    merged = seed_rows + repo_rows
+    merged.sort(key=lambda e: e["timestamp"], reverse=True)
+    events = merged[:limit]
     return RuntimeEventsOut(events=[RuntimeEventOut(**e) for e in events])
+
+
+# F-010-class fix helpers (S55 #15). The JSONL stores in
+# `domain/runtime_engine.py` use distinct record shapes (RuntimeAction /
+# ApprovalRequest / Incident); the API surface is the flat RuntimeEventOut.
+# Each mapper translates one domain record → one view dict and is kept inline
+# here (matching the `_intake_to_summary_view` pattern used for AI systems)
+# rather than pushed into the domain layer — the domain stays view-agnostic.
+
+
+def _system_name_for(ai_system_id: str) -> str:
+    """Resolve a friendly system name for an event, falling back to id.
+
+    Walks seed + intake systems lazily. For high-volume endpoints this
+    would warrant a cache; runtime/events caps at limit=500 and the
+    portfolio fits comfortably in a single scan.
+    """
+    for s in AI_SYSTEMS:
+        if s.get("id") == ai_system_id:
+            return s.get("name") or ai_system_id
+    for s in _list_intake_systems():
+        if getattr(s, "id", None) == ai_system_id:
+            return getattr(s, "name", None) or ai_system_id
+    return ai_system_id
+
+
+def _runtime_action_to_event_view(rec: dict[str, Any]) -> dict[str, Any]:
+    """Map a runtime_state.jsonl record (RuntimeAction shape) → event view."""
+    ai_system_id = rec.get("ai_system_id", "")
+    action_type = rec.get("action_type", "UNKNOWN")
+    actor = rec.get("actor", "system")
+    payload = rec.get("payload") or {}
+    reason = payload.get("reason") or payload.get("note") or ""
+    # KILL_SWITCH events are CRITICAL by definition; DISABLE/MONITORING are HIGH;
+    # everything else (ENABLE, reset) is INFO.
+    severity = (
+        "CRITICAL" if action_type == "KILL_SWITCH"
+        else "HIGH" if action_type in ("DISABLE", "SET_MONITORING")
+        else "INFO"
+    )
+    description = f"{action_type} by {actor}" + (f" — {reason}" if reason else "")
+    return {
+        "id": rec.get("id", ""),
+        "timestamp": rec.get("ts", ""),
+        "system_id": ai_system_id,
+        "system_name": _system_name_for(ai_system_id),
+        "event_type": f"runtime.{action_type.lower()}",
+        "severity": severity,
+        "description": description,
+        "action_taken": action_type,
+        "evidence_id": None,
+    }
+
+
+def _approval_to_event_view(rec: dict[str, Any]) -> dict[str, Any]:
+    """Map a runtime_approvals.jsonl record (ApprovalRequest shape) → event view."""
+    ai_system_id = rec.get("ai_system_id", "")
+    status = rec.get("status", "PENDING")
+    return {
+        "id": rec.get("id", ""),
+        "timestamp": rec.get("requested_at", ""),
+        "system_id": ai_system_id,
+        "system_name": _system_name_for(ai_system_id),
+        "event_type": "runtime.approval_requested",
+        "severity": "HIGH" if status == "PENDING" else "INFO",
+        "description": rec.get("action_description", "") or "Approval request",
+        "action_taken": status,
+        "evidence_id": None,
+    }
+
+
+def _incident_to_event_view(rec: dict[str, Any]) -> dict[str, Any]:
+    """Map a runtime_incidents.jsonl record (Incident shape) → event view."""
+    ai_system_id = rec.get("ai_system_id", "")
+    return {
+        "id": rec.get("id", ""),
+        "timestamp": rec.get("created_at", ""),
+        "system_id": ai_system_id,
+        "system_name": _system_name_for(ai_system_id),
+        "event_type": "runtime.incident",
+        "severity": rec.get("severity", "HIGH") or "HIGH",
+        "description": rec.get("summary", "") or "Runtime incident",
+        "action_taken": rec.get("status", "OPEN"),
+        "evidence_id": rec.get("from_event_id"),
+    }
+
+
+def _list_intake_runtime_events() -> list[dict[str, Any]]:
+    """Read all three JSONL stores via the domain layer, map to event view.
+
+    Defensive: each source is wrapped in its own try/except. A corrupt or
+    missing JSONL must never blank the merged view — operators need the
+    seed + the other two sources to remain visible.
+    """
+    out: list[dict[str, Any]] = []
+    # Lazy import keeps the api module load cheap and avoids a circular
+    # dependency with domain.runtime_engine (which imports from api at
+    # request time for some readers).
+    try:
+        from domain import runtime_engine as _re
+
+        for rec in _re._read_jsonl(_re._STATE_FILE):  # noqa: SLF001
+            try:
+                out.append(_runtime_action_to_event_view(rec))
+            except Exception:  # noqa: BLE001
+                continue
+        for rec in _re._read_jsonl(_re._APPROVALS_FILE):  # noqa: SLF001
+            try:
+                out.append(_approval_to_event_view(rec))
+            except Exception:  # noqa: BLE001
+                continue
+        for rec in _re._read_jsonl(_re._INCIDENTS_FILE):  # noqa: SLF001
+            try:
+                out.append(_incident_to_event_view(rec))
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception:  # noqa: BLE001
+        # If runtime_engine itself can't load, fall back to seed-only.
+        pass
+    return out
 
 
 # ===========================================================================
