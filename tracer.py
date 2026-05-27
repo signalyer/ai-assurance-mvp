@@ -14,9 +14,12 @@ Architecture (Session 05):
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 from dotenv import load_dotenv
 
@@ -26,6 +29,35 @@ logger = logging.getLogger(__name__)
 
 _client: Optional[Any] = None
 _traces_cache: dict[str, dict] = {}
+
+# F-016: JSONL persistence so traces survive a process exit even when
+# Langfuse Cloud is unreachable or unconfigured. Same pattern as storage.py.
+_TRACES_JSONL = Path(
+    os.environ.get("DATA_ROOT") or (Path(__file__).parent / "data")
+) / "traces.jsonl"
+_jsonl_lock = threading.Lock()
+
+
+def _append_trace_jsonl(record: dict) -> None:
+    """Append one trace record to data/traces.jsonl. Best-effort — never raises."""
+    try:
+        _TRACES_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        with _jsonl_lock:
+            with open(_TRACES_JSONL, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("tracer: failed to append trace to %s: %s", _TRACES_JSONL, exc)
+
+
+# F-016: warn loudly at import time when Langfuse creds are absent so operators
+# know remote tracing is OFF. JSONL fallback still runs — but the silent-drop
+# behaviour that hid telemetry loss in S55 must never recur.
+if not (os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")):
+    logger.warning(
+        "tracer: LANGFUSE_PUBLIC_KEY/SECRET_KEY not set — remote tracing disabled. "
+        "Traces will be appended to %s only.",
+        _TRACES_JSONL,
+    )
 
 
 def _get_client():
@@ -92,25 +124,46 @@ def _trace_call_impl(
 
     client = _get_client()
     trace_id = f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(prompt) % 10000}"
-    if client is None:
-        return trace_id
+    langfuse_sent = False
 
-    try:
-        client.create_generation(
-            trace_id=trace_id,
-            name=f"model_call_{model}",
-            model=model,
-            input={"prompt": prompt},
-            output={"response": response},
-            metadata={
-                **metadata,
-                "latency_ms": latency_ms,
-                "tokens_used": tokens_used,
-            },
-        )
-        client.flush()
-    except Exception:
-        pass
+    # F-016 v2: Langfuse 4.x renamed create_generation → start_observation.
+    # The old call has been silently failing under `except: pass` since the
+    # SDK upgrade. Use the 4.x context manager and capture actual success.
+    if client is not None:
+        try:
+            with client.start_as_current_observation(
+                name=f"model_call_{model}",
+                as_type="generation",
+                model=model,
+                input={"prompt": prompt},
+                output={"response": response},
+                metadata={
+                    **metadata,
+                    "latency_ms": latency_ms,
+                    "tokens_used": tokens_used,
+                    "engine_trace_id": trace_id,
+                },
+                usage_details={"input": 0, "output": tokens_used},
+            ):
+                pass  # observation auto-finalises on context exit
+            client.flush()
+            langfuse_sent = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tracer: Langfuse start_observation failed: %s", exc)
+
+    # F-016: persist locally regardless of Langfuse availability. This is the
+    # operator-visible source of truth — Langfuse Cloud is optional gravy.
+    _append_trace_jsonl({
+        "trace_id": trace_id,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "model": model,
+        "prompt": prompt,  # already scrubbed (asserted by vault_id check above)
+        "response": response,
+        "latency_ms": latency_ms,
+        "tokens_used": tokens_used,
+        "metadata": metadata,
+        "langfuse_sent": langfuse_sent,
+    })
 
     return trace_id
 

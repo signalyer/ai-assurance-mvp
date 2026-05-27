@@ -232,6 +232,9 @@ async def call_llm(
             actual_output=response_text,
             expected_output="",
             context=[],
+            trace_id=trace_id,
+            workload_id=workload_id,
+            model=model,
         )
         print(f"[eval] metrics={list(eval_result.keys())}")
     except Exception as exc:  # noqa: BLE001

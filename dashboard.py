@@ -68,6 +68,7 @@ from api.sdk_keys import router as sdk_keys_router
 from api.sdk_runtime import router as sdk_runtime_router
 from api.demo_control import router as demo_control_router
 from api.auth_oidc import router as auth_oidc_router
+from api.evals import router as evals_router
 from api._errors import register_error_handlers
 from middleware.auth import SessionAuthMiddleware, router as auth_router
 from middleware.hmac_auth import HMACAuthMiddleware
@@ -365,6 +366,7 @@ app.include_router(rtf_router)
 app.include_router(audit_verify_router)
 app.include_router(projection_router)
 app.include_router(demo_control_router)
+app.include_router(evals_router)
 if _HAS_METRICS and _metrics_router is not None:
     app.include_router(_metrics_router)
 
