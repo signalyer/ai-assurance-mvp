@@ -17439,6 +17439,28 @@
         ]
       }
     },
+    "/api/policies/rego": {
+      "get": {
+        "description": "Enumerate active .rego bundles on disk. Read-only \u2014 never accepts uploads.",
+        "operationId": "policies_rego_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegoListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Rego Policies",
+        "tags": [
+          "policies-rego"
+        ]
+      }
+    },
     "/api/projection/replay": {
       "post": {
         "description": "Replay events from events.jsonl into the Postgres projection tables.\n\nPrivileged endpoint: requires demo-ciso, demo-risk, or demo-engineer role.\nRuns synchronously in v1 (Day 10 makes it async with a job queue).\n\nArgs:\n    body:    ReplayRequest with optional from_event_id.\n    request: FastAPI request (used to check role).\n\nReturns:\n    JSON with events_processed count.",
@@ -19126,28 +19148,6 @@
         "summary": "List Evals",
         "tags": [
           "evals"
-        ]
-      }
-    },
-    "/api/v1/policies/rego": {
-      "get": {
-        "description": "Enumerate active .rego bundles on disk. Read-only \u2014 never accepts uploads.",
-        "operationId": "policies_rego_list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegoListOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Rego Policies",
-        "tags": [
-          "policies-rego"
         ]
       }
     },

@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-router = APIRouter(prefix="/api/v1", tags=["policies-rego"])
+router = APIRouter(prefix="/api", tags=["policies-rego"])
 
 
 # policies/ lives at the engine root, one level up from api/
