@@ -76,7 +76,7 @@ Sanitized `.env.example` committed; `agent.py` skeleton committed with decorator
 
 **Activities**
 1. Author `policies/azure-architect.rego` — read-only tool allowlist, mutation denylist (template in the [Phase 1-10 walkthrough](../architecture/azure-architecture.md) §3.2 or in the parent chat context).
-2. CISO Console → Policy Governance → upload policy → verify it lands in fail-closed evaluator.
+2. Ship `policies/azure-architect.rego` via git → CI (no upload UI by design — F-018). Verify it's active via CISO Console → Policy Governance → "Active enforced policies" panel (filename + sha256 visible) and by confirming agent `--review` runs pass through `@policy_gate` without deny/500.
 3. CISO Console → Framework Coverage → drill into the new system → tab through EU AI Act / ISO 42001 / OWASP LLM Top 10 / NIST AI RMF. Note any RED cells.
 4. Generate EU AI Act PDF Pack as baseline framework evidence.
 5. Update intake's Step 5 evidence URLs with the policy artifact + EU AI Act pack.

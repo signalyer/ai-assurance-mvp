@@ -12,6 +12,105 @@ import { apiGet } from '../../shared/api/client';
 import type { PolicyItem, PoliciesResponse } from './types';
 
 // ============================================================
+// F-018: Active enforced .rego policies (read-only)
+// .rego bundles ship via git → CI; this panel surfaces what's
+// CURRENTLY enforced on the engine so operators can audit it.
+// No upload UI — that's deliberate (see POC-RETROSPECTIVE.md F-018).
+// ============================================================
+
+type RegoPolicy = {
+  name: string;
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  package: string;
+  summary: string;
+};
+
+type RegoListResponse = {
+  items: RegoPolicy[];
+  count: number;
+  source_dir: string;
+};
+
+const regoBundles = signal<RegoPolicy[]>([]);
+const regoLoading = signal<boolean>(true);
+const regoError = signal<string | null>(null);
+const regoSourceDir = signal<string>('');
+
+async function loadRegoBundles(): Promise<void> {
+  regoLoading.value = true;
+  regoError.value = null;
+  const r = await apiGet<RegoListResponse>('/policies/rego');
+  if (r.ok) {
+    regoBundles.value = r.data.items;
+    regoSourceDir.value = r.data.source_dir;
+  } else {
+    regoError.value = r.detail;
+  }
+  regoLoading.value = false;
+}
+
+function RegoBundlesPanel() {
+  const items = regoBundles.value;
+  const hasData = items.length > 0;
+  return (
+    <div class="card" style={{ marginBottom: '1.5rem' }}>
+      <div class="card-header">
+        <div>
+          <div class="card-title">Active enforced policies (.rego)</div>
+          <div class="card-subtitle">
+            Bundles loaded by the policy engine. Ship via git → CI. Read-only.
+          </div>
+        </div>
+        <button class="btn btn-sm" onClick={() => void loadRegoBundles()}>Refresh</button>
+      </div>
+      {regoLoading.value && !hasData ? (
+        <div class="loading" style={{ padding: '1rem' }}>Loading enforced policies…</div>
+      ) : regoError.value && !hasData ? (
+        <div class="error-banner" style={{ margin: '0.75rem' }}>Failed: {regoError.value}</div>
+      ) : !hasData ? (
+        <div class="empty-state" style={{ padding: '1rem' }}>No .rego bundles found.</div>
+      ) : (
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Bundle</th>
+              <th>Package</th>
+              <th>Summary</th>
+              <th style={{ textAlign: 'right' }}>Size</th>
+              <th>SHA-256</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((b) => (
+              <tr key={b.filename}>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.filename}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.package || '—'}</td>
+                <td style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 360 }}>
+                  {b.summary || '—'}
+                </td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
+                  {b.size_bytes.toLocaleString()}
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                  {b.sha256.slice(0, 16)}…
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {regoSourceDir.value && (
+        <div style={{ padding: '0.5rem 0.75rem', fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
+          source: {regoSourceDir.value}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // Module-level signals
 // ============================================================
 
@@ -208,7 +307,10 @@ function PolicyModal({
 export function PoliciesPage() {
   const [selected, setSelected] = useState<PolicyItem | null>(null);
 
-  useEffect(() => { void loadPolicies(); }, []);
+  useEffect(() => {
+    void loadPolicies();
+    void loadRegoBundles();
+  }, []);
 
   const items = filtered.value;
 
@@ -225,6 +327,8 @@ export function PoliciesPage() {
           <button class="btn btn-sm" onClick={() => void loadPolicies()}>Refresh</button>
         </div>
       </div>
+
+      <RegoBundlesPanel />
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
