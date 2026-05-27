@@ -85,7 +85,24 @@ class TracerBackend(Protocol):
 
 @runtime_checkable
 class EvaluatorBackend(Protocol):
-    """Run multi-metric quality evaluation against a model response."""
+    """Run multi-metric quality evaluation against a model response.
+
+    ADR-003 (multi-vendor evals): each backend declares its vendor identity
+    and metric vocabulary so the federated UI can render per-vendor result
+    cards without normalizing scores into a single lossy "platform score".
+
+    The legacy ``evaluate()`` method continues to return the original
+    5-key DeepEval-shaped dict so existing callers (``api/evals.py``,
+    ``agents/azure-architect/eval/run_eval.py``) keep working unchanged.
+    The new ``evaluate_response_v2()`` free function in ``evaluator.py``
+    wraps this return value in the federated envelope using ``vendor`` /
+    ``vendor_version`` / ``metric_schema`` declared here.
+    """
+
+    # ADR-003: vendor identity surfaced into the run envelope and UI.
+    vendor: str  # stable slug, e.g. "deepeval", "ragas", "noop"
+    vendor_version: str  # installed library or CLI version, e.g. "1.4.2"
+    metric_schema: dict  # {metric_name: {type, range, direction}}
 
     def evaluate(
         self,

@@ -41,9 +41,20 @@ class TracerBackendChoice(str, Enum):
 
 
 class EvalBackendChoice(str, Enum):
-    """Supported evaluator backend identifiers."""
+    """Supported evaluator backend identifiers.
+
+    ADR-003 (multi-vendor evals): ragas / promptfoo / openai_evals are
+    declared here so the API catalog endpoint can surface them as roadmap
+    items in the UI picker. They are NOT wired to backend modules yet —
+    selecting one of them as the active EVAL_BACKEND will raise at
+    construction time inside providers.registry.get_evaluator(). Tracked
+    in docs/adr/ADR-003-multi-vendor-evals.md §7 Steps 2/4/5.
+    """
 
     deepeval = "deepeval"
+    ragas = "ragas"  # ADR-003 §7 Step 2 — pending
+    promptfoo = "promptfoo"  # ADR-003 §7 Step 4 — pending
+    openai_evals = "openai_evals"  # ADR-003 §7 Step 5 — pending (sidecar)
     noop = "noop"
 
 

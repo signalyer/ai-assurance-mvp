@@ -80,3 +80,22 @@ export interface SimulatedRunResponse {
   assessment: AssessmentSummary;
   release_gates: GateRollup;
 }
+
+// ADR-003: multi-vendor eval suite catalog.
+export type SuiteStatus = 'enabled' | 'roadmap';
+
+export interface EvalSuiteEntry {
+  vendor: string;
+  label: string;
+  description: string;
+  integration: string;
+  adr_ref: string;
+  status: SuiteStatus;
+  vendor_version: string;
+}
+
+export interface EvalSuiteCatalog {
+  items: EvalSuiteEntry[];
+  active_vendor: string;
+  adr: string;
+}

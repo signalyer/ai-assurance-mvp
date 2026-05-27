@@ -378,6 +378,104 @@ def evaluate_response(
     return results
 
 
+# ---------------------------------------------------------------------------
+# ADR-003: federated v2 envelope
+# ---------------------------------------------------------------------------
+
+def evaluate_response_v2(
+    input_prompt: str,
+    actual_output: str,
+    expected_output: str = "",
+    context: list[str] = None,
+    *,
+    trace_id: str = "",
+    workload_id: str = "",
+    model: str = "",
+) -> dict:
+    """Return a federated, vendor-cited eval envelope (ADR-003 §4.1).
+
+    Wraps the existing backend.evaluate() return value in a stable envelope
+    that carries vendor identity, version, duration, and cost — the metric
+    payload itself stays vendor-shaped in raw_metrics. This is the shape
+    the multi-vendor UI consumes; legacy evaluate_response() continues to
+    return the 5-key DeepEval dict unchanged for back-compat.
+
+    Args:
+        input_prompt:    The user-facing query that produced the response.
+        actual_output:   The model response to evaluate.
+        expected_output: Optional reference output (accepted for forward
+                         compat with backends like OpenAI evals that grade
+                         against a golden set; ignored by DeepEval today).
+        context:         Optional grounding strings.
+        trace_id:        Engine trace id for join with data/traces.jsonl.
+        workload_id:     Workload identifier for tenant/agent filtering.
+        model:           Model the response came from.
+
+    Returns:
+        {
+          "vendor": str,
+          "vendor_version": str,
+          "metric_schema": dict,
+          "raw_metrics": dict,        # vendor-native shape
+          "status": "ok"|"error",
+          "duration_ms": int,
+          "cost_usd_est": float,      # 0.0 until vendor-specific cost calc lands
+          "errors": list[str],
+        }
+    """
+    import time
+
+    if context is None:
+        context = []
+    _ = expected_output  # accepted for forward compat (ADR-003 §4.1)
+
+    from providers import get_evaluator
+    backend = get_evaluator()
+
+    t0 = time.perf_counter()
+    raw_metrics: dict = {}
+    status = "ok"
+    errors: list[str] = []
+    try:
+        raw_metrics = backend.evaluate(
+            input_prompt=input_prompt,
+            actual_output=actual_output,
+            context=context,
+        )
+    except Exception as exc:  # noqa: BLE001
+        status = "error"
+        errors.append(str(exc)[:200])
+        logger.warning("evaluate_response_v2: backend raised: %s", exc)
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+
+    envelope = {
+        "vendor": getattr(backend, "vendor", "unknown"),
+        "vendor_version": getattr(backend, "vendor_version", "unknown"),
+        "metric_schema": getattr(backend, "metric_schema", {}),
+        "raw_metrics": raw_metrics,
+        "status": status,
+        "duration_ms": duration_ms,
+        "cost_usd_est": 0.0,  # ADR-003 §7 Steps 2/4/5 — per-vendor cost calc
+        "errors": errors,
+    }
+
+    # Persist envelope alongside the legacy record so both consumers work.
+    # format_version=2 distinguishes envelope records from legacy 5-key ones.
+    _append_eval_jsonl({
+        "trace_id": trace_id,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "workload_id": workload_id,
+        "model": model,
+        "format_version": 2,
+        "envelope": envelope,
+    })
+    # Best-effort Langfuse push — only when raw_metrics has the legacy shape.
+    if status == "ok" and raw_metrics:
+        _push_langfuse_scores(trace_id, raw_metrics)
+
+    return envelope
+
+
 if __name__ == "__main__":
     # Test
     try:

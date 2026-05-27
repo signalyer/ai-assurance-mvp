@@ -145,6 +145,22 @@ def get_evaluator() -> EvaluatorBackend:
         from providers.backends.noop import NoopEvaluator
         return NoopEvaluator()
 
+    # ADR-003 §7 Steps 2/4/5 — enum entries declared so the catalog
+    # endpoint can surface them as roadmap items, but no backend module
+    # is wired yet. Selecting one as the active EVAL_BACKEND must fail
+    # loudly with an actionable message.
+    if choice in (
+        EvalBackendChoice.ragas,
+        EvalBackendChoice.promptfoo,
+        EvalBackendChoice.openai_evals,
+    ):
+        raise NotImplementedError(
+            f"EVAL_BACKEND={choice.value!r} is declared in ADR-003 but the "
+            f"backend module has not been built yet. See "
+            f"docs/adr/ADR-003-multi-vendor-evals.md §7 for the rollout "
+            f"sequence. Set EVAL_BACKEND=deepeval or noop for now."
+        )
+
     raise ValueError(
         f"Unknown EVAL_BACKEND value: {choice!r}. "
         f"Valid values: {[c.value for c in EvalBackendChoice]}"

@@ -547,6 +547,64 @@ input:focus { outline: none; border-color: var(--border-focus); }
 .eval-row.sev-FAIL { border-left: 3px solid var(--critical); }
 .eval-row .toggle { color: var(--text-secondary); user-select: none; }
 
+.eval-group-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--bg-base);
+}
+
+.eval-suite-group {
+  overflow: hidden;
+  background: transparent;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.eval-suite-group:last-child { border-bottom: none; }
+
+.eval-suite-group-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.eval-suite-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.eval-suite-group-subtitle {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.eval-suite-group-stats {
+  display: grid;
+  grid-template-columns: 72px 150px 78px;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.eval-suite-group-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eval-suite-group-stats span {
+  font-size: 10px;
+}
+
+.eval-suite-group-stats strong {
+  font-size: 12px;
+}
+
 .eval-detail {
   padding: 0.75rem 1rem 0.75rem 3rem;
   background: var(--bg-elevated);
@@ -574,6 +632,34 @@ input:focus { outline: none; border-color: var(--border-focus); }
 .impact-BLOCKS_RELEASE { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.3); }
 .impact-CONDITIONAL    { background: var(--medium-bg);   color: var(--medium);   border: 1px solid rgba(245,158,11,0.3); }
 .impact-NONE           { background: var(--bg-input);    color: var(--text-secondary); border: 1px solid var(--border-strong); }
+
+@media (max-width: 980px) {
+  .sys-eval-header {
+    grid-template-columns: 1fr 82px 108px;
+  }
+
+  .sys-eval-header > div:nth-child(4),
+  .sys-eval-header > div:nth-child(5) {
+    grid-column: span 3;
+  }
+
+  .eval-suite-group-header {
+    grid-template-columns: 1fr;
+  }
+
+  .eval-suite-group-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .eval-row {
+    grid-template-columns: 22px minmax(180px, 1fr) 86px 74px;
+  }
+
+  .eval-row > div:nth-child(5),
+  .eval-row > div:nth-child(6) {
+    display: none;
+  }
+}
 
 /* ============ AGENT LIBRARY ============ */
 .chip-row {

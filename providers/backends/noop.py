@@ -92,6 +92,11 @@ class NoopTracer:
 class NoopEvaluator:
     """Evaluator that marks all metrics as skipped."""
 
+    # ADR-003 Protocol attrs.
+    vendor: str = "noop"
+    vendor_version: str = "1.0"
+    metric_schema: dict = {}
+
     def evaluate(
         self,
         input_prompt: str,

@@ -1,10 +1,13 @@
 import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
 import { apiGet, apiPost } from '../../shared/api/client';
 import type {
   EvalsSystemOverview,
   EvalRecord,
   SystemDetailResponse,
   SimulatedRunResponse,
+  EvalSuiteCatalog,
+  EvalSuiteEntry,
 } from './types';
 import { reloadEvalsOverview } from './EvalsPage';
 
@@ -16,6 +19,24 @@ const detailLoading = signal<Set<string>>(new Set());
 const running = signal<Set<string>>(new Set());
 const actionError = signal<string | null>(null);
 const lastRun = signal<Map<string, SimulatedRunResponse>>(new Map());
+
+// ADR-003 multi-vendor catalog — loaded once per page session, shared across
+// all cards. selectedSuite is purely cosmetic for this slice: only the
+// `enabled` vendor actually runs; roadmap vendors are non-clickable.
+const suiteCatalog = signal<EvalSuiteCatalog | null>(null);
+const suiteCatalogLoading = signal<boolean>(false);
+const selectedSuite = signal<string>('');
+
+async function loadSuiteCatalog(): Promise<void> {
+  if (suiteCatalog.value || suiteCatalogLoading.value) return;
+  suiteCatalogLoading.value = true;
+  const r = await apiGet<EvalSuiteCatalog>('/evals/suites');
+  if (r.ok) {
+    suiteCatalog.value = r.data;
+    if (!selectedSuite.value) selectedSuite.value = r.data.active_vendor;
+  }
+  suiteCatalogLoading.value = false;
+}
 
 function toggleSet(sig: typeof expandedSystems, key: string): void {
   const next = new Set(sig.value);
@@ -83,12 +104,100 @@ const STATUS_BADGE: Record<string, string> = {
   FAIL: 'badge-critical',
 };
 
+interface EvalGroupDefinition {
+  id: string;
+  title: string;
+  description: string;
+  evalTypes: string[];
+}
+
+interface EvalGroup {
+  definition: EvalGroupDefinition;
+  evals: EvalRecord[];
+  passes: number;
+  warns: number;
+  fails: number;
+  blocking: number;
+}
+
+const EVAL_GROUPS: EvalGroupDefinition[] = [
+  {
+    id: 'safety',
+    title: 'Safety & Abuse',
+    description: 'Injection, jailbreak, refusal, toxicity, and unsafe-output checks.',
+    evalTypes: ['PROMPT_INJECTION', 'JAILBREAK', 'REFUSAL', 'TOXICITY'],
+  },
+  {
+    id: 'data-protection',
+    title: 'Data Protection',
+    description: 'PII and sensitive-data leakage tests.',
+    evalTypes: ['PII_LEAKAGE'],
+  },
+  {
+    id: 'grounding-quality',
+    title: 'Grounding & Quality',
+    description: 'Answer relevance, hallucination, factuality, and retrieval grounding.',
+    evalTypes: ['ANSWER_RELEVANCE', 'HALLUCINATION', 'FACTUALITY', 'GROUNDEDNESS', 'RAG_GROUNDING'],
+  },
+  {
+    id: 'tool-runtime',
+    title: 'Tool & Runtime Assurance',
+    description: 'Tool authorization, audit completeness, human approval, runtime policy, latency, and cost.',
+    evalTypes: ['TOOL_AUTHORIZATION', 'AUDIT_COMPLETENESS', 'HUMAN_APPROVAL', 'RUNTIME_POLICY', 'LATENCY', 'COST'],
+  },
+  {
+    id: 'domain-regulatory',
+    title: 'Domain & Regulatory',
+    description: 'Business-domain obligations and specialized regulatory checks.',
+    evalTypes: ['REGULATORY_KNOWLEDGE', 'SANCTIONS_SCREENING', 'BIAS', 'RAG_POISONING'],
+  },
+];
+
+const FALLBACK_GROUP: EvalGroupDefinition = {
+  id: 'other',
+  title: 'Other Evals',
+  description: 'Additional tests not yet mapped into a suite group.',
+  evalTypes: [],
+};
+
+const evalGroupByType = new Map<string, EvalGroupDefinition>();
+for (const group of EVAL_GROUPS) {
+  for (const evalType of group.evalTypes) {
+    evalGroupByType.set(evalType, group);
+  }
+}
+
+function groupEvals(evals: EvalRecord[]): EvalGroup[] {
+  const grouped = new Map<string, EvalRecord[]>();
+  for (const e of evals) {
+    const group = evalGroupByType.get(e.eval_type) ?? FALLBACK_GROUP;
+    grouped.set(group.id, [...(grouped.get(group.id) ?? []), e]);
+  }
+
+  return [...EVAL_GROUPS, FALLBACK_GROUP]
+    .map((definition) => {
+      const records = grouped.get(definition.id) ?? [];
+      return {
+        definition,
+        evals: records,
+        passes: records.filter((e) => e.status === 'PASS').length,
+        warns: records.filter((e) => e.status === 'WARN').length,
+        fails: records.filter((e) => e.status === 'FAIL').length,
+        blocking: records.filter((e) => e.release_impact === 'BLOCKS_RELEASE' && e.status === 'FAIL').length,
+      };
+    })
+    .filter((group) => group.evals.length > 0);
+}
+
 export function SystemEvalCard({ system: s }: { system: EvalsSystemOverview }) {
   const isOpen = expandedSystems.value.has(s.ai_system_id);
   const evals = detailCache.value.get(s.ai_system_id);
   const isLoadingDetail = detailLoading.value.has(s.ai_system_id);
   const isRunning = running.value.has(s.ai_system_id);
   const lr = lastRun.value.get(s.ai_system_id);
+  // ADR-003: load multi-vendor catalog once.
+  useEffect(() => { void loadSuiteCatalog(); }, []);
+  const catalog = suiteCatalog.value;
 
   return (
     <div class={`sys-eval-card ${isOpen ? 'expanded' : ''}`}>
@@ -138,6 +247,8 @@ export function SystemEvalCard({ system: s }: { system: EvalsSystemOverview }) {
         </div>
       </div>
 
+      {catalog && <EvalSuitePicker catalog={catalog} />}
+
       {actionError.value && (
         <div class="error-banner" style={{ margin: '6px 12px' }}>{actionError.value}</div>
       )}
@@ -149,21 +260,57 @@ export function SystemEvalCard({ system: s }: { system: EvalsSystemOverview }) {
             <div class="empty-state">No evals recorded for this system.</div>
           )}
           {!isLoadingDetail && evals && evals.length > 0 && (
-            <>
-              <div class="eval-row head">
-                <div />
-                <div>Eval / Source</div>
-                <div>Score</div>
-                <div>Status</div>
-                <div>Release Impact</div>
-                <div>Run</div>
-              </div>
-              {evals.map((e) => <EvalDetailRow key={e.id} record={e} />)}
-            </>
+            <div class="eval-group-list">
+              {groupEvals(evals).map((group) => (
+                <EvalGroupSection key={group.definition.id} group={group} />
+              ))}
+            </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function EvalGroupSection({ group }: { group: EvalGroup }) {
+  return (
+    <section class="eval-suite-group">
+      <div class="eval-suite-group-header">
+        <div>
+          <div class="eval-suite-group-title">{group.definition.title}</div>
+          <div class="eval-suite-group-subtitle">{group.definition.description}</div>
+        </div>
+        <div class="eval-suite-group-stats">
+          <div>
+            <span class="text-tertiary">Tests</span>
+            <strong>{group.evals.length}</strong>
+          </div>
+          <div>
+            <span class="text-tertiary">Pass / Warn / Fail</span>
+            <strong>
+              <span style={{ color: 'var(--pass)' }}>{group.passes}</span>
+              {' / '}
+              <span style={{ color: 'var(--medium)' }}>{group.warns}</span>
+              {' / '}
+              <span style={{ color: 'var(--critical)' }}>{group.fails}</span>
+            </strong>
+          </div>
+          <div>
+            <span class="text-tertiary">Blocking</span>
+            <strong class={group.blocking > 0 ? 'text-critical' : ''}>{group.blocking}</strong>
+          </div>
+        </div>
+      </div>
+      <div class="eval-row head">
+        <div />
+        <div>Test / Source</div>
+        <div>Score</div>
+        <div>Status</div>
+        <div>Release Impact</div>
+        <div>Run</div>
+      </div>
+      {group.evals.map((e) => <EvalDetailRow key={e.id} record={e} />)}
+    </section>
   );
 }
 
@@ -268,5 +415,99 @@ function EvalDetailRow({ record: e }: { record: EvalRecord }) {
         </div>
       )}
     </>
+  );
+}
+
+// ADR-003: multi-vendor suite picker. Only the `enabled` vendor is wired;
+// roadmap vendors are non-clickable chips with a tooltip pointing at the
+// ADR. No fake metric output; the picker shows what the platform supports
+// today vs. what's coming. Suite selection does NOT yet alter the engine
+// call — selection wiring lands when 2+ vendors are enabled (ADR-003 §7
+// Step 3).
+function EvalSuitePicker({ catalog }: { catalog: EvalSuiteCatalog }) {
+  const selected = selectedSuite.value || catalog.active_vendor;
+  return (
+    <div
+      class="eval-suite-picker"
+      style={{
+        padding: '10px 14px',
+        borderTop: '1px solid var(--border)',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-elev-1, rgba(255,255,255,0.02))',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div class="text-xs text-tertiary" style={{ marginBottom: 4 }}>
+            Eval suite (per ADR-003)
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {catalog.items.map((entry) => (
+              <SuiteChip key={entry.vendor} entry={entry} selected={selected === entry.vendor} />
+            ))}
+          </div>
+        </div>
+        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+          <div class="text-xs text-tertiary">Active backend</div>
+          <div class="text-sm" style={{ fontFamily: 'monospace' }}>
+            {catalog.active_vendor}
+            {(() => {
+              const active = catalog.items.find((i) => i.vendor === catalog.active_vendor);
+              return active && active.vendor_version
+                ? <span class="text-tertiary"> · v{active.vendor_version}</span>
+                : null;
+            })()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuiteChip({ entry, selected }: { entry: EvalSuiteEntry; selected: boolean }) {
+  const isEnabled = entry.status === 'enabled';
+  const baseStyle: Record<string, string | number> = {
+    padding: '4px 10px',
+    borderRadius: 14,
+    fontSize: 12,
+    border: '1px solid var(--border)',
+    cursor: isEnabled ? 'pointer' : 'not-allowed',
+    opacity: isEnabled ? 1 : 0.55,
+    background: selected && isEnabled ? 'var(--accent, #3b82f6)' : 'transparent',
+    color: selected && isEnabled ? '#fff' : 'var(--text-primary)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+  };
+  const tooltip = isEnabled
+    ? `${entry.label} · ${entry.integration} · v${entry.vendor_version}`
+    : `Roadmap — ${entry.adr_ref}. Click to view ADR.`;
+  const onClick = () => {
+    if (isEnabled) {
+      selectedSuite.value = entry.vendor;
+    } else {
+      // Roadmap chip → take operator to ADR-003 (same repo path the engine cites)
+      window.open(
+        'https://github.com/signalyer/ai-assurance-mvp/blob/main/docs/adr/ADR-003-multi-vendor-evals.md',
+        '_blank',
+        'noopener,noreferrer',
+      );
+    }
+  };
+  return (
+    <span
+      class="suite-chip"
+      style={baseStyle}
+      title={tooltip}
+      onClick={onClick}
+      role="button"
+      aria-disabled={!isEnabled}
+    >
+      <span style={{ fontWeight: 600 }}>{entry.label}</span>
+      {isEnabled
+        ? <span style={{ fontSize: 10 }}>·active</span>
+        : <span style={{ fontSize: 10 }}>·roadmap</span>
+      }
+    </span>
   );
 }

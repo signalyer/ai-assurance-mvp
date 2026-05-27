@@ -5,13 +5,16 @@
 against the 5-row manifest dataset and persists run summaries to
 `data/azure_architect_eval_runs.jsonl`. No live candidate outputs have been
 generated yet because P4 synthesis/orchestration remains skeletal.
+S57b also grouped the Team Portal `/evals` detail view into suite bands with
+individual test rows, but it still reads simulated GRC eval data rather than
+`data/azure_architect_eval_runs.jsonl`.
 
 ## Objectives
 
 1. Generate real candidate outputs for all 5 dataset rows.
 2. Run the offline eval suite without monkeypatching `mermaid_compiles`.
-3. Surface Azure architect eval run history in the Team Portal eval view or a
-   small engine read endpoint.
+3. Wire Azure architect eval run history into the grouped Team Portal eval
+   view or a small engine read endpoint.
 4. Decide whether P6 can close or remains blocked by P4 agent core.
 
 ## Steps
@@ -53,10 +56,12 @@ python agents/azure-architect/eval/run_eval.py --list-runs --limit 5
 Acceptance: at least 4/5 cases pass; failing cases have clear metric-level
 reasons.
 
-### Step 4 — Portal/API visibility
+### Step 4 — Portal/API visibility for real runs
 
 Add a read endpoint or extend the existing evals endpoint so operators can see
-Azure architect run history without reading JSONL manually. Keep it read-only.
+Azure architect run history without reading JSONL manually. Keep it read-only
+and reuse the grouped Team Portal eval bands rather than adding a separate
+flat list.
 
 Acceptance: Team Portal or API can list latest Azure architect eval runs with
 run id, timestamp, pass count, overall score, and per-case failures.

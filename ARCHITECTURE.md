@@ -1819,6 +1819,25 @@ The "Real baselines" work originally targeted for S54 (flip `EVAL_BACKEND=deepev
 - Team Portal still uses the simulated eval suite; it does not yet read `data/azure_architect_eval_runs.jsonl`.
 - `mermaid_compiles` requires local `mmdc` (`@mermaid-js/mermaid-cli`) for real compile checks; tests monkeypatch that boundary.
 
+### Session 57b — Team Portal grouped eval suite detail
+
+**Theme:** Make the Team Portal eval suite easier to scan by grouping individual eval tests inside each system row.
+
+**Outcome:** The `/evals` page keeps the existing KPI + system summary layout, but expanded systems now organize tests into suite groups with per-group counts and individual test result rows.
+
+**Built / fixed this session**
+- [team-portal/src/pages/evals/SystemEvalCard.tsx](team-portal/src/pages/evals/SystemEvalCard.tsx) — added suite grouping for Safety & Abuse, Data Protection, Grounding & Quality, Tool & Runtime Assurance, Domain & Regulatory, and fallback Other Evals. Each group shows test count, pass/warn/fail, blocking count, and the existing individual test rows/details.
+- [team-portal/src/shared/styles/base.css](team-portal/src/shared/styles/base.css) — added grouped eval section styling and responsive rules while keeping groups as unframed bands inside the expanded system row.
+
+**Verification**
+- `npm run build` in `team-portal/` — PASS (`tsc --noEmit && vite build`).
+- Vite dev server started at `http://127.0.0.1:5174/evals`; HTTP probe returned `200`.
+
+**Known open at S57b close**
+- The in-app browser tool was unavailable in this session, and no local Edge/Chrome executable was exposed, so visual screenshot verification could not be completed.
+- Local engine import failed under the default Python because `python-dotenv` is missing there; the Vite page loads, but live API data requires the engine on port 8000 or the deployed API base URL.
+- Team Portal still reads simulated GRC eval data, not `data/azure_architect_eval_runs.jsonl`.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)

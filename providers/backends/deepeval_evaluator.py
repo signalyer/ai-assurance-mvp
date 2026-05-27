@@ -20,8 +20,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _read_deepeval_version() -> str:
+    """Best-effort version probe — never raises; returns 'unknown' on failure."""
+    try:
+        from importlib.metadata import version  # stdlib
+        return version("deepeval")
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+_DEEPEVAL_METRIC_SCHEMA: dict = {
+    "answer_relevancy": {"type": "score", "range": [0.0, 1.0], "direction": "higher_is_better"},
+    "toxicity": {"type": "score", "range": [0.0, 1.0], "direction": "lower_is_better"},
+    "hallucination": {"type": "score", "range": [0.0, 1.0], "direction": "lower_is_better"},
+    "faithfulness": {"type": "score", "range": [0.0, 1.0], "direction": "higher_is_better"},
+    "pii_leakage": {"type": "score", "range": [0.0, 1.0], "direction": "lower_is_better"},
+}
+
+
 class DeepEvalEvaluator:
     """EvaluatorBackend that delegates to evaluator._evaluate_impl."""
+
+    # ADR-003 Protocol attrs — read once at class definition.
+    vendor: str = "deepeval"
+    vendor_version: str = _read_deepeval_version()
+    metric_schema: dict = _DEEPEVAL_METRIC_SCHEMA
 
     def evaluate(
         self,

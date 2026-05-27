@@ -9738,6 +9738,77 @@
         "title": "SubmitEditOut",
         "type": "object"
       },
+      "SuiteCatalogOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active_vendor": {
+            "title": "Active Vendor",
+            "type": "string"
+          },
+          "adr": {
+            "title": "Adr",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuiteEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "active_vendor",
+          "adr"
+        ],
+        "title": "SuiteCatalogOut",
+        "type": "object"
+      },
+      "SuiteEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "adr_ref": {
+            "title": "Adr Ref",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "integration": {
+            "title": "Integration",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "vendor": {
+            "title": "Vendor",
+            "type": "string"
+          },
+          "vendor_version": {
+            "default": "",
+            "title": "Vendor Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vendor",
+          "label",
+          "description",
+          "integration",
+          "adr_ref",
+          "status"
+        ],
+        "title": "SuiteEntry",
+        "type": "object"
+      },
       "SummaryOut": {
         "additionalProperties": false,
         "description": "Response envelope for GET /api/usage/summary.",
@@ -13850,6 +13921,28 @@
         "summary": "Update Domain",
         "tags": [
           "domains"
+        ]
+      }
+    },
+    "/api/evals/suites": {
+      "get": {
+        "description": "Return the multi-vendor eval suite catalog.\n\nEach entry includes `status` of `enabled` (currently wired as the active\nbackend) or `roadmap` (declared in ADR-003 but not yet implemented).",
+        "operationId": "eval_suites_list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuiteCatalogOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Suites",
+        "tags": [
+          "eval-suites"
         ]
       }
     },
