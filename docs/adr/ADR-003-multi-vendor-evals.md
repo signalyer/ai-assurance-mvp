@@ -1,6 +1,6 @@
 # ADR-003 — Multi-vendor eval suite integration
 
-- **Status:** Proposed (Session 57, 2026-05-27). Awaiting acceptance before scaffolding begins.
+- **Status:** Accepted (Session 57, 2026-05-27). Originally Proposed earlier same session; accepted without revision.
 - **Deciders:** Praveen Kosuri
 - **Supersedes:** none
 - **Related:** ADR-001 (sidecar pattern), Session 05 (`providers/` Protocol layer), Session 09 (SDK evaluator hooks), Session 56 #1 (JSONL fallback at proxy layer), Session 57a (offline `run_eval.py` precedent)
