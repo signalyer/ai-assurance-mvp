@@ -333,4 +333,24 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### F-018 · DOC-GAP / PLATFORM-GAP · POC plan's "CISO Console policy upload UI" doesn't exist (P2)
+
+**Found:** S55, 2026-05-26 — POC P3 close-out. User attempted the documented step "CISO Console → Policy Governance → upload policy" and reported there is no upload button anywhere in the CISO portal in prod.
+**Where:**
+  - Plan: [docs/plans/AZURE-ARCHITECT-POC.md §P3 step 2](../../docs/plans/AZURE-ARCHITECT-POC.md#L79) — "CISO Console → Policy Governance → upload policy → verify it lands in fail-closed evaluator"
+  - Reality: [ciso-console/src/pages/policies/PoliciesPage.tsx](../../ciso-console/src/pages/policies/PoliciesPage.tsx) renders `mock_data.POLICIES` (the conceptual control library, e.g. "Review policy update: Tool Authorization v2.1") via `GET /api/grc/policies`. No upload control, no .rego rendering, no link to the actual enforced policies in `policies/*.rego`.
+  - The engine's OPA-style policy evaluator does load `policies/*.rego` at runtime — but only from the deployed `wwwroot/policies/` directory. Operators can't upload, list, or hot-reload via UI.
+**What:** The P3 plan presumes a policy management UI that was never built. `.rego` policies ship through git → CI → /home/site/wwwroot/policies/ alongside the engine code, and there is no operator-facing visibility that they landed.
+**Why it stayed hidden:** The CISO Console's `PoliciesPage` *has the word "policies" in its URL*, which gave the appearance of being the right surface. It's actually the GRC control-library viewer for finserv compliance items — distinct subject matter, same word.
+**Mitigation (no UI build today):** Verification of policy activation is achievable via behavior: the agent's `--review` call passes through `@policy_gate(action="llm_call")` on the engine side. If `azure-architect.rego` failed to parse OR failed to evaluate, the call would have errored with a `PolicyDenied` (worst case) or 500 (parse error). S55 #14's successful Anthropic round trip is therefore the de-facto P3 acceptance test — the policy is active, parses cleanly, and integrates with the base.rego stack.
+**Fix options (S56 or later):**
+  1. (Smallest) New `GET /api/v1/policies/rego` endpoint that lists files in `policies/` with a parse-status flag per file, and a small CISO Console panel that renders the list read-only. Closes the "is it active?" gap without enabling upload.
+  2. (Medium) Add a write endpoint backed by validation + hot reload + audit-chain entry, plus an upload button. Material work because of security model: who can upload? Does it merge or replace? Does it require a quorum?
+  3. (Cleanest long-term) Treat `.rego` as code-only — these are enforcement contracts and belong in PRs, not in a UI. Update the plan to reflect that. The CISO Console gets a read-only "Active enforced policies" panel (option 1) and nothing else.
+**Recommendation:** option 3 + option 1's read-only panel. Policy enforcement is too load-bearing for a UI upload path; PR review is the right gate.
+**Knock-on:** `docs/plans/AZURE-ARCHITECT-POC.md §P3` needs updating to remove the "upload via CISO Console" step. The remaining P3 actions (framework matrix drill, EU AI Act PDF pack, intake Step 5 evidence URLs) all use UIs that DO exist.
+**Priority:** P2 (documentation correctness; the underlying enforcement works).
+
+---
+
 _(Append further findings below as P3-P10 progress.)_
