@@ -371,4 +371,127 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### S59 STEP 1 · P3 Framework Coverage matrix surface walkthrough
+
+**Surface:** `gov.aigovern.sandboxhub.co` → Framework Coverage (portfolio matrix view)
+**Date walked:** 2026-05-27
+**Re-scope note:** Original target `ai-sys-bae72e75` (Azure Architect) shows 0% across all 8 frameworks (F-021 — no mappings populated yet for that system). Switched to portfolio-wide view of all 7 systems.
+
+**Acceptance evidence (matrix-surface granularity):**
+- Matrix renders 7 systems × 8 frameworks (56 cells); live screenshot captured this session.
+- F-019 (export 401) + F-020 (display %) shipped and verified live — color thresholds and percentages now reflect real domain values.
+- Two systems (`ai-sys-bae72e75`, `ai-sys-ede33ad4`) are 0% across the board → F-021 data-load gap.
+- Three frameworks (ISO/IEC 42001, SR 11-7, FFIEC) are 0% for every system → expected; catalogs in `_PDF_NOT_YET`, Session-11 work.
+- Five frameworks have live data: NIST AI RMF, NIST AI 600-1, OWASP LLM Top 10, OWASP Agentic Top 10, EU AI Act.
+
+**Disposition:** P3 STEP 1 CLOSED at matrix-surface granularity. Per-cell RED-triage deferred to P5 (continuous monitoring) where individual-control drift is the natural lens.
+
+**Carry-forward to P5:**
+- Per-cell drill on `ai-sys-001` (Payments Exception Review Agent: 1-6% across all live frameworks — likely a controls-mapping gap, not a real coverage hole).
+- F-021: populate framework mappings for `ai-sys-bae72e75` once P4 produces traces.
+- F-022: portfolio rollup PDF before matrix-page "Export <framework>" buttons are usable end-to-end.
+
+---
+
+### S59 STEP 2 · EU AI Act PDF Pack generated for `ai-sys-002`
+
+**Surface:** `gov.aigovern.sandboxhub.co` → Reports → EU AI Act PDF Pack
+**Generator:** [pdf_report.py:616](../../pdf_report.py#L616) `generate_eu_ai_act_pack` (NIST AI RMF proxy mapping per file comment line 632)
+**System:** `ai-sys-002` (AML Investigation Assistant) — EU AI Act matrix cell 91% green
+**Artifact:** [agents/azure-architect/poc-evidence/p3-eu-ai-act-pack/eu-ai-act-pack-ai-sys-002.pdf](poc-evidence/p3-eu-ai-act-pack/eu-ai-act-pack-ai-sys-002.pdf)
+**Size:** 153,976 bytes
+**sha256:** `86c9382f2733025df95be2cac5747250aa1a4b66f25c1d7f6cf8a45303f466c6`
+**Generated:** 2026-05-27
+
+**Disposition:** STEP 2 ACCEPTED. PDF downloads cleanly via Reports surface (distinct from broken matrix-page export buttons per F-022). Sha256 above is the load-bearing audit value — same pattern as the .rego bundle hashes in F-018.
+
+---
+
+### F-019 · PLATFORM-BUG · CISO Console framework-export 401 (cross-origin cookie drop) (P1)
+
+**Found:** S59 STEP 1, 2026-05-27 — operator opened Framework Coverage matrix at `gov.aigovern.sandboxhub.co`, clicked any "Export <framework>" button, got `Export error: Export failed: HTTP 401`. All 7 framework export buttons failed identically.
+**Where:** [ciso-console/src/pages/frameworks/FrameworksPage.tsx:79](../../ciso-console/src/pages/frameworks/FrameworksPage.tsx#L79) — `exportPdf` bypasses the shared `apiPost` (because the response is binary PDF, not JSON) and uses a raw `fetch` with `credentials: 'same-origin'`. Shared client at [ciso-console/src/shared/api/client.ts:49](../../ciso-console/src/shared/api/client.ts#L49) correctly uses `credentials: 'include'`.
+**What:** CISO Console SPA runs at `gov.aigovern.sandboxhub.co`; engine runs at apex `aigovern.sandboxhub.co` — two origins per [[two-origins-spa-vs-engine]]. `same-origin` causes the session cookie to be omitted on cross-origin POST → engine sees unauth → 401.
+**Why it stayed hidden:** Every other API call goes through `apiRequest` which gets `credentials: 'include'` for free. PDF export is the only call that bypasses the helper (binary response forced a raw fetch). The special case forgot what the common case knew — exactly the gap a shared client exists to prevent.
+**Fix:** 1-line change at line 79: `'same-origin'` → `'include'`. Built + deployed to `swa-aigovern-gov-dev` (bundle `index-BrUbZMvJ.js`).
+**Status:** SHIPPED S59. **Note:** export will now reach the backend but currently 404s due to F-022 (empty `system_id` posted).
+**Compound rule earned:** Any raw `fetch` in an SPA outside the shared client is a contract drift waiting to happen. Either route through the shared client (preferred) or copy ALL of its options (`credentials`, headers, data-mode header).
+
+---
+
+### F-020 · PLATFORM-BUG · CISO Console framework-coverage % double-multiplied (9520%, 8770%…) (P1)
+
+**Found:** S59 STEP 1, 2026-05-27 — same matrix screenshot. AML Investigation Assistant showed `9130%` for EU AI Act, `8410%` for NIST AI RMF, etc. Color thresholds also broken: every non-zero cell rendered green (≥0.8 trip).
+**Where:** [ciso-console/src/pages/frameworks/FrameworksPage.tsx:114-122](../../ciso-console/src/pages/frameworks/FrameworksPage.tsx#L114) — `coverageStyle` thresholds (0.8, 0.5) and `fmtPct` (`Math.round(n * 100)`) both assumed a 0-1 ratio. Domain at [domain/framework_coverage.py:410](../../domain/framework_coverage.py#L410) emits 0-100: `passing_total / applicable_total * 100.0`.
+**What:** CISO Console multiplied a 0-100 value by 100 a second time. 95.2 → 9520%.
+**Why it stayed hidden:** Sweep showed CISO Console was the **only** consumer using 0-1. Team Portal's [AiSystemFrameworksPanel.tsx:113](../../team-portal/src/pages/ai-systems/AiSystemFrameworksPanel.tsx#L113) explicitly documents "Engine returns coverage_pct on a 0-100 scale"; [domain/pdf_pack_base.py:343](../../domain/pdf_pack_base.py#L343) renders `{ic.coverage_pct:.0f}%` (0-100). The CISO Console code was written against a wrong assumption that nothing else in the codebase tested for. Initial fix recommendation was to flip the domain — reversed after grep sweep (23 consumer files, ~all expect 0-100; flipping domain would break Team Portal + PDF generators + tests).
+**Fix:** CISO Console only. Thresholds 0.8 → 80, 0.5 → 50; dropped `* 100` from `fmtPct`. Added comment cross-referencing the domain contract. Shipped in same bundle as F-019.
+**Status:** SHIPPED S59.
+**Compound rule earned:** Before flipping a domain-level contract, grep ALL consumers — not just the one that's visibly wrong. The lone outlier is usually the bug, not the contract. (S59 #2.)
+
+---
+
+### F-022 · PLATFORM-BUG · Framework-matrix portfolio export sends empty system_id → 404 (P2, DEFERRED)
+
+**Found:** S59 STEP 1, 2026-05-27 — analysis after fixing F-019.
+**Where:** [FrameworksPage.tsx:81](../../ciso-console/src/pages/frameworks/FrameworksPage.tsx#L81) hardcodes `body: JSON.stringify({ system_id: '' })`. Backend [api/frameworks.py:432](../../api/frameworks.py#L432) requires a real system_id → returns 404 on empty.
+**What:** The 7 "Export <framework>" buttons are designed as a **portfolio-wide** action (one button per framework column, no per-system selector on the page). But the only generator shapes are per-system: `generate_nist_pack(system_id)`, `generate_owasp_pack(system_id)`, `generate_eu_ai_act_pack(system_id)`. No portfolio-rollup generator exists. UI promised a feature the backend never had.
+**Mitigation:** STEP 2 of S59 uses the **Reports** page (different surface) which calls per-system generators with real IDs — works today. Operators avoid the broken matrix-page buttons.
+**Fix options:**
+  1. **Portfolio rollup generators** (~45-60 min): add `generate_<fw>_portfolio_pack(system_ids: list[str])` for each live framework; backend dispatches when `system_id` is empty. Matches current button design. **Recommended.**
+  2. **Frontend picker** (~30 min): add a system dropdown above the export row; column buttons use the selected system. Easier backend (no change) but adds UI noise.
+  3. **Row-level export** (~20 min): drop column buttons; add per-cell export icons. Backend unchanged.
+**Status:** DEFERRED to S60. Not on P3 critical path. Logged with full fix plan above.
+**Compound rule earned:** UI promises that have never been implemented end-to-end are the same shape as F-018 and S57 #1. "Sweep operator verbs in docs vs UI reality" (S57 close note carry-forward) — still owed.
+
+---
+
+### F-023 · PLATFORM-GAP · No operator UI to add evidence to an existing AI system (P2)
+
+**Found:** S59 STEP 3, 2026-05-27 — operator opened Team Portal → AI Systems → `ai-sys-bae72e75` → Edit, looking for the "Step 5 evidence URLs" field per S59 plan §STEP 3 and POC plan §P3 step 3. Field is not present in Edit mode.
+**Where:**
+  - [team-portal/src/pages/ai-systems/AiSystemEditModal.tsx:4-5](../../team-portal/src/pages/ai-systems/AiSystemEditModal.tsx#L4) — header comment explicitly scopes Edit to drawer def-list fields only: *"Full MATERIAL set (cloud_provider, tools, rag_sources…) requires extending /grc/ai-systems/{id} — out of scope for #9."* Evidence URLs are not in that set.
+  - [team-portal/src/pages/ai-systems/RegisterSystemPage.tsx:81,426](../../team-portal/src/pages/ai-systems/RegisterSystemPage.tsx#L81) — Step 5 "Evidence Upload" exists in the registration wizard but not the edit flow.
+  - [api/evidence.py](../../api/evidence.py) — no POST/PUT routes. Read-only.
+  - [ciso-console/src/pages/evidence/EvidencePage.tsx](../../ciso-console/src/pages/evidence/EvidencePage.tsx) — read-only viewer. Only "Refresh" actions.
+**What:** Post-registration there is no operator-visible surface for adding evidence URLs, files, or hashes to a registered system. Evidence is effectively append-only via Python `repository` calls — i.e. code, not operator workflow.
+**Why it stayed hidden:** Same shape as F-018 (no policy upload UI; CISO Console's "Policies" page is a different concept) and F-022 (Framework matrix export buttons promise per-framework portfolio rollup PDFs that don't exist). All three are *plan documents a verb → no UI ships → operator hits a wall*. The Edit modal even self-documents the gap, but the plan never reconciled with that scope cut.
+**Mitigation in S59:** STEP 3 skipped at UI level. Audit/evidence chain for `ai-sys-bae72e75` is still complete via the artifacts logged in this retro itself: F-018 .rego bundle sha256s, F-019/F-020/F-022 fix references, STEP 2's EU AI Act PDF Pack sha256 (`86c9382f…f466c6`). These provide the operator-visible audit trail STEP 3 was meant to produce, just not via the registered-system Edit screen.
+**Fix options (S60+):**
+  1. **Minimal** — extend Edit modal with read+add (no delete) evidence URL form, backed by new `POST /api/v1/grc/ai-systems/{id}/evidence` endpoint. ~60-90 min.
+  2. **Right-sized** — full evidence CRUD in Edit + a CISO Console "Evidence Bundles" tab that supports add/link, not just view. ~3-4 hr.
+  3. **Architectural** — treat evidence as immutable artifacts in an append-only store (already true at storage layer); UI surfaces an "Attach Evidence" affordance from anywhere a system is shown (drawer, AI systems list row, framework drill modal). Larger refactor.
+**Recommendation:** option 1 next session if STEP 3-equivalent operator workflow becomes load-bearing for a demo; otherwise option 3 as long-term direction.
+**Status:** OPEN — DEFERRED to S60+. Logged with full triage. Does NOT block P3 EXIT GATE per disposition below.
+**Compound rule earned:** Three consecutive sessions producing the same finding shape ("UI promise that never shipped") makes this a class, not three incidents. The S57 close-note carry-forward — *"UI-promise audit: sweep operator verbs in docs vs UI reality"* — is now overdue. (S59 #3.)
+
+---
+
+### S59 STEP 3 · DISPOSITION
+
+**Decision:** SKIPPED at UI level due to F-023. Per-system audit trail demonstrated via this retrospective's own logged artifacts (F-018 .rego sha256s + STEP 2 PDF sha256 `86c9382f…f466c6`).
+**Plan deviation:** Plan §STEP 3 acceptance was "Step 5 saves; re-open shows persisted entries; system's evidence completeness % ticks up." This cannot execute without F-023's fix. P3 EXIT GATE proceeds with documented gap.
+
+---
+
+### S59 P3 EXIT GATE
+
+**Status:** P3 CLOSED at surface-acceptance granularity with three documented carry-forward gaps (F-021, F-022, F-023).
+
+**What P3 proved:**
+- Framework Coverage matrix surface renders the full 7×8 grid, end-to-end auth works, percentages and color thresholds are real (F-019 + F-020 shipped this session).
+- Per-system PDF generation works via the Reports surface for the live frameworks (STEP 2 produced [eu-ai-act-pack-ai-sys-002.pdf](poc-evidence/p3-eu-ai-act-pack/eu-ai-act-pack-ai-sys-002.pdf), sha256 `86c9382f…f466c6`).
+- Audit trail concept is real: sha256-anchored evidence (PDF + .rego bundles from F-018) is verifiable + persistent.
+- The `.rego` policy enforcement chain demonstrated in F-018 is still load-bearing — `azure-architect.rego` is active in the engine policy stack.
+
+**What P3 explicitly did NOT prove (carry-forward):**
+- **F-021** — framework coverage data populated for `ai-sys-bae72e75` (Azure Architect itself shows 0% across all frameworks; awaits P4 agent traces).
+- **F-022** — portfolio rollup PDF (matrix-page Export buttons broken end-to-end; Reports surface is the working alternative for now).
+- **F-023** — post-registration evidence-add UI (operator must rely on Python `repository` for evidence on existing systems).
+- **UI-promise audit** — three F-018/F-022/F-023 same-shape findings in three sessions; a dedicated audit pass owes the carry-forward queue.
+
+**Proceeding to P4:** Agent core (tool layer + orchestration loop, 5-turn cap, output to `data/plans.jsonl`, synthesis row to `eval/dataset.jsonl`). Per S59 plan §STEP 4.
+
+---
+
 _(Append further findings below as P3-P10 progress.)_

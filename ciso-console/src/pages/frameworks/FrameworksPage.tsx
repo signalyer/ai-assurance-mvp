@@ -76,7 +76,7 @@ async function exportPdf(slug: string, displayName: string): Promise<void> {
       `${base}/frameworks/${encodeURIComponent(slug)}/export`,
       {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json', Accept: 'application/pdf,application/json' },
         body: JSON.stringify({ system_id: '' }),
       },
@@ -110,16 +110,18 @@ function closeDrill(): void {
 // Helpers
 // ============================================================
 
+// Engine returns coverage_pct on a 0-100 scale (domain/framework_coverage.py:410).
+// Matches Team Portal's AiSystemFrameworksPanel contract.
 function coverageStyle(pct: number): { background: string; color: string } {
-  if (pct >= 0.8) return { background: 'rgba(16,185,129,0.2)', color: '#10b981' };
-  if (pct >= 0.5) return { background: 'rgba(245,158,11,0.2)', color: '#f59e0b' };
+  if (pct >= 80) return { background: 'rgba(16,185,129,0.2)', color: '#10b981' };
+  if (pct >= 50) return { background: 'rgba(245,158,11,0.2)', color: '#f59e0b' };
   if (pct > 0) return { background: 'rgba(239,68,68,0.15)', color: '#ef4444' };
   return { background: 'rgba(30,40,60,0.5)', color: 'var(--text-tertiary)' };
 }
 
 function fmtPct(n: number | undefined): string {
   if (n == null) return '—';
-  return `${Math.round(n * 100)}%`;
+  return `${Math.round(n)}%`;
 }
 
 // ============================================================
