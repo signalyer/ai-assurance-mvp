@@ -253,11 +253,108 @@ def _evaluate_local(
         if not result.allowed:
             return result
 
+    # Workload-specific (rego-as-data, F-024): enforce the workload's rego
+    # file as the source of truth for tool allowlists + mutation-verb denies.
+    # Runs LAST so it acts as a final overlay; org-mandatory still wins on
+    # PII and other non-negotiables.
+    result = _check_workload_specific(workload_id, action, input_data)
+    if not result.allowed:
+        return result
+
     return PolicyResult(
         decision=Decision.ALLOW,
         category=PolicyCategory.ORG_MANDATORY,
         policy_name="all_local_checks_pass",
         reason="All local policy checks passed",
+    )
+
+
+def _check_workload_specific(workload_id: str, action: str, input_data: dict) -> PolicyResult:
+    """Enforce workload-specific rego data (F-024).
+
+    Reads sets + arrays from the workload's rego file and enforces them in
+    Python. Currently supports:
+      - `readonly_*_tools` set — tool_invoke allowlist (rule 1)
+      - `mutation_verbs` list — tool_name prefix deny (rule 2)
+      - `memory_write` action  — denied for workloads whose rego declares
+        a stateless contract (we detect this by file presence of the rule)
+
+    For any other rule shape (REVIEW conditionals, integer caps, etc.) this
+    function is a no-op and returns ALLOW. Those need either OPA or a real
+    Rego runtime; out of scope for F-024 unblock.
+    """
+    from domain.rego_loader import resolve_workload_policy
+
+    rego_filename, data = resolve_workload_policy(workload_id)
+    if not data:
+        return PolicyResult(
+            decision=Decision.ALLOW,
+            category=PolicyCategory.TEAM,
+            policy_name="no_workload_specific_policy",
+        )
+
+    if action == "tool_invoke":
+        tool_name = input_data.get("tool_name", "")
+        if not tool_name:
+            return PolicyResult(
+                decision=Decision.DENY,
+                category=PolicyCategory.TEAM,
+                policy_name="workload_tool_name_required",
+                reason="tool_invoke requires tool_name for workload policy enforcement",
+                metadata={"workload_id": workload_id, "rego": rego_filename},
+            )
+
+        # Rule 2: mutation-verb prefix deny (belt-and-braces — runs BEFORE
+        # the allowlist so a misdrafted allowlist entry like "delete_foo"
+        # is still caught).
+        mutation_verbs = data.get("mutation_verbs") or []
+        for verb in mutation_verbs:
+            if tool_name.startswith(verb):
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_mutation_verb_blocked",
+                    reason=(
+                        f"Tool '{tool_name}' uses a mutation-verb prefix "
+                        f"('{verb}'); workload is read-only per {rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "tool": tool_name,
+                        "matched_verb": verb,
+                        "severity": "CRITICAL",
+                    },
+                )
+
+        # Rule 1: allowlist. We accept any set whose name ends with `_tools`
+        # so future workloads with a differently-named allowlist (e.g.
+        # `readonly_aws_tools`) work without code changes.
+        allowlists = [v for k, v in data.items() if k.endswith("_tools") and isinstance(v, set)]
+        if allowlists:
+            allowed = set().union(*allowlists)
+            if tool_name not in allowed:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_tool_not_allowlisted",
+                    reason=(
+                        f"Tool '{tool_name}' is not in the {workload_id} "
+                        f"read-only allowlist (defined in {rego_filename})"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "tool": tool_name,
+                        "severity": "HIGH",
+                    },
+                )
+
+    return PolicyResult(
+        decision=Decision.ALLOW,
+        category=PolicyCategory.TEAM,
+        policy_name="workload_specific_pass",
+        metadata={"rego": rego_filename},
     )
 
 

@@ -164,17 +164,34 @@ def _evaluate_policy(
 
 
 def _extract_arg(func: Callable, args: tuple, kwargs: dict, arg_name: str, default: Any = None) -> Any:
-    """Extract a named arg from kwargs or positional args."""
+    """Extract a named arg from kwargs, positional args, or the function's default.
+
+    Resolution order:
+      1. Explicit kwarg at call site.
+      2. Positional arg at the parameter's declared index.
+      3. The parameter's signature default (e.g. `tool_name="list_resource_groups"`
+         as a kwarg-only default). Without this fallback, governed tools that
+         encode their identity via a default value are invisible to the
+         policy engine — every caller would have to repeat the kwarg, and a
+         missed call site would silently bypass workload-specific rules.
+         Caught in F-024 when @policy_gate(action="tool_invoke") failed to
+         deny a mutation-verb tool whose name lived only in the default.
+      4. The provided `default` arg.
+    """
     if arg_name in kwargs:
         return kwargs[arg_name]
 
     sig = inspect.signature(func)
-    params = list(sig.parameters.keys())
+    params = sig.parameters
 
     if arg_name in params:
-        idx = params.index(arg_name)
+        positional_names = list(params.keys())
+        idx = positional_names.index(arg_name)
         if idx < len(args):
             return args[idx]
+        param_default = params[arg_name].default
+        if param_default is not inspect.Parameter.empty:
+            return param_default
 
     return default
 

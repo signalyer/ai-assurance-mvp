@@ -65,10 +65,19 @@ import signallayer
 from prompts import (
     MODEL_DEEP,
     MODEL_FAST,
+    PLAN_SYSTEM_PROMPT,
+    PLAN_TOOL_SPECS,
     SYSTEM_PROMPT_REVIEW,
     TOKEN_BUDGETS,
     build_user_message,
 )
+
+# S60 STEP 2 — agent orchestration loop constants. The 5-turn cap is locked in
+# SESSION-60 (cost compounds across turns + Anthropic tool_use can pathologically
+# loop on ambiguous tool errors). Bump deliberately, never silently.
+PLAN_TURN_CAP: int = 5
+PLAN_LOG_PATH = Path(__file__).resolve().parents[2] / "data" / "plans.jsonl"
+PLAN_SYNTHESIS_PATH = Path(__file__).resolve().parent / "eval" / "dataset.jsonl"
 
 
 # Load the agent's own .env regardless of cwd. We're typically launched
@@ -271,6 +280,187 @@ async def dry_run() -> None:
     print(f"[http] status={http_result.status_code} payload={http_result!s}")
 
 
+# --- S60 STEP 2: agent orchestration loop ------------------------------------
+#
+# Anthropic tool_use loop with a hard 5-turn cap.
+# Each turn:
+#   1. Call Claude with the current message stack + tool specs
+#   2. Append a per-turn row to data/plans.jsonl (turn no, stop_reason, calls)
+#   3. If stop_reason != "tool_use", break — model is done
+#   4. Otherwise dispatch each tool_use block through the local dispatch
+#      table (every tool fn is already governed by @policy_gate); append
+#      tool_result blocks; loop
+# Final synthesis: one JSONL row to eval/dataset.jsonl in the canonical
+# (input, output, context, metadata) shape so S58's eval harness picks it up
+# without further plumbing.
+
+
+def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
+    """Map tool_name → coroutine factory.
+
+    We pre-bind `subscription_id` here because the Anthropic input_schema
+    advertises it as required but the model may still occasionally omit it
+    under tight token pressure. A late KeyError inside the loop would burn
+    a retry; defaulting to the operator-supplied value is safer.
+
+    Each entry returns an *awaitable* — the loop is responsible for awaiting
+    it so we can `gather` parallel tool_use blocks in a future turn.
+    """
+    from azure.identity import DefaultAzureCredential  # local import — see arm_read
+    from tools.arm_read import list_resource_groups
+
+    cred = DefaultAzureCredential()
+
+    async def _list_rgs(tool_input: dict) -> Any:
+        sub = tool_input.get("subscription_id") or subscription_id
+        result = await list_resource_groups(credential=cred, subscription_id=sub)
+        return result.model_dump()
+
+    return {"list_resource_groups": _list_rgs}
+
+
+async def _run_plan(
+    operator_request: str,
+    subscription_id: str,
+    *,
+    model: str = MODEL_FAST,
+) -> dict[str, Any]:
+    """Drive one --plan run end-to-end.
+
+    Returns a dict with: synthesis (str), turns (int), stop_reason (str),
+    run_id (str), tool_calls (list of summaries), cost_usd (float).
+    """
+    import uuid
+    from anthropic import Anthropic
+    import storage  # engine root must be on PYTHONPATH
+
+    _init_sdk()
+    anthropic = Anthropic(api_key=_require_anthropic_key())
+    run_id = f"plan-{uuid.uuid4().hex[:12]}"
+
+    dispatch = _build_tool_dispatch(subscription_id)
+
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": (
+            f"{operator_request.strip()}\n\n"
+            f"Subscription scope: {subscription_id}"
+        )},
+    ]
+    tool_call_summaries: list[dict[str, Any]] = []
+    final_text = ""
+    final_stop = ""
+    turn = 0
+
+    for turn in range(PLAN_TURN_CAP):
+        started = time.monotonic()
+        msg = anthropic.messages.create(
+            model=model,
+            max_tokens=TOKEN_BUDGETS["plan_turn"],
+            system=PLAN_SYSTEM_PROMPT,
+            tools=PLAN_TOOL_SPECS,
+            messages=messages,
+        )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+
+        # Extract any text blocks emitted this turn (the final turn typically
+        # produces only text; intermediate turns may produce text + tool_use).
+        turn_text = "".join(
+            b.text for b in msg.content if getattr(b, "type", None) == "text"
+        )
+        tool_uses = [b for b in msg.content if getattr(b, "type", None) == "tool_use"]
+
+        # Per-turn telemetry → data/plans.jsonl (CLAUDE.md storage rule)
+        storage._append_jsonl(PLAN_LOG_PATH, {
+            "run_id": run_id,
+            "turn": turn,
+            "model": model,
+            "stop_reason": msg.stop_reason,
+            "elapsed_ms": elapsed_ms,
+            "input_tokens": int(getattr(msg.usage, "input_tokens", 0) or 0),
+            "output_tokens": int(getattr(msg.usage, "output_tokens", 0) or 0),
+            "tool_calls": [{"name": tu.name, "input": tu.input} for tu in tool_uses],
+            "text_chars": len(turn_text),
+        })
+
+        final_stop = msg.stop_reason or ""
+        if msg.stop_reason != "tool_use":
+            final_text = turn_text
+            break
+
+        # Append assistant message verbatim so tool_use_id references resolve.
+        messages.append({"role": "assistant", "content": msg.content})
+
+        # Dispatch each tool_use → tool_result. The @policy_gate decorator on
+        # each tool fn surfaces PolicyDeniedError; we render that back to the
+        # model as an error tool_result so the model can self-correct rather
+        # than the loop aborting (defense in depth: rego allowlist already
+        # constrains which tools the model can call).
+        tool_results: list[dict[str, Any]] = []
+        for tu in tool_uses:
+            fn = dispatch.get(tu.name)
+            if fn is None:
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "is_error": True,
+                    "content": f"Tool '{tu.name}' is not implemented in this build.",
+                })
+                tool_call_summaries.append({"tool": tu.name, "ok": False, "reason": "unimplemented"})
+                continue
+            try:
+                result = await fn(tu.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": json.dumps(result, default=str),
+                })
+                tool_call_summaries.append({"tool": tu.name, "ok": True})
+            except Exception as exc:  # noqa: BLE001
+                # PolicyDeniedError or any tool runtime error lands here. We
+                # surface the message to the model — never swallow silently
+                # ([[bare-except-hides-broken-integrations]]).
+                err_msg = f"{type(exc).__name__}: {exc}"
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "is_error": True,
+                    "content": err_msg,
+                })
+                tool_call_summaries.append({"tool": tu.name, "ok": False, "reason": err_msg})
+                print(f"[plan turn={turn}] tool {tu.name} failed: {err_msg}", file=sys.stderr)
+
+        messages.append({"role": "user", "content": tool_results})
+    else:
+        # Loop completed without break — hit the turn cap without final synthesis.
+        final_stop = "turn_cap_reached"
+        final_text = "(no synthesis — agent hit the 5-turn cap)"
+
+    # Final synthesis row to eval/dataset.jsonl. Four canonical fields so
+    # S58's eval harness picks it up unchanged.
+    PLAN_SYNTHESIS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    storage._append_jsonl(PLAN_SYNTHESIS_PATH, {
+        "input": operator_request,
+        "output": final_text,
+        "context": tool_call_summaries,
+        "metadata": {
+            "run_id": run_id,
+            "turns": turn + 1,
+            "stop_reason": final_stop,
+            "model": model,
+            "subscription_id": subscription_id,
+            "agent": "azure-architect",
+        },
+    })
+
+    return {
+        "run_id": run_id,
+        "turns": turn + 1,
+        "stop_reason": final_stop,
+        "synthesis": final_text,
+        "tool_calls": tool_call_summaries,
+    }
+
+
 def _print_review(result: dict[str, Any]) -> None:
     """Render the review + the eval scoreboard to stdout."""
     print("\n" + "=" * 72)
@@ -333,9 +523,22 @@ def _usage() -> str:
         "  python agent.py --review \"<architecture description>\"\n"
         "  python agent.py --review-file <path>\n"
         "  python agent.py --review -          # read description from stdin\n"
+        "  python agent.py --plan \"<request>\" --subscription <sub-id>\n"
+        "                                       # S60 orchestration loop (5-turn cap)\n"
         "Optional:\n"
-        "  --fast    Use Sonnet 4.6 instead of Opus 4.7 (cheaper, faster)\n"
+        "  --fast    Use Sonnet 4.6 instead of Opus 4.7 (cheaper, faster).\n"
+        "            --plan defaults to Sonnet because cost compounds per turn.\n"
     )
+
+
+def _arg_value(argv: list[str], flag: str) -> str | None:
+    """Pull the value following `flag` from argv, or None."""
+    if flag not in argv:
+        return None
+    idx = argv.index(flag)
+    if idx + 1 >= len(argv):
+        raise SystemExit(f"{flag} requires a value")
+    return argv[idx + 1]
 
 
 if __name__ == "__main__":
@@ -354,6 +557,29 @@ if __name__ == "__main__":
             raise SystemExit("Empty architecture description.")
         result = asyncio.run(review_architecture(text, fast=fast))
         _print_review(result)
+    elif "--plan" in argv:
+        request = _arg_value(argv, "--plan")
+        if not request or not request.strip():
+            raise SystemExit("--plan requires a non-empty request string.")
+        subscription = _arg_value(argv, "--subscription")
+        if not subscription:
+            subscription = os.environ.get("AZURE_SUBSCRIPTION_ID", "").strip()
+        if not subscription:
+            raise SystemExit(
+                "--plan requires --subscription <sub-id> or AZURE_SUBSCRIPTION_ID env var."
+            )
+        # Default Sonnet for --plan: cost compounds per turn (S60 lock).
+        # --fast is a no-op here but harmless; --deep can force Opus.
+        model = MODEL_DEEP if "--deep" in argv else MODEL_FAST
+        result = asyncio.run(_run_plan(request, subscription, model=model))
+        print("\n" + "=" * 72)
+        print(f"PLAN RUN {result['run_id']}  turns={result['turns']}  "
+              f"stop={result['stop_reason']}  tools={len(result['tool_calls'])}")
+        print("=" * 72 + "\n")
+        print(result["synthesis"])
+        print("\n" + "=" * 72)
+        print(f"plans.jsonl: {PLAN_LOG_PATH}")
+        print(f"dataset.jsonl: {PLAN_SYNTHESIS_PATH}")
     else:
         print(_usage())
         raise SystemExit(2)

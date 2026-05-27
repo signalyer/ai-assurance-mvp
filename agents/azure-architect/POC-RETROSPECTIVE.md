@@ -494,4 +494,61 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### F-024 · PLATFORM-CRITICAL · `policies/*.rego` files were decorative — never enforced (RESOLVED in S60)
+
+**Found:** S60 STEP 1, 2026-05-27 — wrapping `list_resource_groups` with `@signallayer.policy_gate(action="tool_invoke")` and calling it with a fake mutation-verb tool name (`delete_resource_group`) returned ALLOW instead of the `PolicyDeniedError` the rego file promises.
+**Where:**
+  - [domain/policy_engine.py](../../domain/policy_engine.py) — `_evaluate_local()` ran the five Python `_check_*` helpers then returned `policy_name="all_local_checks_pass"`. **Zero code paths loaded or evaluated any `.rego` file.**
+  - [policies/azure-architect.rego](../../policies/azure-architect.rego) — workload-specific tool allowlist, mutation-verb deny, multi-subscription review, LLM-call budget — all defined but **never executed**.
+  - [middleware/policy.py:166](../../middleware/policy.py#L166) — `_extract_arg()` read kwargs + positional args but ignored Python signature defaults. So `tool_name="..."` as a kwarg-only default was invisible to the engine.
+**What:** Two compounding bugs masked each other. (1) The engine never consulted rego files. (2) Even if it had, `_extract_arg` couldn't see tool identities encoded as defaults — a pattern the SDK encourages. The F-018 contract ("rego sha256 visible in CISO Console = enforced rule") was a lie at the engine layer despite the UI showing a valid hash.
+**Why it stayed hidden:** Same shape as [[bare-except-hides-broken-integrations]] — the engine returned `Decision.ALLOW` cleanly with a green-looking policy_name. No exception, no warning, no telemetry. Three full sessions (S57/S58/S59) shipped on top of this because no negative test ever ran a denied tool through the decorator chain.
+**Fix (this session):**
+  1. New [domain/rego_loader.py](../../domain/rego_loader.py) — regex parser for rego sets/lists/ints. Pure data extraction (no Rego logic execution); file remains source of truth, enforcement runs in Python alongside existing `_check_*` helpers. No new runtime dep, no OPA install.
+  2. New `_check_workload_specific()` in `domain/policy_engine.py` — enforces allowlist + mutation-verb prefix deny derived from rego data.
+  3. [middleware/policy.py:166](../../middleware/policy.py#L166) — `_extract_arg` falls back to the function's signature default when a kwarg is missing.
+**Verification:** Six tests pass via direct `evaluate()` AND the full `@policy_gate` decorator chain:
+  - `delete_resource_group` → DENY (`workload_mutation_verb_blocked`) ✓
+  - `list_storage_accounts` → DENY (`workload_tool_not_allowlisted`) ✓
+  - `list_resource_groups` → ALLOW, function body reached ✓
+  - tool_invoke with no `tool_name` for an azure-architect workload → DENY ✓
+  - non-azure-architect workloads → unchanged ALLOW (no regression) ✓
+  - `fake_delete()` through the SDK decorator chain → raises `PolicyDeniedError` ✓
+**Scope deferred:** Rule 5 (`max_llm_calls_per_run=25`) and Rule 6 (multi-subscription REVIEW) are NOT enforced yet — need OPA or run-state plumbing. Parser extracts the int + the conditional shape, but `_check_workload_specific` is a no-op for them. Documented in `domain/rego_loader.py`.
+**Compound rule earned:** Any "the engine reads policy from a file" contract MUST have a negative test in CI that proves a known-bad input is denied. Memory: [[rego-files-were-decorative]].
+
+---
+
+### F-025 · PLATFORM-MEDIUM · `PolicyDeniedError` class mismatch SDK vs engine (DEFERRED)
+
+**Found:** S60 STEP 1, 2026-05-27 — `except signallayer.errors.PolicyDeniedError:` failed to catch a real deny because the engine raises `middleware.policy.PolicyDeniedError` — an *unrelated* class, not a subclass. MROs share only `Exception`.
+**Where:**
+  - [signallayer/errors.py](../../signallayer/errors.py) — `class PolicyDeniedError(SignalLayerError)`. Advertised in SDK `__all__`.
+  - [middleware/policy.py](../../middleware/policy.py) — `class PolicyDeniedError(Exception)`. Raised by every `@policy_gate` decorator.
+**Blast radius:** LOW now — error messages, policy_name, reason still surface. Only `except` discrimination is broken. Becomes MEDIUM once external SDK consumers exist.
+**Fix sketch:** Make `middleware.policy.PolicyDeniedError` subclass `signallayer.errors.PolicyDeniedError`, or re-export the same class. ~15 min + one rebuild.
+**Status:** OPEN — deferred.
+
+---
+
+### S60 P4 STEP 1+2 · STATUS
+
+**STEP 1 (tool layer) — DONE:**
+- [agents/azure-architect/tools/arm_read.py](../../agents/azure-architect/tools/arm_read.py) — `list_resource_groups()` body implemented (real `ResourceManagementClient.resource_groups.list` wrapped in `asyncio.to_thread`, pydantic-strict return), wrapped with `@signallayer.policy_gate(action="tool_invoke")`.
+- F-024 unblocks the STEP 1 acceptance criterion ("rego allowlist enforced").
+
+**STEP 2 (orchestration loop) — STRUCTURALLY DONE, NOT LIVE-TESTED:**
+- [agents/azure-architect/agent.py](../../agents/azure-architect/agent.py) — `_run_plan()` with 5-turn cap, governed dispatch, per-turn append to `data/plans.jsonl`, final synthesis row to `agents/azure-architect/eval/dataset.jsonl` in canonical `(input, output, context, metadata)` shape.
+- CLI: `python agent.py --plan "<request>" --subscription <sub-id>` (Sonnet 4.6 default per S60 cost lock; `--deep` forces Opus).
+- Tool errors (including `PolicyDeniedError`) rendered back to the model as `is_error: True` tool_result blocks — model can self-correct within remaining turns.
+- **Not exercised end-to-end** — requires `pip install azure-mgmt-resource azure-identity`, `az login`, `ANTHROPIC_API_KEY`, real subscription ID. First live run is an S61 item.
+
+**STEP 3 (per-tool tracing + policy verification) — PARTIAL:**
+- Policy denial verified via direct `evaluate()` + decorator chain (F-024 tests).
+- Live `trace_id` in `data/traces.jsonl` for tool dispatch deferred to first live `--plan` run.
+
+**STEP 4 (Mermaid synthesis + per-tool eval) — DEFERRED to S61** per S60 plan.
+
+---
+
 _(Append further findings below as P3-P10 progress.)_

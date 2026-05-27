@@ -1,22 +1,35 @@
-"""ARM read tools — 5 async functions wrapping azure.mgmt.* packages.
+"""ARM read tools — async functions wrapping azure.mgmt.* packages.
 
 P4 Day-1 deliverable. Skeleton-only in S55 prep: signatures, docstrings,
-JSON-schema-pinned return types, NotImplementedError bodies. Day-1 of P4
-fills in azure.mgmt.* calls + unit tests against fixture data.
+JSON-schema-pinned return types, NotImplementedError bodies. S60 STEP 1
+fills in the first body: `list_resource_groups`.
 
 Auth contract: every function expects an azure.identity credential injected
 via the agent's startup path (`agent.py::_init_azure_credential`). No env-var
 sniffing inside individual tool functions — keeps the trust boundary at
 one explicit init site, per CLAUDE.md universal rule "SDK Client
 Initialisation: always at module/global scope".
+
+Governance contract (S60): every tool is wrapped with
+`@signallayer.policy_gate(action="tool_invoke")` and accepts a `tool_name`
+kwarg whose value matches the function name. `middleware.policy._evaluate_policy`
+auto-extracts `tool_name` into the rego input, which fires Rule 1 (allowlist)
+and Rule 2 (mutation-verb) in `policies/azure-architect.rego`. Adding a
+function here that is NOT in the rego `readonly_azure_tools` set will deny
+at runtime — single source of truth.
 """
 
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import Protocol
+
+import signallayer
 
 from .schemas import (
     NetworkTopologyOut,
+    ResourceGroupSummary,
     ResourceGroupsListOut,
     ResourceMetadata,
     RoleAssignmentsListOut,
@@ -61,21 +74,68 @@ async def list_subscriptions(credential: _Cred) -> SubscriptionsListOut:
 # ---------------------------------------------------------------------------
 
 
+@signallayer.policy_gate(action="tool_invoke")
 async def list_resource_groups(
-    credential: _Cred, subscription_id: str
+    credential: _Cred,
+    subscription_id: str,
+    *,
+    tool_name: str = "list_resource_groups",
+    workload_id: str = "azure-architect",
 ) -> ResourceGroupsListOut:
     """List every resource group in one subscription.
 
     Wraps `azure.mgmt.resource.ResourceManagementClient.resource_groups.list`.
+    The SDK call is synchronous; we wrap it in `asyncio.to_thread` so the
+    orchestration loop can fan-out tool calls without blocking the event loop.
 
     Args:
-        credential: Azure credential.
+        credential: Azure credential (DefaultAzureCredential in dev,
+            ManagedIdentityCredential in prod). Injected by the agent
+            startup path; never sourced here from env.
         subscription_id: Target subscription GUID.
+        tool_name: Identity for the policy engine. DO NOT override at call
+            site — it is the contract key used by rego Rule 1 (allowlist)
+            and Rule 2 (mutation-verb prefix). Default matches function name.
+        workload_id: Workload identity for policy + audit attribution.
 
     Returns:
-        Strict ResourceGroupsListOut.
+        Strict ResourceGroupsListOut (pydantic v2, frozen, extra="forbid").
+
+    Raises:
+        signallayer.PolicyDeniedError: If rego denies the call.
+        RuntimeError: If azure-mgmt-resource is not installed in the env.
     """
-    raise NotImplementedError("P4 Day-1 — wrap ResourceManagementClient.resource_groups.list")
+    try:
+        from azure.mgmt.resource import ResourceManagementClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-mgmt-resource not installed. Run "
+            "`uv pip install -e agents/azure-architect` (or install the "
+            "package directly) before invoking ARM read tools."
+        ) from exc
+
+    def _call_sync() -> list[ResourceGroupSummary]:
+        client = ResourceManagementClient(credential, subscription_id)
+        groups: list[ResourceGroupSummary] = []
+        for rg in client.resource_groups.list():
+            groups.append(
+                ResourceGroupSummary(
+                    name=rg.name or "",
+                    location=rg.location or "",
+                    tags=dict(rg.tags or {}),
+                    provisioning_state=(
+                        getattr(rg, "properties", None)
+                        and getattr(rg.properties, "provisioning_state", "")
+                    ) or "",
+                )
+            )
+        return groups
+
+    resource_groups = await asyncio.to_thread(_call_sync)
+    return ResourceGroupsListOut(
+        subscription_id=subscription_id,
+        resource_groups=resource_groups,
+    )
 
 
 # ---------------------------------------------------------------------------
