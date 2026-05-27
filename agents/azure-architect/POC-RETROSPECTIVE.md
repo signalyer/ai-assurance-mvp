@@ -310,6 +310,12 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
   3. Both — warn AND fallback. JSONL is the durable-by-default path; Langfuse is the visualization path.
 **Priority:** P1 (silent telemetry loss class — same family as F-015's misdiagnosis lesson: "if the symptom looks impossible, look for a silent no-op first").
 
+**Status:** CLOSED in S56 #1 (commit `c73bc70`). Resolution went further than the original framing: option 3 (warn + JSONL fallback) PLUS a previously-unknown SDK-drift fix.
+  - Module-level warning fires at `tracer.py` import when `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` absent (CI log confirmed it lands cleanly).
+  - Every trace is appended to `data/traces.jsonl` (joinable with `data/evals.jsonl` via `trace_id`), regardless of whether Langfuse is configured.
+  - **Bonus find:** Langfuse 4.x renamed `create_generation` → `start_observation`. The old code had been silently no-op'ing remote tracing in prod since the SDK upgrade because of the `except: pass` swallow. Switched to `client.start_as_current_observation(as_type='generation', ...)`. `langfuse_sent` field in `traces.jsonl` now reflects actual API success, not just "client constructed."
+**Lesson:** when you remove a `bare except: pass`, expect to discover at least one broken integration. Worth a memory entry.
+
 ---
 
 ### F-017 · PLATFORM-GAP · Eval scores have zero persistence path (P0)
@@ -331,6 +337,12 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
   - Eval-trend dashboard — a chart of relevancy / toxicity / pii_leakage scores over time per workload. The relevancy=0.77 result in S55 #14 (Sonnet drifted into cross-region recommendations for an explicitly single-region input) is exactly the kind of signal that becomes valuable when trended.
 **Priority:** P0 — promised platform capability ships hollow.
 
+**Status:** CLOSED in S56 #1 (commit `c73bc70`). Option 3 (Langfuse + JSONL).
+  - `evaluate_response()` signature extended with `trace_id`, `workload_id`, `model` kwargs. Agent threads `trace_id` from `tracer.trace_call()` straight through, so `data/traces.jsonl` and `data/evals.jsonl` join cleanly.
+  - Each non-skipped metric pushed to Langfuse via `client.create_score(trace_id=..., name=..., value=..., data_type='NUMERIC')` (the 4.x rename — old `score()` was failing too, same root cause as F-016).
+  - New `GET /api/v1/evals?trace_id=&workload_id=&limit=` endpoint at [api/evals.py](../../api/evals.py) reads the JSONL back. Returns the file path in the response for operator transparency.
+  - Sibling work (CISO Console trace-viewer panel with scoreboard, eval-trend dashboard) is deferred — the data store now exists, the rendering can come when the trace viewer itself is built.
+
 ---
 
 ### F-018 · DOC-GAP / PLATFORM-GAP · POC plan's "CISO Console policy upload UI" doesn't exist (P2)
@@ -350,6 +362,12 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 **Recommendation:** option 3 + option 1's read-only panel. Policy enforcement is too load-bearing for a UI upload path; PR review is the right gate.
 **Knock-on:** `docs/plans/AZURE-ARCHITECT-POC.md §P3` needs updating to remove the "upload via CISO Console" step. The remaining P3 actions (framework matrix drill, EU AI Act PDF pack, intake Step 5 evidence URLs) all use UIs that DO exist.
 **Priority:** P2 (documentation correctness; the underlying enforcement works).
+
+**Status:** CLOSED in S56 #2 (commit `02de720`). Resolution = recommendation: option 3 + option 1's read-only panel. No upload UI — by design.
+  - New `GET /api/v1/policies/rego` at [api/policies_rego.py](../../api/policies_rego.py) enumerates `policies/*.rego` with `filename`, `package`, `summary` (first comment line), `size_bytes`, `sha256`. Sha256 is the load-bearing audit field — "policy X was active on date Y" is provable by hash match against git history.
+  - CISO Console gets a new read-only "Active enforced policies" panel via `RegoBundlesPanel` in [ciso-console/src/pages/policies/PoliciesPage.tsx](../../ciso-console/src/pages/policies/PoliciesPage.tsx), rendered above the existing GRC control-library table. Read-only by design.
+  - [docs/plans/AZURE-ARCHITECT-POC.md §P3 step 2](../../docs/plans/AZURE-ARCHITECT-POC.md#L79) rewritten: "Ship via git → CI; verify via 'Active enforced policies' panel + agent `--review` pass-through." No more upload claim.
+**Compound rule earned:** "view" vs "upload" is the standard separation between change governance (git/PR/CI) and operational visibility (read-only panel). Conflating them is what F-018 was.
 
 ---
 
