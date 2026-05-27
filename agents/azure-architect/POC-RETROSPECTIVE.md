@@ -552,4 +552,32 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### S61 P4 STEP 1+2 LIVE · STATUS
+
+**First live `--plan` run — DONE (2026-05-27):**
+- Installed `azure-mgmt-resource==25.0.0` + `azure-identity==1.25.3` (+ msal, msal-extensions, isodate transitives).
+- Subscription scope: `06e4c6fa-8b0f-4e4a-b993-e0fd21eb22a3` (SignalLayerDev).
+- Command: `PYTHONPATH=. python agents/azure-architect/agent.py --plan "audit my dev subscription: list resource groups and summarise what I have" --subscription 06e4c6fa-…`.
+- Model: `claude-sonnet-4-6` (cost-locked default per S60). `--deep` for Opus.
+- Run: `plan-7036dc14bb58` · turns=2 · stop=`end_turn` · 1 tool call (`list_resource_groups` ok=True).
+- 6 resource groups returned. Sonnet produced a credible WAF synthesis across all 5 pillars from RG-level inventory alone (flagged `DefaultResourceGroup-EUS` anti-pattern + universal missing tags — both real findings).
+- Artifacts persisted:
+  - [data/plans.jsonl](../../data/plans.jsonl) — 2 per-turn telemetry rows (turn 0 = tool_use dispatch, turn 1 = end_turn synthesis), tracks `model`, `stop_reason`, `elapsed_ms`, in/out tokens, `tool_calls[]`, `text_chars`.
+  - [agents/azure-architect/eval/dataset.jsonl](eval/dataset.jsonl) — row 6 in canonical `(input, output, context, metadata)` shape, picked up by S58's eval harness without further plumbing.
+
+**Rego enforcement — VERIFIED LIVE (negative + positive):**
+- New `/verify` block in [ARCHITECTURE.md](../../ARCHITECTURE.md) replays the real `(workload_id="azure-architect", action="tool_invoke", tool_name=…)` shape through `@signallayer.policy_gate`.
+- DENY path: `tool_name="delete_resource_group"` → `PolicyDeniedError [workload_mutation_verb_blocked]` ✓.
+- ALLOW path: `tool_name="list_resource_groups"` → returns normally ✓.
+- Defense in depth confirmed: rego catches via BOTH explicit `readonly_azure_tools` allowlist AND prefix-based `workload_mutation_verb_blocked` rule.
+- Corollary added to the [[rego-files-were-decorative]] rule: a negative test must replay the exact `(workload_id, action, tool_name)` triple the real caller produces. An unmapped-workload call hits a different code path (fallback ALLOW for unmapped workloads) and proves nothing about rego enforcement. The S61 verify block does this correctly; first attempt did not (false-FAIL caught and corrected mid-session).
+
+**Remaining for S62+:**
+- STEP 4 spillover: Mermaid synthesis + per-tool eval rubric (still deferred per S60 plan).
+- Add a 2nd read tool (e.g. `list_resources_in_group`) — exercises multi-turn tool chaining. Add to `readonly_azure_tools` in [policies/azure-architect.rego](../../policies/azure-architect.rego) BEFORE wiring the function ([[rego-files-were-decorative]]).
+- Triple-overdue UI-promise audit ([[ui-promise-audit-owed]]).
+- F-021 (framework mapping data for `ai-sys-bae72e75`) — partially self-resolves once P4 runs accumulate traces.
+
+---
+
 _(Append further findings below as P3-P10 progress.)_

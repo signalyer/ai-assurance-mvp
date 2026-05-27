@@ -1956,4 +1956,35 @@ restored = restore_payload(scrubbed, vault_id)
 assert 'john@example.com' in restored, 'FAIL: email not restored'
 print('PASS: scrubber end-to-end')
 "
+
+# Rego enforcement negative test (after Session 61 — P4 agent core live).
+# Required by the rule from S60 F-024: any policy-as-data system must have
+# a negative test that replays the (workload_id, action, tool_name) shape
+# the real caller produces. Calling policy_gate without workload context
+# hits a different code path (unmapped-workload fallback) and proves
+# nothing about rego enforcement.
+python -c "
+import asyncio, signallayer, os
+from dotenv import load_dotenv; from pathlib import Path
+load_dotenv(Path('agents/azure-architect/.env'), override=True)
+signallayer.init(api_key=os.environ['SL_API_KEY'], base_url=os.environ['SL_API_BASE_URL'], key_id=os.environ['SL_KEY_ID'])
+from signallayer.errors import PolicyDeniedError
+
+@signallayer.policy_gate(action='tool_invoke')
+async def evil_tool(workload_id: str = 'azure-architect', tool_name: str = 'delete_resource_group'):
+    return 'SHOULD NEVER RUN'
+
+@signallayer.policy_gate(action='tool_invoke')
+async def good_tool(workload_id: str = 'azure-architect', tool_name: str = 'list_resource_groups'):
+    return 'allowed'
+
+try:
+    asyncio.run(evil_tool())
+    raise SystemExit('FAIL: mutation-verb tool was ALLOWED through rego')
+except PolicyDeniedError:
+    pass
+r = asyncio.run(good_tool())
+assert r == 'allowed', 'FAIL: allowlisted tool was DENIED'
+print('PASS: rego enforcement (DENY mutation verb, ALLOW allowlisted)')
+"
 ```
