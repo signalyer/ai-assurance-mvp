@@ -1770,6 +1770,55 @@ The "Real baselines" work originally targeted for S54 (flip `EVAL_BACKEND=deepev
 - CISO Console SPA pipeline not yet triggered for S56 #2 — `RegoBundlesPanel` is in the bundle but waits on the next SPA deploy run to go live at `gov.aigovern.sandboxhub.co`.
 - Remaining POC P3 UI walkthrough (framework drill / EU AI Act PDF / intake evidence URLs), F-012 multi-cloud intake, output-guardrails false-positive retro, POC P4 agent core — all deferred to S57.
 
+### Session 57 — F-018 router prefix fix + STEP 0 closure (CISO Console RegoBundlesPanel live)
+
+**Theme:** Execute the S56 #6 plan STEP 0 (deploy CISO Console SPA so S56 #2's `RegoBundlesPanel` goes live). Caught a real 404 on first browser load; fixed; closed STEP 0 end-to-end. STEP 1+ deferred to S58.
+
+**What happened**
+- Built + deployed `ciso-console/` to `swa-aigovern-gov-dev` via `swa deploy --deployment-token --env production` (no SPA CI workflow exists — `.github/workflows/deploy.yml:30` explicitly skips `ciso-console/**`). Live bundle on `gov.aigovern.sandboxhub.co` flipped to `index-D0_YAjjx.js`.
+- First operator load of `/policies` showed `RegoBundlesPanel` rendered with "Failed: Not Found" — the API call 404'd.
+- Diagnosed: [api/policies_rego.py:22](api/policies_rego.py:22) was registered with `prefix="/api/v1"`, but [middleware/api_version_alias.py](middleware/api_version_alias.py) rewrites incoming `/api/v1/*` → `/api/*` BEFORE routing ([dashboard.py:270](dashboard.py:270)). Net effect: SPA `/api/v1/policies/rego` → rewritten to `/api/policies/rego` → no route registered there → 404 with body `"Not Found"`.
+
+**Why S56 verification missed it:** S56 #1's `/verify` and curl smoke hit `/api/v1/policies/rego` **unauthenticated**. Auth middleware runs AFTER the alias rewrite ([dashboard.py:268-272](dashboard.py:268)), so `/api/policies/rego` matched the protected `/api/*` prefix and 401'd before routing reached the missing handler. The 401 looked like "endpoint exists, auth-gated" — shadowing the real 404. Same class as [[two-origins-spa-vs-engine]]: same status code ≠ same outcome.
+
+**Fixed this session**
+- `58932fe` (S57 #1) — `api/policies_rego.py` prefix `/api/v1` → `/api`. All other routers in `api/` follow this convention; the alias middleware adds v1 for SPA callers. Verified `python -c "from api.policies_rego import router; print([r.path for r in router.routes])"` → `['/api/policies/rego']`. `docs/openapi-v1.json` regenerated — diff is purely the path move.
+
+**Verification (end-to-end)**
+- CI deploy poll: prod `/api/health.sha` flipped `02de720` → `58932fe`.
+- Unauth probe: `curl /api/v1/policies/rego` → 401 (auth correctly gates).
+- Operator browser at `gov.aigovern.sandboxhub.co/policies`: panel renders 5 .rego bundles (agent_tools, azure-architect, base, financial_advisor, pii) with package, summary, size, sha256 prefixes, and source dir. Confirmed via screenshot. **F-018 fully closed.**
+
+**Compound rule earned (in memory)**
+- **S57 #1** [[auth-shadows-404]] — Unauthenticated probes can return 401 from auth middleware running AFTER path-rewriting middleware, shadowing a real 404. "Endpoint exists, auth-gated" is a lie when the auth prefix is broader than registered routes. Smoke-test new endpoints with an authenticated session, OR verify route registration with `[r.path for r in router.routes]` before deploy.
+
+**Known open at S57 close**
+- POC P3 STEPS 1-3 deferred to S58 (framework matrix walkthrough + EU AI Act PDF Pack + intake Step 5 evidence URLs). Operator-driven; ~50 min.
+- POC P4 agent core kickoff (tool layer + orchestration + first working Azure verb) deferred to S58 as the main arc.
+- Cosmetic: `PoliciesPage` shows "No policies match the current filters" below the .rego panel — the mock GRC control list (`/api/grc/policies`) is empty in current data, separate from .rego. Not a regression; flag for cleanup.
+
+### Session 57a — Azure Architect P6 offline eval harness
+
+**Theme:** Turn the existing Azure architect P6 scaffold into a repeatable eval runner without spending model tokens.
+
+**Outcome:** Offline candidate-output scoring is now available. Full P6 remains open until P4 emits real candidate outputs and the run history is wired into the Team Portal eval card.
+
+**Built / fixed this session**
+- [agents/azure-architect/eval/run_eval.py](agents/azure-architect/eval/run_eval.py) — NEW. CLI + library runner for `eval/dataset.jsonl` candidate outputs. Scores strict output schema, expected Mermaid substrings, manifest coverage, expected notes, no-PII leakage, and the custom `mermaid_compiles` metric. Persists summaries to `data/azure_architect_eval_runs.jsonl` via `storage._append_jsonl()`. `--list-runs` reads via `storage._read_jsonl()`.
+- [tests/test_azure_architect_eval.py](tests/test_azure_architect_eval.py) — NEW. Nine focused tests: passing candidate, missing diagram/manifest coverage, missing candidate row, persistence to a temp JSONL run file, strict schema extra-key rejection, PII leakage in otherwise-valid output, required notes for broken topology, duplicate-candidate latest-wins semantics, and Mermaid compile failure.
+- [agents/azure-architect/README.md](agents/azure-architect/README.md) — documents the offline eval runner, candidate output JSONL shape, scored metrics, and persistence path.
+- [agents/azure-architect/CHANGELOG.md](agents/azure-architect/CHANGELOG.md) — records the first P6 harness entry.
+
+**Verification**
+- `python -c "import importlib.util, pathlib; ... run_eval.py ..."` — PASS (`azure architect eval runner import OK`).
+- `uv run --with pytest --with pydantic python -m pytest tests\test_azure_architect_eval.py -q` — PASS (`9 passed`, one pytest config warning because the ephemeral environment does not include `pytest-asyncio`).
+- `python agents\azure-architect\eval\run_eval.py --list-runs --limit 3` — PASS (`No persisted Azure architect eval runs.`)
+
+**Known open at S57a close**
+- No real candidate outputs yet because P4 synthesis/orchestration is still skeletal.
+- Team Portal still uses the simulated eval suite; it does not yet read `data/azure_architect_eval_runs.jsonl`.
+- `mermaid_compiles` requires local `mmdc` (`@mermaid-js/mermaid-cli`) for real compile checks; tests monkeypatch that boundary.
+
 ### Session 13 — V2 Phase 1 (Engine Hardening + Carry-Over Debt) — status
 See `docs/plans/SESSION-13-v2-engine-hardening.md`. Closeout status:
 - Track A: A1 OpenAPI hardening (per-router series, 5/25 done Sessions 25-29), A2 contract tests ✓ Session 18, ~~A3 parent-domain cookie~~ ✓ Session 24 (activated Session 25), ~~A4 CNAME~~ ✓ Session 25 (env-var flip + verified-already-bound)
