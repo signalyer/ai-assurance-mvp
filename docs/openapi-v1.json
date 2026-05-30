@@ -176,6 +176,53 @@
         "title": "ActiveSessionsOut",
         "type": "object"
       },
+      "AddEvidencePayload": {
+        "additionalProperties": false,
+        "description": "POST payload \u2014 operator-driven add from the Edit modal Evidence section.",
+        "properties": {
+          "evidence_type": {
+            "description": "Must be a member of domain.models.EvidenceType (e.g. ARCHITECTURE_DIAGRAM).",
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional SHA-256 hex. If absent, the engine does NOT compute it \u2014 we don't fetch external URIs at write time.",
+            "title": "Hash"
+          },
+          "source": {
+            "default": "operator",
+            "description": "The actor or system that produced this row.",
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "description": "Short human-readable description.",
+            "title": "Summary",
+            "type": "string"
+          },
+          "uri": {
+            "description": "URL or URI for the artifact.",
+            "minLength": 1,
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_type",
+          "uri"
+        ],
+        "title": "AddEvidencePayload",
+        "type": "object"
+      },
       "AdversarialCategoriesResponse": {
         "description": "Response shape for GET /api/security/adversarial/categories.",
         "properties": {
@@ -3224,7 +3271,7 @@
           },
           "evidence": {
             "items": {
-              "$ref": "#/components/schemas/api__frameworks__EvidenceOut"
+              "$ref": "#/components/schemas/EvidenceOut"
             },
             "title": "Evidence",
             "type": "array"
@@ -4264,105 +4311,47 @@
       "EvidenceListOut": {
         "additionalProperties": false,
         "properties": {
-          "evidence": {
-            "items": {
-              "$ref": "#/components/schemas/api__grc__EvidenceOut"
-            },
-            "title": "Evidence",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "evidence",
-          "total"
-        ],
-        "title": "EvidenceListOut",
-        "type": "object"
-      },
-      "EvidenceRowOut": {
-        "description": "Single evidence record as rendered in the sectioned roll-up.\n\nMirrors domain.evidence_repository.EvidenceRow (dataclass). 18\nfields, all always present. Optionals reflect the source dataclass:\nassessment_id / hash / uri may be None.",
-        "properties": {
           "ai_system_id": {
             "title": "Ai System Id",
             "type": "string"
           },
-          "ai_system_name": {
-            "title": "Ai System Name",
-            "type": "string"
+          "count": {
+            "title": "Count",
+            "type": "integer"
           },
-          "assessment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assessment Id"
-          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/api__grc__EvidenceRowOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ai_system_id",
+          "evidence",
+          "count"
+        ],
+        "title": "EvidenceListOut",
+        "type": "object"
+      },
+      "EvidenceOut": {
+        "additionalProperties": false,
+        "properties": {
           "collected_at": {
             "title": "Collected At",
+            "type": "string"
+          },
+          "evidence_hash": {
+            "title": "Evidence Hash",
             "type": "string"
           },
           "evidence_type": {
             "title": "Evidence Type",
             "type": "string"
           },
-          "evidence_type_pretty": {
-            "title": "Evidence Type Pretty",
-            "type": "string"
-          },
-          "hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hash"
-          },
           "id": {
             "title": "Id",
-            "type": "string"
-          },
-          "immutable": {
-            "title": "Immutable",
-            "type": "boolean"
-          },
-          "linked_control_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Linked Control Ids",
-            "type": "array"
-          },
-          "linked_finding_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Linked Finding Ids",
-            "type": "array"
-          },
-          "linked_frameworks": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Linked Frameworks",
-            "type": "array"
-          },
-          "section_id": {
-            "title": "Section Id",
-            "type": "string"
-          },
-          "section_name": {
-            "title": "Section Name",
             "type": "string"
           },
           "source": {
@@ -4372,36 +4361,17 @@
           "summary": {
             "title": "Summary",
             "type": "string"
-          },
-          "uri": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Uri"
           }
         },
         "required": [
           "id",
-          "ai_system_id",
-          "ai_system_name",
-          "evidence_type",
-          "evidence_type_pretty",
-          "section_id",
-          "section_name",
-          "source",
-          "collected_at",
-          "immutable",
           "summary",
-          "linked_control_ids",
-          "linked_finding_ids",
-          "linked_frameworks"
+          "evidence_hash",
+          "collected_at",
+          "source",
+          "evidence_type"
         ],
-        "title": "EvidenceRowOut",
+        "title": "EvidenceOut",
         "type": "object"
       },
       "ExceptionRequest": {
@@ -9585,7 +9555,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/EvidenceRowOut"
+              "$ref": "#/components/schemas/api__evidence__EvidenceRowOut"
             },
             "title": "Items",
             "type": "array"
@@ -10878,6 +10848,127 @@
         "title": "_ScenarioEntry",
         "type": "object"
       },
+      "api__evidence__EvidenceRowOut": {
+        "description": "Single evidence record as rendered in the sectioned roll-up.\n\nMirrors domain.evidence_repository.EvidenceRow (dataclass). 18\nfields, all always present. Optionals reflect the source dataclass:\nassessment_id / hash / uri may be None.",
+        "properties": {
+          "ai_system_id": {
+            "title": "Ai System Id",
+            "type": "string"
+          },
+          "ai_system_name": {
+            "title": "Ai System Name",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "evidence_type_pretty": {
+            "title": "Evidence Type Pretty",
+            "type": "string"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "immutable": {
+            "title": "Immutable",
+            "type": "boolean"
+          },
+          "linked_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Control Ids",
+            "type": "array"
+          },
+          "linked_finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "linked_frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Frameworks",
+            "type": "array"
+          },
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          },
+          "section_name": {
+            "title": "Section Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "id",
+          "ai_system_id",
+          "ai_system_name",
+          "evidence_type",
+          "evidence_type_pretty",
+          "section_id",
+          "section_name",
+          "source",
+          "collected_at",
+          "immutable",
+          "summary",
+          "linked_control_ids",
+          "linked_finding_ids",
+          "linked_frameworks"
+        ],
+        "title": "EvidenceRowOut",
+        "type": "object"
+      },
       "api__findings_v2__FindingsListOut": {
         "additionalProperties": false,
         "properties": {
@@ -11130,45 +11221,6 @@
         "title": "ControlRollupOut",
         "type": "object"
       },
-      "api__frameworks__EvidenceOut": {
-        "additionalProperties": false,
-        "properties": {
-          "collected_at": {
-            "title": "Collected At",
-            "type": "string"
-          },
-          "evidence_hash": {
-            "title": "Evidence Hash",
-            "type": "string"
-          },
-          "evidence_type": {
-            "title": "Evidence Type",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "summary": {
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "summary",
-          "evidence_hash",
-          "collected_at",
-          "source",
-          "evidence_type"
-        ],
-        "title": "EvidenceOut",
-        "type": "object"
-      },
       "api__frameworks__FindingSummaryOut": {
         "additionalProperties": false,
         "properties": {
@@ -11291,16 +11343,16 @@
         "title": "ItemCoverageOut",
         "type": "object"
       },
-      "api__grc__EvidenceOut": {
+      "api__grc__EvidenceRowOut": {
         "additionalProperties": false,
-        "description": "An evidence artifact attached to systems/findings/controls.",
+        "description": "One evidence row in the canonical layered-store shape.\n\nMirrors `domain.models.Evidence`. `data_source` lets V1/V2 toggle the\ndistinction between fixture rows and real operator-added rows.",
         "properties": {
-          "author": {
-            "title": "Author",
+          "ai_system_id": {
+            "title": "Ai System Id",
             "type": "string"
           },
-          "created": {
-            "title": "Created",
+          "collected_at": {
+            "title": "Collected At",
             "type": "string"
           },
           "data_source": {
@@ -11308,50 +11360,80 @@
             "title": "Data Source",
             "type": "string"
           },
-          "format": {
-            "title": "Format",
+          "evidence_type": {
+            "title": "Evidence Type",
             "type": "string"
+          },
+          "hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hash"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "linked_findings": {
+          "immutable": {
+            "default": true,
+            "title": "Immutable",
+            "type": "boolean"
+          },
+          "linked_control_ids": {
             "items": {
               "type": "string"
             },
-            "title": "Linked Findings",
+            "title": "Linked Control Ids",
             "type": "array"
           },
-          "system_id": {
-            "title": "System Id",
+          "linked_finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "linked_frameworks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Linked Frameworks",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
             "type": "string"
           },
-          "system_name": {
-            "title": "System Name",
+          "summary": {
+            "title": "Summary",
             "type": "string"
           },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
           }
         },
         "required": [
           "id",
-          "type",
-          "system_id",
-          "system_name",
-          "title",
-          "created",
-          "linked_findings",
-          "author",
-          "format"
+          "ai_system_id",
+          "evidence_type",
+          "source",
+          "collected_at",
+          "summary"
         ],
-        "title": "EvidenceOut",
+        "title": "EvidenceRowOut",
         "type": "object"
       },
       "api__grc__FindingsListOut": {
@@ -12103,6 +12185,28 @@
         "summary": "List Agent Subscribers",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/api/ai-systems/revisions/pending": {
+      "get": {
+        "description": "All revisions in approval_status='pending' across every AI system.\n\nConsumer: CISO Console Revisions Queue (G-1, S65). Newest-first. One\nrequest renders the inbox; the alternative is the SPA fanning\n`GET /edit-info` across every system \u2014 O(N) round-trips for an N-system\norg, which scales badly.\n\nReturns `RevisionsListOut` so the SPA can reuse the same row type as\n`/{system_id}/revisions`. Status filtering is server-side (the domain\nhelper walks the revision store once); no `?status=` querystring because\n\"pending\" is the only useful filter for this view.",
+        "operationId": "ai_systems_revisions_pending",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionsListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Pending Revisions",
+        "tags": [
+          "ai-system-edit"
         ]
       }
     },
@@ -14340,6 +14444,100 @@
           }
         },
         "summary": "Get Ai System",
+        "tags": [
+          "grc"
+        ]
+      }
+    },
+    "/api/grc/ai-systems/{system_id}/evidence": {
+      "get": {
+        "description": "Canonical evidence list for one system via the layered store.\n\nNewest-first. Feeds the Edit modal's Evidence tab. Distinct from the\nbundled get_ai_system endpoint above which surfaces the mock fixture\nrows only \u2014 this one is what the rollup actually reads.",
+        "operationId": "ai_systems_evidence_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "system_id",
+            "required": true,
+            "schema": {
+              "title": "System Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence For System",
+        "tags": [
+          "grc"
+        ]
+      },
+      "post": {
+        "description": "Append one Evidence row for this system.\n\nValidates evidence_type against the EvidenceType enum; 400 on unknown.\nSystem existence is intentionally NOT validated here \u2014 operator may pre-\nstage evidence before intake completes (uncommon but allowed by the\nimmutable append-only model).",
+        "operationId": "ai_systems_evidence_add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "system_id",
+            "required": true,
+            "schema": {
+              "title": "System Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddEvidencePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/api__grc__EvidenceRowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Evidence For System",
         "tags": [
           "grc"
         ]

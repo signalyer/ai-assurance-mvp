@@ -27,6 +27,7 @@ from middleware.data_mode import filter_by_mode, get_data_mode
 # Pull the intake rows via the repository at request time and merge into
 # the view-shape AiSystemSummaryOut below.
 from domain.repository import list_ai_systems as _list_intake_systems
+from domain.repository import evidence_for as _evidence_for
 
 from mock_data import (
     AI_SYSTEMS,
@@ -767,7 +768,14 @@ async def get_ai_system(system_id: str) -> AiSystemDetailOut:
 
     findings = [f for f in FINDINGS if f["system_id"] == system_id]
     gates = RELEASE_GATE_RESULTS.get(system_id)
-    evidence = [e for e in EVIDENCE if e["system_id"] == system_id]
+    # S67: consolidate dual-path evidence read. Pre-S67 this filtered the
+    # mock_data.EVIDENCE dict list (3-5 curated rows per seed system);
+    # /grc/ai-systems/{id}/evidence already used the canonical layered
+    # store, producing two different counts for the same system. Both
+    # paths now read domain.repository.evidence_for() (seed + overlays +
+    # demo + intake) so the drawer, framework matrix, and dedicated
+    # evidence endpoint agree.
+    evidence = [e.model_dump(mode="json") for e in _evidence_for(system_id)]
     events = [e for e in RUNTIME_EVENTS if e["system_id"] == system_id]
 
     return AiSystemDetailOut(
@@ -780,14 +788,11 @@ async def get_ai_system(system_id: str) -> AiSystemDetailOut:
 
 
 # ---------------------------------------------------------------------------
-# F-023 fix (S66): operator-readable + operator-writable evidence surface.
-#
-# The bundled get_ai_system endpoint above reads from mock_data.EVIDENCE only —
-# that path stays intact to avoid disturbing the existing drawer + framework
-# matrix wiring. These two new endpoints surface the canonical layered store
-# (seed + overlays + demo + intake-written) via domain.repository.evidence_for,
-# which is what the framework completeness rollup uses. So evidence added here
-# DOES tick the completeness % up.
+# Operator-readable + operator-writable evidence surface (F-023 fix, S66).
+# S67: dual-path consolidation — get_ai_system above ALSO reads
+# domain.repository.evidence_for() now. The two endpoints exist for shape
+# reasons: the bundled detail returns loosely-typed dicts (drawer V1 compat),
+# these return strict EvidenceRowOut. Both read the same underlying store.
 # ---------------------------------------------------------------------------
 
 class EvidenceRowOut(BaseModel):

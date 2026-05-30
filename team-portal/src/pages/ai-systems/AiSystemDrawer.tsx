@@ -6,7 +6,7 @@ import { openEdit, registerEditSavedCallback } from './AiSystemEditModal';
 import { openRevisions } from './AiSystemRevisionsPanel';
 import { openFrameworks } from './AiSystemFrameworksPanel';
 import { openBoundAgents } from './AiSystemBoundAgentsPanel';
-import type { AiSystemDetail, EditStatus } from './types';
+import type { AiSystemDetail, EditStatus, EvidenceListResponse, EvidenceRow } from './types';
 
 // Open-system signal: drives the side drawer.
 // Setting to a non-null id triggers a fetch; null closes the drawer.
@@ -14,11 +14,19 @@ const openSystemId = signal<string | null>(null);
 const currentSystem = signal<AiSystemDetail | null>(null);
 const drawerError = signal<string | null>(null);
 const editStatus = signal<EditStatus | null>(null);
+// S67: drawer surfaces canonical layered evidence via the dedicated endpoint
+// (same one the Edit modal reads). Loaded on drawer open alongside detail.
+const evidenceRows = signal<EvidenceRow[]>([]);
+const evidenceError = signal<string | null>(null);
 
 // Edit modal calls back here on successful save so the drawer + status banner
-// reflect the new state without a page reload.
+// reflect the new state without a page reload. S67: also refreshes evidence
+// list — operator may have added rows in the modal's Evidence section.
 registerEditSavedCallback((id: string) => {
-  if (openSystemId.value === id) void loadDetail(id);
+  if (openSystemId.value === id) {
+    void loadDetail(id);
+    void loadEvidence(id);
+  }
 });
 
 export function openSystem(id: string): void {
@@ -32,9 +40,24 @@ export function closeSystem(): void {
   openSystemId.value = null;
   currentSystem.value = null;
   drawerError.value = null;
+  evidenceRows.value = [];
+  evidenceError.value = null;
   const url = new URL(window.location.href);
   url.searchParams.delete('id');
   window.history.replaceState({}, '', url.toString());
+}
+
+async function loadEvidence(id: string): Promise<void> {
+  evidenceError.value = null;
+  const r = await apiGet<EvidenceListResponse>(
+    `/grc/ai-systems/${encodeURIComponent(id)}/evidence`,
+  );
+  if (r.ok) {
+    evidenceRows.value = r.data.evidence ?? [];
+  } else {
+    evidenceError.value = r.detail;
+    evidenceRows.value = [];
+  }
 }
 
 async function loadDetail(id: string): Promise<void> {
@@ -58,7 +81,10 @@ export function AiSystemDrawer() {
   const id = openSystemId.value;
 
   useEffect(() => {
-    if (id) void loadDetail(id);
+    if (id) {
+      void loadDetail(id);
+      void loadEvidence(id);
+    }
   }, [id]);
 
   const isOpen = id !== null;
@@ -180,11 +206,14 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         ))}
       </div>
 
+      <EvidenceSection />
+
       <div class="drawer-section">
         <div class="drawer-section-title">Last Assessment</div>
         <div class="text-sm">{s.last_assessment} · next {s.next_assessment}</div>
       </div>
 
+      {/* Action buttons */}
       <div class="drawer-section" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <a class="btn btn-sm btn-primary" href={`/assessment?system=${encodeURIComponent(s.id)}`}>
           Run Assessment
@@ -198,5 +227,51 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         <button class="btn btn-sm btn-secondary" onClick={() => openBoundAgents(s.id)}>Bound Agents</button>
       </div>
     </>
+  );
+}
+
+// S67: Evidence section. Read-only here; add lives in the Edit modal.
+// Shows the canonical layered store (seed + overlays + demo + intake-written)
+// via /grc/ai-systems/{id}/evidence. The first 8 rows render inline; an
+// overflow line summarizes the rest so the drawer doesn't grow unbounded
+// for systems with 20+ rows (typical post-S67 consolidation).
+const EVIDENCE_PREVIEW_LIMIT = 8;
+
+function EvidenceSection() {
+  const rows = evidenceRows.value;
+  const err = evidenceError.value;
+  const visible = rows.slice(0, EVIDENCE_PREVIEW_LIMIT);
+  const overflow = rows.length - visible.length;
+
+  return (
+    <div class="drawer-section">
+      <div class="drawer-section-title">Evidence ({rows.length})</div>
+      {err && <div class="text-xs text-critical">Could not load evidence: {err}</div>}
+      {!err && rows.length === 0 && (
+        <div class="text-xs text-tertiary">No evidence on file yet. Add via Edit System → Evidence.</div>
+      )}
+      {visible.map((ev) => (
+        <div
+          key={ev.id}
+          style={{
+            padding: '0.5rem',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            marginBottom: 6,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <span class="font-mono text-xs">{ev.evidence_type}</span>
+            <span class="text-xs text-tertiary">{ev.collected_at?.slice(0, 10)}</span>
+          </div>
+          <div class="text-sm" style={{ marginTop: 4 }}>{ev.summary || ev.source}</div>
+        </div>
+      ))}
+      {overflow > 0 && (
+        <div class="text-xs text-tertiary" style={{ marginTop: 4 }}>
+          + {overflow} more — open Edit System → Evidence to see all.
+        </div>
+      )}
+    </div>
   );
 }

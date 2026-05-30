@@ -116,3 +116,28 @@ export interface SubmitEditResponse {
   status: EditStatus;
   next_step: 'pending_approval' | 'applied' | string;
 }
+
+// --- Evidence (api/grc.py::EvidenceRowOut) ---------------------------------
+// Shared by AiSystemEditModal (read+add) and AiSystemDrawer (read-only).
+
+export interface EvidenceRow {
+  id: string;
+  ai_system_id: string;
+  evidence_type: string;
+  source: string;
+  uri: string | null;
+  hash: string | null;
+  collected_at: string;
+  summary: string;
+  immutable: boolean;
+  linked_control_ids: string[];
+  linked_finding_ids: string[];
+  linked_frameworks: string[];
+  data_source: string;
+}
+
+export interface EvidenceListResponse {
+  ai_system_id: string;
+  evidence: EvidenceRow[];
+  count: number;
+}

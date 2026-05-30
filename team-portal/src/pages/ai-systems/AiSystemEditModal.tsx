@@ -10,32 +10,14 @@ import { apiGet, apiPost, apiRequest } from '../../shared/api/client';
 import type {
   AiSystemDetail,
   EditInfo,
+  EvidenceListResponse,
+  EvidenceRow,
   SubmitEditResponse,
 } from './types';
 
-// F-023 fix (S66): Evidence add/list payload + response types. Engine source
-// of truth is api/grc.py::EvidenceRowOut / AddEvidencePayload.
-interface EvidenceRow {
-  id: string;
-  ai_system_id: string;
-  evidence_type: string;
-  source: string;
-  uri: string | null;
-  hash: string | null;
-  collected_at: string;
-  summary: string;
-  immutable: boolean;
-  linked_control_ids: string[];
-  linked_finding_ids: string[];
-  linked_frameworks: string[];
-  data_source: string;
-}
-
-interface EvidenceListResponse {
-  ai_system_id: string;
-  evidence: EvidenceRow[];
-  count: number;
-}
+// F-023 fix (S66) / S67: Evidence add/list types moved to ./types so the
+// drawer can share them. Engine source of truth is
+// api/grc.py::EvidenceRowOut / AddEvidencePayload.
 
 // Curated subset of EvidenceType for the operator dropdown. The engine
 // accepts the full enum, but ~8 types cover ~99% of operator workflows;
