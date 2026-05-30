@@ -217,11 +217,22 @@ from .errors import (  # noqa: E402
     SignalLayerError,
 )
 
+# Result discriminators — re-exported so callers can do
+# `from signallayer import write_episode, Err` without reaching into
+# `.client`. Discovered in S71 Block A live smoke: the agent's
+# `from signallayer import Err, write_episode` raised ImportError because
+# `Err` was only available via `signallayer.client`. Unit tests masked it
+# because they imported from `.client` directly.
+from .client import Err, Ok, Result  # noqa: E402
+
 __all__ = [
     "__version__",
     "init",
     "get_client",
     "write_episode",
+    "Ok",
+    "Err",
+    "Result",
     # Decorators
     "policy_gate",
     "scrub_pii",

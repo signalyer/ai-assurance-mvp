@@ -21,6 +21,23 @@ from signallayer.client import Err, Ok
 from signallayer.errors import AuthError
 
 
+def test_public_surface_exports_result_types() -> None:
+    """`from signallayer import Err, Ok, write_episode` must succeed.
+
+    Regression guard for the S71 smoke bug where agent.py raised
+    ImportError on this exact import because Err/Ok were only exposed via
+    signallayer.client, not the package top level.
+    """
+    import importlib
+    mod = importlib.reload(signallayer)
+    assert hasattr(mod, "write_episode")
+    assert hasattr(mod, "Err")
+    assert hasattr(mod, "Ok")
+    assert "Err" in mod.__all__
+    assert "Ok" in mod.__all__
+    assert "write_episode" in mod.__all__
+
+
 @pytest.fixture(autouse=True)
 def _init_sdk() -> None:
     """Re-initialise the SDK with stable creds before each test."""
