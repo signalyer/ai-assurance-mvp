@@ -25,6 +25,9 @@ import { RtfForensicsPage }      from './pages/rtf-forensics/RtfForensicsPage';
 import { PoliciesPage }          from './pages/policies/PoliciesPage';
 import { ReportsPage }           from './pages/reports/ReportsPage';
 
+// G-1 (S65) — Revisions Queue: CISO decide surface for engineer-submitted edits
+import { RevisionsQueuePage }    from './pages/revisions/RevisionsQueuePage';
+
 // S50: SPA-resident login (no Shell chrome)
 import { LoginPage }             from './pages/login/LoginPage';
 
@@ -62,6 +65,9 @@ export function App() {
         {/* CSM-4: stubs */}
         <Route path="/policies"       component={PoliciesPage} />
         <Route path="/reports"        component={ReportsPage} />
+
+        {/* G-1 (S65): closes the UI-promise gap surfaced in S64's audit */}
+        <Route path="/revisions"      component={RevisionsQueuePage} />
 
         <Route>
           <div class="empty-state">Page not found.</div>

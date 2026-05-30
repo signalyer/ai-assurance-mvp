@@ -14,6 +14,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { path: '/findings',      label: 'Findings' },
   { path: '/audit',         label: 'Audit Chain' },
+  { path: '/revisions',     label: 'Revisions Queue' },
   { path: '/rtf-approvals',  label: 'RTF Approvals' },
   { path: '/rtf-forensics',  label: 'RTF Forensics' },
   { path: '/portfolio',     label: 'Portfolio Overview' },

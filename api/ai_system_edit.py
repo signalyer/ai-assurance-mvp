@@ -231,6 +231,31 @@ async def list_revisions(system_id: str) -> RevisionsListOut:
 
 
 @router.get(
+    "/revisions/pending",
+    response_model=RevisionsListOut,
+    operation_id="ai_systems_revisions_pending",
+)
+async def list_pending_revisions() -> RevisionsListOut:
+    """All revisions in approval_status='pending' across every AI system.
+
+    Consumer: CISO Console Revisions Queue (G-1, S65). Newest-first. One
+    request renders the inbox; the alternative is the SPA fanning
+    `GET /edit-info` across every system — O(N) round-trips for an N-system
+    org, which scales badly.
+
+    Returns `RevisionsListOut` so the SPA can reuse the same row type as
+    `/{system_id}/revisions`. Status filtering is server-side (the domain
+    helper walks the revision store once); no `?status=` querystring because
+    "pending" is the only useful filter for this view.
+    """
+    revs = ase.pending_revisions_across_systems()
+    return RevisionsListOut(
+        revisions=[RevisionOut(**r) for r in revs],
+        count=len(revs),
+    )
+
+
+@router.get(
     "/revisions/{revision_id}",
     response_model=RevisionOut,
     operation_id="ai_systems_revision_get",

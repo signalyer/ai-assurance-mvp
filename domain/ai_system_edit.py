@@ -262,6 +262,29 @@ def has_pending_material(ai_system_id: str) -> bool:
     return pending_revision(ai_system_id) is not None
 
 
+def pending_revisions_across_systems() -> list[dict]:
+    """Every revision currently in approval_status=='pending', org-wide.
+
+    Newest-first. Mirrors the shape used by RTF's `?status=pending` queue —
+    consumer is the CISO Console Revisions Queue (G-1, S65), which needs
+    one fetch to render the inbox rather than N+1 per-system polls. Server-
+    side walk is O(N) over the revision store once, vs the client otherwise
+    fanning `GET /edit-info` across every AI system to discover pending state.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    # _all_revision_ids walks the underlying jsonl in append order;
+    # reversed = newest-first for the CISO inbox UX.
+    for rid in reversed(_all_revision_ids()):
+        if rid in seen:
+            continue
+        seen.add(rid)
+        rev = get_revision(rid)
+        if rev and rev.get("approval_status") == "pending":
+            out.append(rev)
+    return out
+
+
 # ---------- Effective state (fold revisions onto base) ---------------------
 
 _TERMINAL_DECISIONS_FOR_FOLD = {"approved", "auto_applied", "overridden"}
