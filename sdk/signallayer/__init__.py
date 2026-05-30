@@ -104,6 +104,63 @@ def init(
     )
 
 
+def write_episode(
+    workload_id: str,
+    prompt: str,
+    response: str,
+    outcome: str,
+    metadata: dict[str, Any] | None = None,
+    ttl_seconds: int | None = None,
+) -> "Result":  # noqa: F821
+    """Persist one Tier-2 episode via the SignalLayer engine.
+
+    Posts to ``/api/sdk/episodes`` with HMAC signing. The engine's configured
+    memory backend (postgres in prod, jsonl in dev) decides where the row
+    lands; the SDK only knows about the HTTP contract.
+
+    Replaces the S70b pattern of importing ``domain.agent_memory`` directly
+    from customer agent code. Customer agents no longer need sqlalchemy +
+    psycopg2 + a Postgres connection string just to record an episode.
+
+    Args:
+        workload_id: AI workload identifier (e.g. ``"azure-architect"``).
+        prompt:      Pre-scrubbed prompt text (the @scrub_pii decorator on the
+                     calling function should already have replaced PII).
+        response:    Pre-scrubbed response text.
+        outcome:     One of ``"success"``, ``"failure"``, ``"review"``.
+        metadata:    Optional dict. May include ``vault_id``, ``trace_id``,
+                     ``eval_scores``, ``guardrail_result``. ``vault_id`` is
+                     required when the engine has ``SCRUBBER_ENABLED=true``.
+        ttl_seconds: Override engine default TTL. ``None`` = engine default.
+
+    Returns:
+        ``Ok[str]`` with the episode_id on success, or ``Err`` on failure
+        (auth / validation / network / DB).  Never raises for expected
+        failure modes — caller pattern is
+        ``if isinstance(result, Err): log; continue``.
+
+    Requires ``init()`` to have been called first.
+    """
+    from .client import Err, Ok
+
+    client = get_client()
+    body: dict[str, Any] = {
+        "workload_id": workload_id,
+        "prompt": prompt,
+        "response": response,
+        "outcome": outcome,
+        "metadata": metadata or {},
+    }
+    if ttl_seconds is not None:
+        body["ttl_seconds"] = ttl_seconds
+
+    result = client.post("/api/sdk/episodes", json_body=body)
+    if isinstance(result, Ok):
+        episode_id = result.value.get("episode_id", "") if isinstance(result.value, dict) else ""
+        return Ok(value=episode_id, status_code=result.status_code)
+    return result
+
+
 def get_client() -> "SignalLayerClient":  # noqa: F821
     """Return a configured HTTP client instance.
 
@@ -164,6 +221,7 @@ __all__ = [
     "__version__",
     "init",
     "get_client",
+    "write_episode",
     # Decorators
     "policy_gate",
     "scrub_pii",
