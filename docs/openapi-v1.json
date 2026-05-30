@@ -1133,6 +1133,17 @@
             "title": "Audit Event Id",
             "type": "string"
           },
+          "cost_estimate_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Estimate Usd"
+          },
           "governance": {
             "anyOf": [
               {
@@ -1205,9 +1216,31 @@
             "type": "array"
           },
           "status": {
-            "description": "blocked | simulated | (real when wired)",
+            "description": "blocked | simulated | live",
             "title": "Status",
             "type": "string"
+          },
+          "streaming_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Streaming Complete"
+          },
+          "token_estimate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Estimate"
           },
           "use_case": {
             "title": "Use Case",
@@ -12716,6 +12749,7 @@
     },
     "/api/assurance-model/explain-release": {
       "post": {
+        "description": "S69: streams real Anthropic deltas when REAL_LLM_ENABLED + creds present.\n\nReturns an SSE stream regardless of path (blocked / simulated / live) so\nthe SPA can keep a single consumption pattern. Blocked + sim emit one\nterminal 'done' event; live emits deltas then 'done'.\n\nNote: no `response_model=AskResponseOut` here -- OpenAPI cannot represent\nSSE streams in that field. The drawer parses the 'done' event payload\nagainst the AskResponseOut TS interface client-side.",
         "operationId": "assurance_explain_release",
         "requestBody": {
           "content": {
@@ -12731,9 +12765,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponseOut"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"

@@ -16,6 +16,12 @@ garak>=0.5.0
 fastapi>=0.100.0
 uvicorn>=0.20.0
 pydantic>=2.0.0
+# S69: SSE for /assurance-model/explain-release streaming. Native FastAPI
+# StreamingResponse works for raw bytes but doesn't model the SSE
+# event/data/id frame shape or expose client-disconnect detection cleanly.
+# sse-starlette.EventSourceResponse does both — required for the
+# streaming_complete=false audit field.
+sse-starlette>=2.1.0
 
 # Database (for future multi-tenant)
 sqlalchemy>=2.0.0

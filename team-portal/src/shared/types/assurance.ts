@@ -27,8 +27,9 @@ export interface GovernanceMetadata {
   chain_hash?: string | null;
 }
 
-// status: "blocked" | "simulated" | (future "live" once S69 ships).
-// Drawer branches on this to show/hide the Simulated preview badge.
+// status: "blocked" | "simulated" | "live" (S69 shipped).
+// Drawer branches on this to show/hide the Simulated preview badge and to
+// surface token/cost metadata on the live path.
 export interface AskResponseOut {
   status: 'blocked' | 'simulated' | 'live' | string;
   provider: string | null;
@@ -40,4 +41,9 @@ export interface AskResponseOut {
   audit_event_id: string;
   sanitized_redactions: string[];
   governance: GovernanceMetadata | null;
+  // S69: populated on status='live' from Anthropic usage block. Absent
+  // (null/undefined) on simulated/blocked paths.
+  token_estimate?: number | null;
+  cost_estimate_usd?: number | null;
+  streaming_complete?: boolean | null;
 }

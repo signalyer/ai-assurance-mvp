@@ -15,11 +15,15 @@ carries GovernanceMetadata for trace_id / policy_decision surfacing.
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sse_starlette.sse import EventSourceResponse
 
 from domain.assurance_providers import (
     PROVIDERS_BY_ID, AuditDecision, UseCase,
@@ -28,7 +32,10 @@ from domain.assurance_providers import (
     sanitize_payload_for_provider, create_provider_audit_event,
     have_real_credentials, simulate_response,
     list_audit, explain_provider_decision,
+    real_llm_enabled, stream_anthropic_response,
 )
+
+_log = logging.getLogger(__name__)
 
 from api._models import GovernanceMetadata, OkResponse
 
@@ -193,7 +200,7 @@ class AskResponseOut(BaseModel):
     """
     model_config = _strict()
 
-    status: str = Field(description="blocked | simulated | (real when wired)")
+    status: str = Field(description="blocked | simulated | live")
     provider: str | None = None
     provider_id: str | None = None
     model: str | None = None
@@ -203,6 +210,12 @@ class AskResponseOut(BaseModel):
     audit_event_id: str
     sanitized_redactions: list[str] = Field(default_factory=list)
     governance: GovernanceMetadata | None = None
+    # S69: populated on status='live' from Anthropic usage block; absent on
+    # 'simulated' / 'blocked'. Drawer surfaces both rows in the routing dl
+    # so operators know what a click costs.
+    token_estimate: int | None = None
+    cost_estimate_usd: float | None = None
+    streaming_complete: bool | None = None
 
 
 # ===========================================================================
@@ -456,14 +469,258 @@ async def summarize_finding(req: AskRequest) -> AskResponseOut:
     return _dispatch(req)
 
 
+# ---------------------------------------------------------------------------
+# S69: streaming dispatch for /explain-release
+# ---------------------------------------------------------------------------
+
+def _sim_response_to_sse_done(resp: AskResponseOut) -> dict:
+    """Wrap an AskResponseOut as the terminal SSE 'done' event payload.
+
+    Drawer parses the data JSON and treats this identically to the legacy
+    JSON response, so blocked/simulated paths route through the same UI
+    code regardless of whether they came via _dispatch or _dispatch_streaming.
+    """
+    return {"event": "done", "data": resp.model_dump_json()}
+
+
+async def _stream_live_release_narrative(
+    req: AskRequest,
+    decision,  # RoutingDecision
+    sanitized: dict,
+    request: Request,
+):
+    """Yield SSE events for a live Anthropic streaming call.
+
+    Handles three terminal states:
+      - completed normally -> emit final 'done' with status='live', LIVE audit
+      - client disconnect (CancelledError) -> LIVE audit, streaming_complete=False
+      - Anthropic / network exception -> emit 'done' with status='blocked' framing
+        and BLOCKED audit (so the drawer surfaces a clean error instead of hanging)
+    """
+    partial_text: list[str] = []
+    final_usage: dict | None = None
+    try:
+        async for kind, value in stream_anthropic_response(
+            provider=decision.provider,
+            use_case=req.use_case,
+            sanitized=sanitized,
+        ):
+            if kind == "delta":
+                partial_text.append(value)
+                yield {"event": "delta", "data": json.dumps({"text": value})}
+            elif kind == "done":
+                final_usage = value
+        # Normal completion path.
+        assert final_usage is not None
+        audit = create_provider_audit_event(
+            provider=decision.provider, use_case=req.use_case,
+            ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+            decision=AuditDecision.LIVE, user=req.user,
+            reason=(
+                f"Live Anthropic streaming call completed via {decision.provider.provider_name}; "
+                f"token_estimate={final_usage['token_estimate']}, "
+                f"cost_estimate_usd={final_usage['cost_estimate_usd']}."
+            ),
+            model=final_usage["model"],
+            token_estimate=final_usage["token_estimate"],
+            cost_estimate_usd=final_usage["cost_estimate_usd"],
+            response_snippet=final_usage["full_text"][:300],
+            streaming_complete=True,
+        )
+        final_resp = AskResponseOut(
+            status="live",
+            provider=decision.provider.provider_name,
+            provider_id=decision.provider.provider_id,
+            model=final_usage["model"],
+            use_case=req.use_case,
+            response=final_usage["full_text"],
+            policy_decision=PolicyDecisionOut(**explain_provider_decision(decision)),
+            audit_event_id=audit.id,
+            sanitized_redactions=sanitized.get("_redacted_fields", []),
+            governance=GovernanceMetadata(policy_decision="ALLOW"),
+            token_estimate=final_usage["token_estimate"],
+            cost_estimate_usd=final_usage["cost_estimate_usd"],
+            streaming_complete=True,
+        )
+        yield {"event": "done", "data": final_resp.model_dump_json()}
+    except asyncio.CancelledError:
+        # Client closed the SSE stream before we finished. Record a partial
+        # audit row so CISO Console can surface "user abandoned" — important
+        # signal for cost attribution.
+        snippet = "".join(partial_text)[:300]
+        create_provider_audit_event(
+            provider=decision.provider, use_case=req.use_case,
+            ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+            decision=AuditDecision.LIVE, user=req.user,
+            reason=(
+                "Live Anthropic streaming call cancelled by client mid-stream; "
+                f"partial chars={len(snippet)}."
+            ),
+            model=decision.provider.default_model,
+            token_estimate=0, cost_estimate_usd=0.0,
+            response_snippet=snippet, streaming_complete=False,
+        )
+        raise
+    except Exception as exc:  # noqa: BLE001 — top of SSE handler, must not crash worker
+        _log.exception("Live LLM streaming failed for use_case=%s", req.use_case)
+        audit = create_provider_audit_event(
+            provider=decision.provider, use_case=req.use_case,
+            ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+            decision=AuditDecision.BLOCKED, user=req.user,
+            reason=f"Live LLM call failed: {type(exc).__name__}: {str(exc)[:160]}",
+            model=decision.provider.default_model,
+            token_estimate=0, cost_estimate_usd=0.0,
+            streaming_complete=False,
+        )
+        err_resp = AskResponseOut(
+            status="blocked",
+            provider=decision.provider.provider_name,
+            provider_id=decision.provider.provider_id,
+            model=decision.provider.default_model,
+            use_case=req.use_case,
+            response=None,
+            policy_decision=PolicyDecisionOut(
+                reason=f"Upstream LLM error: {type(exc).__name__}",
+                allowed=False,
+            ),
+            audit_event_id=audit.id,
+            governance=GovernanceMetadata(policy_decision="DENY"),
+            streaming_complete=False,
+        )
+        yield {"event": "done", "data": err_resp.model_dump_json()}
+
+
+def _dispatch_streaming(req: AskRequest, request: Request) -> EventSourceResponse:
+    """Streaming variant of _dispatch.
+
+    Always returns an EventSourceResponse so the SPA can keep a single
+    consumption path. The blocked/simulated paths emit a single 'done' event
+    and close immediately -- drawer parses the final AskResponseOut JSON the
+    same way it did pre-S69. Only the live path streams real deltas.
+    """
+    # Resolve the routing decision synchronously -- this part is identical
+    # to _dispatch and doesn't benefit from being async.
+    payload = dict(req.payload or {})
+    if req.question:
+        payload["question"] = req.question
+    if req.ai_system_id:
+        payload["ai_system_id"] = req.ai_system_id
+
+    decision = select_assurance_provider(
+        use_case=req.use_case,
+        data_classes=req.data_classes,
+        preferred_provider=req.preferred_provider,
+    )
+
+    # Path 1: policy engine blocked the call.
+    if not decision.allowed or decision.provider is None:
+        audit = create_provider_audit_event(
+            provider=None, use_case=req.use_case,
+            ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+            decision=AuditDecision.BLOCKED, user=req.user,
+            reason=decision.reason,
+        )
+        blocked_resp = AskResponseOut(
+            status="blocked",
+            provider=None, provider_id=None, model=None,
+            use_case=req.use_case, response=None,
+            policy_decision=PolicyDecisionOut(**explain_provider_decision(decision)),
+            audit_event_id=audit.id,
+            governance=GovernanceMetadata(policy_decision="DENY"),
+        )
+        async def _blocked_gen():
+            yield _sim_response_to_sse_done(blocked_resp)
+        return EventSourceResponse(_blocked_gen())
+
+    # Defense-in-depth re-check.
+    ok, why = validate_provider_policy(
+        decision.provider, {"use_case": req.use_case, "data_classes": req.data_classes},
+    )
+    if not ok:
+        audit = create_provider_audit_event(
+            provider=decision.provider, use_case=req.use_case,
+            ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+            decision=AuditDecision.BLOCKED, user=req.user, reason=why,
+        )
+        blocked_resp = AskResponseOut(
+            status="blocked",
+            provider=decision.provider.provider_name,
+            provider_id=decision.provider.provider_id,
+            model=decision.provider.default_model,
+            use_case=req.use_case, response=None,
+            policy_decision=PolicyDecisionOut(reason=why, allowed=False),
+            audit_event_id=audit.id,
+            governance=GovernanceMetadata(policy_decision="DENY"),
+        )
+        async def _recheck_blocked_gen():
+            yield _sim_response_to_sse_done(blocked_resp)
+        return EventSourceResponse(_recheck_blocked_gen())
+
+    sanitized = sanitize_payload_for_provider(decision.provider, payload)
+
+    # Path 2: live path is gated by env flag AND real credentials. If either
+    # is missing, fall back to sim -- this is the safe, audited fallback the
+    # plan calls out (failure mode #1 in the verification list).
+    if real_llm_enabled() and have_real_credentials(decision.provider):
+        async def _live_gen():
+            async for ev in _stream_live_release_narrative(req, decision, sanitized, request):
+                yield ev
+        return EventSourceResponse(_live_gen())
+
+    # Path 3: simulated (REAL_LLM_ENABLED=false OR no credentials).
+    response_text = simulate_response(req.use_case, decision.provider, sanitized)
+    tok = max(120, len(response_text) // 4)
+    cost = round(tok * 0.000005, 5)
+    audit = create_provider_audit_event(
+        provider=decision.provider, use_case=req.use_case,
+        ai_system_id=req.ai_system_id, data_classes=req.data_classes,
+        decision=AuditDecision.SIMULATED, user=req.user,
+        reason=(
+            "Routed via policy engine; "
+            + (
+                "real credentials present but REAL_LLM_ENABLED=false -- simulated response."
+                if have_real_credentials(decision.provider)
+                else "no live credentials -- simulated response."
+            )
+        ),
+        model=decision.provider.default_model,
+        token_estimate=tok, cost_estimate_usd=cost,
+        response_snippet=response_text[:300],
+    )
+    sim_resp = AskResponseOut(
+        status="simulated",
+        provider=decision.provider.provider_name,
+        provider_id=decision.provider.provider_id,
+        model=decision.provider.default_model,
+        use_case=req.use_case,
+        response=response_text,
+        policy_decision=PolicyDecisionOut(**explain_provider_decision(decision)),
+        audit_event_id=audit.id,
+        sanitized_redactions=sanitized.get("_redacted_fields", []),
+        governance=GovernanceMetadata(policy_decision="ALLOW"),
+    )
+    async def _sim_gen():
+        yield _sim_response_to_sse_done(sim_resp)
+    return EventSourceResponse(_sim_gen())
+
+
 @router.post(
     "/explain-release",
-    response_model=AskResponseOut,
     operation_id="assurance_explain_release",
 )
-async def explain_release(req: AskRequest) -> AskResponseOut:
+async def explain_release(req: AskRequest, request: Request):
+    """S69: streams real Anthropic deltas when REAL_LLM_ENABLED + creds present.
+
+    Returns an SSE stream regardless of path (blocked / simulated / live) so
+    the SPA can keep a single consumption pattern. Blocked + sim emit one
+    terminal 'done' event; live emits deltas then 'done'.
+
+    Note: no `response_model=AskResponseOut` here -- OpenAPI cannot represent
+    SSE streams in that field. The drawer parses the 'done' event payload
+    against the AskResponseOut TS interface client-side.
+    """
     req.use_case = UseCase.RELEASE_DECISION_NARRATIVE.value
-    return _dispatch(req)
+    return _dispatch_streaming(req, request)
 
 
 @router.post(

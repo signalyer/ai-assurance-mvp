@@ -111,6 +111,7 @@ class AuditDecision(str, Enum):
     BLOCKED = "blocked"
     WARNING = "warning"
     SIMULATED = "simulated"
+    LIVE = "live"  # S69: real LLM call completed (token + cost from usage block)
 
 
 # ===========================================================================
@@ -180,6 +181,10 @@ class AssuranceModelUsageAudit:
     evidence_id: Optional[str] = None
     trace_id: Optional[str] = None
     response_snippet: Optional[str] = None
+    # S69: false when client disconnects mid-stream before the LLM produced
+    # a complete response. CISO Console can use this to surface "partial".
+    # Default False keeps existing JSONL records loadable (no field on disk).
+    streaming_complete: bool = False
 
 
 # ===========================================================================
@@ -670,6 +675,7 @@ def create_provider_audit_event(
     evidence_id: str | None = None,
     trace_id: str | None = None,
     response_snippet: str | None = None,
+    streaming_complete: bool = False,
 ) -> AssuranceModelUsageAudit:
     rec = AssuranceModelUsageAudit(
         id=f"aud-{uuid4().hex[:8].upper()}",
@@ -686,6 +692,7 @@ def create_provider_audit_event(
         cost_estimate_usd=cost_estimate_usd,
         user=user, evidence_id=evidence_id, trace_id=trace_id,
         response_snippet=response_snippet,
+        streaming_complete=streaming_complete,
     )
     _append_audit(rec)
     return rec
@@ -844,6 +851,152 @@ def policy_summary() -> dict:
     }
 
 
+# ===========================================================================
+# S69: Real Anthropic streaming
+# ---------------------------------------------------------------------------
+# Gated by REAL_LLM_ENABLED env flag (default false — backward compat with
+# every previous session). When on AND provider has live credentials AND the
+# use case has a built prompt, the dispatcher streams real text. Otherwise
+# the sim path runs unchanged.
+#
+# The streaming context manager is MANDATORY per
+# [[anthropic-max-tokens-streaming-threshold]]: max_tokens > 2000 with the
+# non-streaming `messages.create()` disconnects mid-response.
+# ===========================================================================
+
+# Approximate Anthropic Sonnet pricing (USD per token). Cost surfacing is
+# order-of-magnitude — operators want to know "fractions of a cent" vs
+# "tens of cents", not 4-decimal accuracy.
+_COST_PER_INPUT_TOKEN_USD = 3.0 / 1_000_000   # $3 per M input tokens
+_COST_PER_OUTPUT_TOKEN_USD = 15.0 / 1_000_000  # $15 per M output tokens
+
+
+def real_llm_enabled() -> bool:
+    """Env flag gate for the live LLM path. Read at call time (not module
+    load) so tests can flip it via monkeypatch.setenv without reimporting."""
+    return os.getenv("REAL_LLM_ENABLED", "false").strip().lower() in {"true", "1", "yes"}
+
+
+def _build_prompt(use_case: str, payload: dict) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for a use case.
+
+    S69 ships RELEASE_DECISION_NARRATIVE only. S69b adds the other four.
+    Prompts colocated per the "prompts in one module" rule. The text is
+    explicitly grounded in the simulate_response() framing — that text is
+    the calibration target. Real responses should match its structure
+    (decision, gates, evidence gaps, remediation) so the drawer rendering
+    needs no changes.
+    """
+    if use_case == UseCase.RELEASE_DECISION_NARRATIVE.value:
+        system_prompt = (
+            "You are an AI assurance specialist drafting a release decision "
+            "narrative for a regulated financial-services AI system. You are "
+            "writing for a CISO + CRO audience: tight, factual, no hedging. "
+            "The narrative explains why a specific release gate failed and "
+            "what remediation is required.\n\n"
+            "Structure your response exactly as:\n"
+            "  · Decision: <HOLD | CONDITIONAL_PILOT | RELEASE>\n"
+            "  · Why: <one sentence root cause>\n"
+            "  · Failed gates: <gate IDs + brief framing>\n"
+            "  · Evidence gaps: <specific manifests / artifacts missing>\n"
+            "  · Required remediation: <ordered list of 2-4 concrete actions>\n\n"
+            "Reference framework controls explicitly when applicable "
+            "(NIST 600-1, OWASP LLM/AAI, FS-Overlay AI-*). Do NOT fabricate "
+            "framework IDs you are not certain of. Keep total length under "
+            "180 words."
+        )
+        ai_sys = payload.get("ai_system_id") or "the AI system"
+        gate_id = payload.get("gate_id") or "—"
+        gate_note = payload.get("gate_note") or "(no operator note)"
+        gate_actual = payload.get("gate_actual") or "(no measured value)"
+        user_prompt = (
+            f"AI system: {ai_sys}\n"
+            f"Failed gate ID: {gate_id}\n"
+            f"Operator note: {gate_note}\n"
+            f"Measured value at gate: {gate_actual}\n\n"
+            f"Draft the release decision narrative."
+        )
+        return system_prompt, user_prompt
+
+    # Fallback (shouldn't be hit in S69 — _dispatch_streaming guards).
+    return (
+        "You are an AI assurance specialist. Respond concisely.",
+        f"Use case: {use_case}\nPayload: {json.dumps(payload)[:1500]}",
+    )
+
+
+# Max output token budgets per use case. Release narrative is the only one
+# S69 ships; the others land in S69b with their own budgets.
+_MAX_TOKENS_BY_USE_CASE: dict[str, int] = {
+    UseCase.RELEASE_DECISION_NARRATIVE.value: 3500,
+    UseCase.FINDINGS_SUMMARIZATION.value: 2500,
+    UseCase.EVIDENCE_SUMMARIZATION.value: 2500,
+    UseCase.EXECUTIVE_REPORT_GENERATION.value: 4000,
+    UseCase.SYSTEM_QA.value: 2000,
+}
+
+
+async def stream_anthropic_response(
+    provider: AssuranceProvider,
+    use_case: str,
+    sanitized: dict,
+):
+    """Async generator yielding streaming tokens from Anthropic.
+
+    Yields tuples:
+      ("delta", text)          — incremental text chunks
+      ("done", {usage info})   — terminal event with token + cost numbers
+
+    The {usage info} dict has keys: input_tokens, output_tokens,
+    token_estimate (sum), cost_estimate_usd, model, full_text.
+
+    Uses `async with client.messages.stream(...)` per
+    [[anthropic-max-tokens-streaming-threshold]] — non-streaming
+    messages.create() with max_tokens > 2000 disconnects with a misleading
+    APIConnectionError. The streaming context manager is the only safe path.
+    """
+    # Lazy import — anthropic SDK is heavy and top-level import would slow
+    # cold start. See [[appservice-deploy-python]] re: top-level heavy imports.
+    from anthropic import AsyncAnthropic
+
+    client = AsyncAnthropic()  # reads ANTHROPIC_API_KEY from env
+
+    system_prompt, user_prompt = _build_prompt(use_case, sanitized)
+    max_tokens = _MAX_TOKENS_BY_USE_CASE.get(use_case, 2500)
+    model = provider.default_model
+
+    full_text_parts: list[str] = []
+    async with client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    ) as stream:
+        async for text in stream.text_stream:
+            full_text_parts.append(text)
+            yield ("delta", text)
+        final_message = await stream.get_final_message()
+
+    input_tokens = int(getattr(final_message.usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(final_message.usage, "output_tokens", 0) or 0)
+    cost = round(
+        input_tokens * _COST_PER_INPUT_TOKEN_USD
+        + output_tokens * _COST_PER_OUTPUT_TOKEN_USD,
+        5,
+    )
+    yield (
+        "done",
+        {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "token_estimate": input_tokens + output_tokens,
+            "cost_estimate_usd": cost,
+            "model": model,
+            "full_text": "".join(full_text_parts),
+        },
+    )
+
+
 __all__ = [
     "ProviderType", "ProviderStatus", "ProviderRole", "DataClass", "UseCase",
     "AuditDecision",
@@ -856,4 +1009,6 @@ __all__ = [
     "have_real_credentials", "simulate_response",
     "list_providers", "get_provider", "policy_summary", "list_audit",
     "RoutingDecision",
+    # S69 — real LLM streaming
+    "real_llm_enabled", "stream_anthropic_response",
 ]

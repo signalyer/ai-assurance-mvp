@@ -236,6 +236,13 @@ function FailedGateRow({ gate: g, systemId }: { gate: ReleaseGate; systemId: str
           gate_note: g.note ?? null,
           gate_actual: g.actual ?? null,
         },
+        // S69 constraint: pin Anthropic. Routing engine ranks Bedrock above
+        // Anthropic for RELEASE_DECISION_NARRATIVE (Bedrock carries all three
+        // roles), but App Service has no AWS creds -- without this pin the
+        // live LLM path would fall back to sim and the operator would see
+        // the same Simulated preview as S68a. S69b: provider-agnostic
+        // streaming will drop this pin.
+        preferred_provider: 'anthropic-prod',
         user: 'team-portal',
       },
     });

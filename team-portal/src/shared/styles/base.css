@@ -900,3 +900,8 @@ input:focus { outline: none; border-color: var(--border-focus); }
 }
 .drawer-section { padding: 0.75rem 0; border-top: 1px solid var(--border); }
 .drawer-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 0.5rem; }
+
+/* S69: streaming cursor for AiSummaryDrawer live LLM responses. */
+@keyframes aiCursorBlink {
+  to { opacity: 0; }
+}

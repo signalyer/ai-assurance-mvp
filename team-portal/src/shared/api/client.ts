@@ -111,3 +111,59 @@ export const apiPost = <T>(path: string, body?: unknown) =>
 
 export const apiDelete = <T>(path: string) =>
   apiRequest<T>(path, { method: 'DELETE' });
+
+// ---------------------------------------------------------------------------
+// SSE (Server-Sent Events) — S69
+// ---------------------------------------------------------------------------
+// Native EventSource doesn't support POST bodies, so we use
+// @microsoft/fetch-event-source which gives us full fetch() semantics
+// (POST + body + credentials + custom headers) on top of the SSE wire format.
+//
+// Per [[raw-fetch-drifts-from-shared-client]]: this wrapper is the ONLY
+// way SPA code should consume SSE. Bypassing it (e.g. raw fetchEventSource)
+// would drop credentials='include' or the X-Data-Mode header and produce
+// the same auth/data-drift class of bug as the F-019 PDF-export incident.
+
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+
+export interface SseHandlers {
+  onEvent: (event: string, data: string) => void;
+  onError?: (err: unknown) => void;
+  onClose?: () => void;
+  signal?: AbortSignal;
+}
+
+export async function apiSse(
+  path: string,
+  body: unknown,
+  handlers: SseHandlers,
+): Promise<void> {
+  const url = buildUrl(path);
+  await fetchEventSource(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      'X-Data-Mode': readDataMode(),
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal ?? null,
+    // openWhenHidden: keep the stream alive when the tab is backgrounded.
+    // Without this fetchEventSource pauses the connection on visibilitychange
+    // and the user returns to a dead stream.
+    openWhenHidden: true,
+    onmessage(msg) {
+      handlers.onEvent(msg.event || 'message', msg.data);
+    },
+    onerror(err) {
+      handlers.onError?.(err);
+      // Throwing here is the documented way to stop fetchEventSource from
+      // retrying. We want fail-fast UI behavior, not silent reconnect.
+      throw err;
+    },
+    onclose() {
+      handlers.onClose?.();
+    },
+  });
+}
