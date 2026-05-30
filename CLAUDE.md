@@ -45,3 +45,9 @@ Stop. State the blocker. Never fake output. Never work around silently.
 ## Compound engineering rule
 Every mistake I correct → add a new rule to this file immediately.
 Label it with the date. This file grows with experience.
+
+## Workflow + token bands
+Operating rules (workflow classification, token bands, review/stop/cost
+control) live in global `~/.claude/CLAUDE.md` under SESSION MANAGEMENT.
+Project may tighten bands here if a project-shape reason exists; do not
+restate the rules themselves.
