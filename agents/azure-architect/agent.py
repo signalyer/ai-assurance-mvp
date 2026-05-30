@@ -172,12 +172,23 @@ async def call_llm(
     anthropic = Anthropic(api_key=_require_anthropic_key())
     started = time.monotonic()
 
-    msg = anthropic.messages.create(
+    # Streaming is REQUIRED per CLAUDE.md "Use streaming for any call with
+    # max_tokens > 2000" and the [[anthropic-max-tokens-streaming-threshold]]
+    # memory. architecture_review is 4096 — non-streaming messages.create()
+    # at that budget disconnects mid-response via
+    # anthropic.APIConnectionError ("Server disconnected without sending a
+    # response"). _run_plan already uses this pattern; call_llm was missed.
+    # Caught in S70b STEP 2 when the first real --review smoke ran after
+    # S69 added write_episode. The streaming context manager collects the
+    # full message via get_final_message() while keeping the connection
+    # alive — same downstream contract (msg.content, msg.usage).
+    with anthropic.messages.stream(
         model=model,
         max_tokens=TOKEN_BUDGETS["architecture_review"],
         system=SYSTEM_PROMPT_REVIEW,
         messages=[{"role": "user", "content": prompt}],
-    )
+    ) as stream:
+        msg = stream.get_final_message()
 
     latency_ms = int((time.monotonic() - started) * 1000)
     # Anthropic responses are a list of content blocks; concat text blocks.
@@ -249,6 +260,86 @@ async def call_llm(
     except Exception as exc:  # noqa: BLE001
         print(f"[eval] FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
 
+    # 4. Persist Tier-2 episodic memory. write_episode is NOT a decorator —
+    #    it's a POST-call inline, same pattern as trace_call + evaluate_response
+    #    above. The decorator chain order (@policy_gate → @scrub_pii →
+    #    @guardrails → @trace_llm_call → @evaluate_response) is unchanged;
+    #    this extends the inline tail per S70b.
+    #
+    #    `prompt` here is the SCRUBBED text per the @scrub_pii contract, which
+    #    is what agent_memory.write_episode requires. vault_id is the same
+    #    synthesised value passed to tracer.trace_call above, so memory rows
+    #    are joinable with trace rows on vault_id. Never swallow exceptions
+    #    silently per [[bare-except-hides-broken-integrations]] — log the
+    #    failure with module+exception, but never block the agent on memory
+    #    write failure (memory is observability, not a gate).
+    episode_id = ""
+    try:
+        from domain.agent_memory import write_episode
+
+        # Outcome derived from eval pass-rate. eval_result shape:
+        # {metric_name: {"score": float|None, "passed": bool|None, "details": str}}
+        # Skip detection: the DeepEval-backed evaluator emits skipped metrics
+        # as {score: None, passed: False, details: "Skipped (...)"} when there's
+        # no ground truth (e.g. hallucination + faithfulness with empty context).
+        # `passed=False` is a presentation artefact for the V1 scoreboard mark,
+        # NOT a real failure. The reliable signal is `score is None`. Drop those
+        # before classifying outcome. Caught in S70b STEP 2 second smoke when
+        # an otherwise-passing review still wrote outcome="failure" because
+        # hallucination + faithfulness were skipped.
+        if eval_result:
+            scored = [
+                p for p in eval_result.values()
+                if isinstance(p, dict) and p.get("score") is not None
+            ]
+            any_failed = any(p.get("passed") is False for p in scored)
+            any_passed = any(p.get("passed") is True for p in scored)
+            if any_failed:
+                outcome = "failure"
+            elif any_passed:
+                outcome = "success"
+            else:
+                outcome = "review"
+        else:
+            outcome = "review"
+
+        # eval_summary is a small, self-describing roll-up so the episode row
+        # is useful in a future episode browser without rejoining to evals.jsonl.
+        eval_summary: dict[str, Any] = {
+            metric: {
+                "score": payload.get("score"),
+                "passed": payload.get("passed"),
+            }
+            for metric, payload in eval_result.items()
+            if isinstance(payload, dict)
+        }
+
+        episode_id = write_episode(
+            workload_id=workload_id,
+            prompt=prompt,
+            response=response_text,
+            outcome=outcome,
+            metadata={
+                "agent": "azure-architect",
+                "model": model,
+                "latency_ms": latency_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "trace_id": trace_id,
+                "vault_id": vault_id,
+                "eval_summary": eval_summary,
+            },
+        )
+        print(f"[memory] episode_id={episode_id} outcome={outcome}")
+    except Exception as exc:  # noqa: BLE001
+        # Log with module + exception name + message per
+        # [[bare-except-hides-broken-integrations]]. episode_id stays "".
+        print(
+            f"[memory] write_episode FAILED: "
+            f"{type(exc).__module__}.{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+
     return {
         "response": response_text,
         "model": model,
@@ -258,6 +349,7 @@ async def call_llm(
         "trace_id": trace_id,
         "eval": eval_result,
         "vault_id": vault_id,
+        "episode_id": episode_id,
     }
 
 
@@ -531,7 +623,8 @@ def _print_review(result: dict[str, Any]) -> None:
     print(
         f"model={result['model']}  latency_ms={result['latency_ms']}  "
         f"tokens_in={result['input_tokens']}  tokens_out={result['output_tokens']}  "
-        f"trace_id={result['trace_id'] or '(none)'}  vault_id={result['vault_id'] or '(none)'}"
+        f"trace_id={result['trace_id'] or '(none)'}  vault_id={result['vault_id'] or '(none)'}  "
+        f"episode_id={result.get('episode_id') or '(none)'}"
     )
     print("=" * 72 + "\n")
 

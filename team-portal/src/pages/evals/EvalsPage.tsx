@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
 import type { EvalsSystemOverview, OverviewResponse } from './types';
 import { SystemEvalCard } from './SystemEvalCard';
+import { RecentLiveRunsPanel } from './RecentLiveRunsPanel';
 
 const overview = signal<EvalsSystemOverview[]>([]);
 const loading = signal<boolean>(true);
@@ -66,6 +67,8 @@ export function EvalsPage() {
       </div>
 
       {loadError.value && <div class="error-banner">Failed to load evals: {loadError.value}</div>}
+
+      <RecentLiveRunsPanel />
 
       <div class="kpi-row">
         <div class="kpi-card">

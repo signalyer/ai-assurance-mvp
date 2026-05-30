@@ -11,14 +11,25 @@ bare-by-design exemption per compound rule 26a does not apply here.
 
 from __future__ import annotations
 
+import asyncio
+import os
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
 from tracer import get_recent_traces
 from evaluator import evaluate_response
+from storage import _read_jsonl
 
 router = APIRouter(prefix="/api", tags=["evaluate"])
+
+# S70b — recent-evals read source. Match evaluator._EVALS_JSONL path-resolution
+# rule (DATA_ROOT env override, else <repo>/data) so a misconfigured DATA_ROOT
+# can't cause read/write to silently target different files.
+_EVALS_JSONL_PATH = Path(
+    os.environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data")
+) / "evals.jsonl"
 
 # In-memory cache for eval results (key: trace_id)
 eval_cache: dict[str, dict] = {}
@@ -65,6 +76,42 @@ class EvaluateResponse(BaseModel):
 class EvaluateRequest(BaseModel):
     """Request to evaluate a trace."""
     trace_id: str
+
+
+# ===========================================================================
+# Recent-evals read surface (S70b — wire team-portal Evals to real data)
+# ===========================================================================
+
+class RecentEvalMetric(BaseModel):
+    """Per-metric record as stored in data/evals.jsonl.
+
+    skipped is the canonical signal for "metric not applicable" (no context /
+    no ground truth). passed=false on a skipped row is a legacy V1 scoreboard
+    artefact — consumers should check skipped first.
+    """
+    score: Optional[float] = None
+    passed: Optional[bool] = None
+    skipped: bool = False
+    details: str = ""
+
+
+class RecentEvalRow(BaseModel):
+    """One eval row as written by evaluator._append_eval_jsonl()."""
+    trace_id: str
+    timestamp: str
+    workload_id: Optional[str] = None
+    model: Optional[str] = None
+    results: dict[str, RecentEvalMetric] = Field(default_factory=dict)
+
+
+class RecentEvalsResponse(BaseModel):
+    """Envelope for GET /api/evals/recent."""
+    rows: list[RecentEvalRow]
+    total: int = Field(description="Number of rows returned (after filter + limit).")
+    source: str = Field(
+        default="data/evals.jsonl",
+        description="Hard-coded so the UI can label the panel correctly when seed/overlay rows exist elsewhere.",
+    )
 
 
 # ===========================================================================
@@ -171,3 +218,52 @@ async def evaluate_trace(request: EvaluateRequest) -> dict:
             "cached": False,
             "error": str(e)[:200],
         }
+
+
+# ===========================================================================
+# Recent-evals read endpoint (S70b)
+# ===========================================================================
+
+def _read_recent_evals_sync(
+    workload_id: Optional[str],
+    limit: int,
+) -> list[dict]:
+    """Sync read of data/evals.jsonl with optional workload filter.
+
+    Kept sync + private so the FastAPI handler can wrap it in asyncio.to_thread
+    — storage._read_jsonl does blocking file I/O and would hold the event loop
+    on a large JSONL otherwise.
+    """
+    # Read all (limit=None) then filter, then slice — _read_jsonl returns
+    # most-recent-first so we want to filter before slicing to avoid losing
+    # matching rows behind unrelated recent ones.
+    rows = _read_jsonl(_EVALS_JSONL_PATH, limit=None)
+    if workload_id:
+        rows = [r for r in rows if r.get("workload_id") == workload_id]
+    return rows[:limit]
+
+
+@router.get(
+    "/evals/recent",
+    response_model=RecentEvalsResponse,
+    operation_id="evals_recent_get",
+)
+async def evals_recent(
+    workload_id: Optional[str] = Query(
+        default=None,
+        description="Filter to one workload (matches evaluator's workload_id field).",
+    ),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> RecentEvalsResponse:
+    """Return the most recent real eval rows from data/evals.jsonl.
+
+    Source of truth is the JSONL file written inline by evaluate_response().
+    No seed/overlay fallback — empty list when no real runs have happened.
+    That's deliberate: the team-portal Evals "Recent live runs" panel must
+    NOT lie about provenance.
+    """
+    rows = await asyncio.to_thread(_read_recent_evals_sync, workload_id, limit)
+    return RecentEvalsResponse(
+        rows=[RecentEvalRow(**r) for r in rows],
+        total=len(rows),
+    )

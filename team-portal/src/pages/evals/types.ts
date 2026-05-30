@@ -99,3 +99,31 @@ export interface EvalSuiteCatalog {
   active_vendor: string;
   adr: string;
 }
+
+// ===========================================================================
+// S70b — recent live evals (real data from data/evals.jsonl)
+// Mirrors api/evaluate.py::RecentEvalsResponse. The "Recent live runs" panel
+// on the Evals page reads these in addition to the seed-overlay system cards
+// below. Provenance is intentionally narrow: real agent/SDK runs only.
+// ===========================================================================
+
+export interface RecentEvalMetric {
+  score: number | null;
+  passed: boolean | null;
+  skipped: boolean;
+  details: string;
+}
+
+export interface RecentEvalRow {
+  trace_id: string;
+  timestamp: string;
+  workload_id: string | null;
+  model: string | null;
+  results: Record<string, RecentEvalMetric>;
+}
+
+export interface RecentEvalsResponse {
+  rows: RecentEvalRow[];
+  total: number;
+  source: string;
+}
