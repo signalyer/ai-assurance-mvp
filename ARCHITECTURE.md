@@ -111,7 +111,15 @@ Summary index of net-new files + materially-changed surfaces:
 - `team-portal/src/pages/ai-systems/AiSystemEditModal.tsx` — imports `EvidenceRow` / `EvidenceListResponse` from `./types`
 - `docs/openapi-v1.json` — regen (S66 evidence schemas + S67 shape)
 
-Live tips: engine `17683c6`; team-portal SPA `index-B65x86z3.js`; ciso-console SPA `index-bVhd18Tk.js` (unchanged from S66).
+**S68a — LLM affordance carryover G-6 (Explain on failed release gates):**
+- `team-portal/src/shared/types/assurance.ts` — `AskRequest`, `AskResponseOut`, `PolicyDecisionOut`, `GovernanceMetadata` mirroring `api/assurance_model.py`
+- `team-portal/src/shared/components/AiSummaryDrawer.tsx` — module-signal-driven shared drawer; mandatory "Simulated preview" badge on `status === 'simulated'`; rotating loading messages; Copy markdown + Close; surfaces `provider`, `model`, `audit_event_id`, `sanitized_redactions`
+- `team-portal/src/pages/ai-systems/AiSystemDrawer.tsx` — `FailedGateRow` extracted; per-row **Explain** button routes to `/assurance-model/explain-release` via `openAiSummary`
+- `team-portal/src/app.tsx` — `<AiSummaryDrawer />` mounted once at shell
+- G-5 (Summarize finding) deferred: no `FindingsPage.tsx` exists in team-portal; would have meant synthesizing a page in-session (out-of-scope per S68a plan). Carried to S69b.
+- Engine **unchanged** — endpoints are simulation-only by design (api/assurance_model.py:404); real LLM wiring is S69 scope.
+
+Live tips: engine `17683c6` (unchanged from S67); team-portal SPA `index-yKOGPBUx.js`; ciso-console SPA `index-bVhd18Tk.js` (unchanged from S66).
 
 **/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
 

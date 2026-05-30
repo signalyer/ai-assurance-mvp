@@ -13,6 +13,7 @@ import { RagCorpusPage } from './pages/rag/RagCorpusPage';
 import { AdversarialPage } from './pages/adversarial/AdversarialPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { LoginPage } from './pages/login/LoginPage';
+import { AiSummaryDrawer } from './shared/components/AiSummaryDrawer';
 
 export function App() {
   const [location] = useLocation();
@@ -42,6 +43,7 @@ export function App() {
           <div class="empty-state">Page not found.</div>
         </Route>
       </Switch>
+      <AiSummaryDrawer />
     </Shell>
   );
 }

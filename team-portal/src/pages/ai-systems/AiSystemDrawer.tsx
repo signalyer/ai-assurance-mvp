@@ -6,7 +6,8 @@ import { openEdit, registerEditSavedCallback } from './AiSystemEditModal';
 import { openRevisions } from './AiSystemRevisionsPanel';
 import { openFrameworks } from './AiSystemFrameworksPanel';
 import { openBoundAgents } from './AiSystemBoundAgentsPanel';
-import type { AiSystemDetail, EditStatus, EvidenceListResponse, EvidenceRow } from './types';
+import { openAiSummary } from '../../shared/components/AiSummaryDrawer';
+import type { AiSystemDetail, EditStatus, EvidenceListResponse, EvidenceRow, ReleaseGate } from './types';
 
 // Open-system signal: drives the side drawer.
 // Setting to a non-null id triggers a fetch; null closes the drawer.
@@ -165,19 +166,7 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
             {' · approved by '}{s.release_gates.approver}
           </div>
           {s.release_gates.gates.filter((g) => !g.passed).map((g) => (
-            <div
-              key={g.id}
-              class="text-xs"
-              style={{
-                padding: '0.5rem',
-                background: 'var(--critical-bg)',
-                border: '1px solid rgba(239,68,68,0.3)',
-                borderRadius: 4,
-                marginBottom: 6,
-              }}
-            >
-              <span class="font-mono text-critical">{g.id}</span> {g.note ?? g.actual}
-            </div>
+            <FailedGateRow key={g.id} gate={g} systemId={s.id} />
           ))}
         </div>
       )}
@@ -227,6 +216,57 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         <button class="btn btn-sm btn-secondary" onClick={() => openBoundAgents(s.id)}>Bound Agents</button>
       </div>
     </>
+  );
+}
+
+// S68a (G-6): Failed release gate row with Explain button. Routes to
+// /api/v1/assurance-model/explain-release; drawer renders the simulated
+// preview via the shared AiSummaryDrawer. Currently sim-only — S69 wires
+// real Anthropic streaming.
+function FailedGateRow({ gate: g, systemId }: { gate: ReleaseGate; systemId: string }) {
+  function onExplain(): void {
+    openAiSummary({
+      url: '/assurance-model/explain-release',
+      title: `Explain: ${g.id}`,
+      body: {
+        ai_system_id: systemId,
+        data_classes: [],
+        payload: {
+          gate_id: g.id,
+          gate_note: g.note ?? null,
+          gate_actual: g.actual ?? null,
+        },
+        user: 'team-portal',
+      },
+    });
+  }
+
+  return (
+    <div
+      class="text-xs"
+      style={{
+        padding: '0.5rem',
+        background: 'var(--critical-bg)',
+        border: '1px solid rgba(239,68,68,0.3)',
+        borderRadius: 4,
+        marginBottom: 6,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+      }}
+    >
+      <div>
+        <span class="font-mono text-critical">{g.id}</span> {g.note ?? g.actual}
+      </div>
+      <button
+        class="btn btn-xs btn-secondary"
+        style={{ flexShrink: 0 }}
+        onClick={onExplain}
+      >
+        Explain
+      </button>
+    </div>
   );
 }
 

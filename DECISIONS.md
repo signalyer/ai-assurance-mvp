@@ -658,3 +658,37 @@ Constrains: any future Drawer section that surfaces a list with O(N)
      `evidence` field is still typed `list[dict[str, Any]]` (loose) for
      V1 compat; tightening to `EvidenceRowOut` is a future minor
      version bump.
+
+## 2026-05-30 — S68a: shared AiSummaryDrawer + mandatory "Simulated preview" badge
+Decision: Ship the G-6 Explain affordance on failed release gates via a
+     new shared `AiSummaryDrawer` mounted once at the team-portal shell.
+     Mandatory "Simulated preview" badge surfaces whenever
+     `AskResponseOut.status === 'simulated'` (every response in S68a since
+     `api/assurance_model.py::_dispatch` hardcodes `simulate_response()`).
+     S69 wires real Anthropic streaming and the badge drops transparently
+     when `status === 'live'`.
+Alternatives: bundle G-5..G-9 into one mega-session · wait for S69 real-LLM
+     wiring before shipping any UI · ship the button without disclosure ·
+     synthesize a new FindingsPage so G-5 could ride alongside G-6
+Why: Per the S67 streaming audit, all five `/assurance-model/*` endpoints
+     are sim-only by design — no `FORCE_REAL` flag exists. Shipping the
+     affordance now (a) gives S69 a UI to swap into rather than designing
+     UI + engine simultaneously, (b) validates the drawer pattern against
+     real provider routing + audit (those parts are already live), and
+     (c) lets operators see policy-decision + redaction surfaces today.
+     The mandatory disclosure badge is non-negotiable: a button labeled
+     "Explain" returning deterministic placeholder text without surfacing
+     that fact is exactly the [[ui-promise-audit-owed]] failure mode that
+     S64 audited away. G-5 deferred because `FindingsPage.tsx` doesn't
+     exist; synthesizing a new page mid-S68a violates the
+     [[wizard-mounts-create-resources]] discipline (build the surface
+     when the data + flow are known, not opportunistically).
+Constrains: any future LLM-triggering button anywhere in team-portal MUST
+     call `openAiSummary({ url, title, body })` rather than rolling its own
+     drawer — single point of control for disclosure, loading state, and
+     status discrimination. S69 changes one branch in the drawer
+     (`status === 'live'` path) and the engine's `_dispatch` function;
+     no caller-side code changes required. The drawer reads
+     `result.policy_decision?.reason` for blocked branches — if S69+
+     tightens `PolicyDecisionOut` from `extra='allow'` to a strict union,
+     the drawer needs a typed accessor.
