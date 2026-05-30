@@ -45,6 +45,13 @@ interface ExistingKeyListOut {
 const issuedKey = signal<IssuedKey | null>(null);
 const issueError = signal<string | null>(null);
 const issuing = signal<boolean>(false);
+// G-2 (S64): Revoke is a separate affordance from Rotate. revoking gates the
+// button to prevent double-click double-POST; revokeNotice surfaces the
+// "you revoked key X" one-time banner so the operator has visual proof the
+// security primitive fired (key revocation is the only operator action that
+// is irreversible AND silent if the UI doesn't confirm it).
+const revoking = signal<boolean>(false);
+const revokeNotice = signal<string | null>(null);
 // S55 #8: default the secret to revealed. It's shown ONCE; masking by default
 // adds friction without a real security gain (the user already authenticated
 // to reach this page, and the secret is on screen either way). The Hide
@@ -63,6 +70,11 @@ const existingKey = signal<ExistingKeySummary | null>(null);
 
 async function bootstrapKey(aiSystemId: string): Promise<void> {
   if (issuing.value || issuedKey.value || existingKey.value) return;
+  // G-2 (S64): if the operator just revoked, don't auto-mint — they should
+  // explicitly hit "Issue Fresh Key". Auto-mint after revoke would defeat
+  // the purpose of having a revoke-only affordance (and silently re-introduce
+  // the [[wizard-mounts-create-resources]] class).
+  if (revokeNotice.value) return;
   issuing.value = true;
   issueError.value = null;
 
@@ -110,13 +122,22 @@ async function bootstrapKey(aiSystemId: string): Promise<void> {
 
 async function rotateKey(aiSystemId: string): Promise<void> {
   // Explicit user action: revoke the current key (if any) and mint a new one.
-  // The current key is revoked server-side by issuing a new one is NOT the
-  // contract — the user must explicitly hit /revoke first. For now we just
-  // mint; revocation is a separate S56 affordance.
+  // G-2 (S64): rotation now properly calls /revoke on the prior key first —
+  // previously the comment here flagged that "the user must explicitly hit
+  // /revoke first" and that revocation was a "separate S56 affordance".
+  // S64 added both: revokeKey() below for revoke-only, and rotateKey now
+  // calls it for "revoke + mint" as one operation. Revoke is best-effort —
+  // if it fails (e.g. key already revoked server-side), the mint still
+  // proceeds because the contract is "after this completes, the operator
+  // has a fresh usable key", not "revoke must succeed."
+  const priorKeyId = existingKey.value?.key_id ?? issuedKey.value?.key_id ?? null;
   existingKey.value = null;
   issuedKey.value = null;
   issuing.value = true;
   issueError.value = null;
+  if (priorKeyId) {
+    await apiPost<{ key_id: string; revoked_at: string }>(`/sdk-keys/${priorKeyId}/revoke`, {});
+  }
   const r = await apiPost<IssuedKey>('/sdk-keys', { ai_system_id: aiSystemId });
   if (!r.ok) {
     issueError.value = r.detail;
@@ -125,6 +146,49 @@ async function rotateKey(aiSystemId: string): Promise<void> {
   }
   issuedKey.value = r.data;
   issuing.value = false;
+}
+
+async function revokeKey(keyId: string): Promise<void> {
+  // G-2 (S64): revoke-only — operator wants to kill a key without immediately
+  // replacing it (e.g. suspected leak, system being decommissioned). After
+  // success the wizard returns to a clean "no usable key" state with a banner
+  // confirming the revocation. Issuing a fresh key is a separate explicit
+  // action via "Issue Fresh Key" below.
+  if (revoking.value) return;
+  // window.confirm is the lightest-weight modal; matches the RTF approve flow.
+  // Revocation is irreversible so the confirm is mandatory, not optional.
+  if (!window.confirm(`Revoke SDK key ${keyId}? Any agents still signing with this key will start failing immediately. This cannot be undone.`)) return;
+  revoking.value = true;
+  issueError.value = null;
+  const r = await apiPost<{ key_id: string; revoked_at: string }>(`/sdk-keys/${keyId}/revoke`, {});
+  revoking.value = false;
+  if (!r.ok) {
+    issueError.value = `Revoke failed: ${r.detail}`;
+    return;
+  }
+  existingKey.value = null;
+  issuedKey.value = null;
+  revokeNotice.value = `Key ${r.data.key_id} revoked at ${r.data.revoked_at}.`;
+}
+
+async function mintFreshKey(aiSystemId: string): Promise<void> {
+  // G-2 (S64): explicit mint, separate from bootstrap (which is the on-mount
+  // auto-discovery path). Used after revokeKey to give the operator a
+  // dedicated action button rather than auto-minting on their behalf —
+  // F-013 [[wizard-mounts-create-resources]] showed how unconditional
+  // mint-on-mount produces orphan keys; making this explicit avoids
+  // re-introducing that class.
+  if (issuing.value) return;
+  issuing.value = true;
+  issueError.value = null;
+  revokeNotice.value = null;
+  const r = await apiPost<IssuedKey>('/sdk-keys', { ai_system_id: aiSystemId });
+  issuing.value = false;
+  if (!r.ok) {
+    issueError.value = r.detail;
+    return;
+  }
+  issuedKey.value = r.data;
 }
 
 function copyTo(text: string, key: NonNullable<typeof copied.value>): void {
@@ -250,6 +314,10 @@ export function OnboardingPage() {
       copied.value = null;
       currentStep.value = 1;
       firstSignalArrived.value = false;
+      // G-2 (S64): clear revoke-state too — a banner from a prior system
+      // would otherwise leak onto a fresh wizard mount.
+      revokeNotice.value = null;
+      revoking.value = false;
       mountedSystemId.value = systemId;
     }
     void bootstrapKey(systemId);
@@ -344,11 +412,49 @@ export function OnboardingPage() {
                   <div>{existing.first_seen_at ?? <span style={{ color: 'var(--text-secondary)' }}>— never (still waiting)</span>}</div>
                 </div>
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  {/* G-2 (S64): Revoke is the security primitive — it kills the
+                      key without minting a replacement. Distinct from Rotate
+                      (which revokes + mints in one step). Disabled while a
+                      revoke is in flight to prevent double-POST. */}
+                  <button
+                    class="btn btn-sm"
+                    disabled={revoking.value}
+                    onClick={() => { void revokeKey(existing.key_id); }}
+                    title="Mark this key as revoked. Agents signing with it will start failing immediately."
+                  >
+                    {revoking.value ? 'Revoking…' : 'Revoke key'}
+                  </button>
                   <button class="btn btn-sm" onClick={() => { void rotateKey(systemId); }}>
-                    Rotate — issue a new key
+                    Rotate — revoke + issue new
                   </button>
                   <button class="btn btn-sm btn-primary" onClick={() => { currentStep.value = 3; }}>
                     Skip to Verify
+                  </button>
+                </div>
+              </>
+            )}
+            {/* G-2 (S64): post-revoke clean state. No usable key + explicit
+                Issue Fresh Key button. revokeNotice is the visual proof the
+                revocation fired — without it the page would just look empty
+                and the operator would wonder if anything happened. */}
+            {!key && !existing && revokeNotice.value && (
+              <>
+                <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border-strong)', borderRadius: '6px', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '0.25rem' }}>
+                    {revokeNotice.value}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Any agents still signing with this key will start receiving 401 from the engine.
+                    Issue a fresh key below to continue onboarding.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    class="btn btn-sm btn-primary"
+                    disabled={issuing.value}
+                    onClick={() => { void mintFreshKey(systemId); }}
+                  >
+                    {issuing.value ? 'Issuing…' : 'Issue Fresh Key'}
                   </button>
                 </div>
               </>

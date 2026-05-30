@@ -98,8 +98,17 @@ async function runSuite(): Promise<void> {
 
   try {
     const base = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/+$/, '');
+    // credentials: 'include' is mandatory here. Team Portal lives at
+    // portal.aigovern.sandboxhub.co; the engine answers at the apex
+    // aigovern.sandboxhub.co. The default 'same-origin' silently drops the
+    // session cookie cross-subdomain, producing a 401 in prod while dev
+    // (single-origin Vite proxy) passes. Same shape as F-019
+    // ([[raw-fetch-drifts-from-shared-client]]); every shared-client call
+    // uses 'include' already. EventSource isn't an option (POST + body), so
+    // we keep the raw fetch but match the shared client's credentials.
     const resp = await fetch(`${base}/adversarial/run`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({
         model_provider: provider.value,
