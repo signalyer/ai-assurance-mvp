@@ -1,135 +1,129 @@
-# SESSION-68 — V1→V2 LLM affordance carryover (G-5..G-9, slice 1)
+# SESSION-68 — V1→V2 LLM affordance carryover (G-5..G-9)
 # Date: 2026-05-31 (planned)
-# Context cost: MEDIUM-HIGH (likely multi-session arc — this is slice 1 of 2-3)
+# Context cost: SMALL (S68a ships UI on existing simulated endpoints)
+#
+# REVISED post-S67 streaming audit. Original plan assumed these endpoints
+# made real Anthropic calls; audit proved they're simulation-only. Scope
+# split into S68a (UI on simulated) + S69 (wire real LLM in dispatcher).
 
-## What this session builds
+## What the audit found (S67 end-of-session)
 
-S64's UI-promise audit + S66's V1→V2 carryover sub-pattern surfaced five
-`api/assurance_model.py` LLM-backed endpoints that were fully wired into
-V1 (`static/`) pages but have **zero V2 SPA consumers**:
+Five `api/assurance_model.py` endpoints exist and are operator-promised
+in V1 (`static/findings.html` etc), zero V2 consumers:
 
-| Gap   | Verb                 | Engine endpoint                                       | V1 surface                | V2 (today) |
-| ----- | -------------------- | ----------------------------------------------------- | ------------------------- | ---------- |
-| G-5   | Summarize finding    | `POST /api/assurance/findings/{id}/summarize`         | `static/findings.html`    | none       |
-| G-6   | Explain release      | `POST /api/assurance/release-gates/{id}/explain`      | `static/release-gates.html` | none      |
-| G-7   | Summarize evidence   | `POST /api/assurance/evidence/{id}/summarize`         | `static/evidence.html`    | none       |
-| G-8   | Draft report         | `POST /api/assurance/reports/draft`                   | `static/reports.html`     | none       |
-| G-9   | Ask (free-form Q&A)  | `POST /api/assurance/ask`                             | multiple                  | none       |
+| Gap | Verb               | Engine endpoint                          | Body                         |
+| --- | ------------------ | ---------------------------------------- | ---------------------------- |
+| G-5 | Summarize finding  | `POST /api/assurance-model/summarize-finding` | `AskRequest` (use_case auto-set) |
+| G-6 | Explain release    | `POST /api/assurance-model/explain-release`   | `AskRequest`                 |
+| G-7 | Summarize evidence | `POST /api/assurance-model/summarize-evidence`| `AskRequest`                 |
+| G-8 | Draft report       | `POST /api/assurance-model/draft-report`      | `AskRequest`                 |
+| G-9 | Ask (free-form Q&A)| `POST /api/assurance-model/ask`               | `AskRequest`                 |
 
-S68 ships **slice 1: G-5 (Summarize finding) + G-6 (Explain release)**.
-These two are the highest-leverage because they live on surfaces operators
-already visit daily; G-7/G-8/G-9 are scoped for S69+ once the
-button-→drawer-→stream UX pattern is validated.
+**All five are SIMULATION-ONLY by design** (api/assurance_model.py:404):
+- `response_text = simulate_response(req.use_case, decision.provider, sanitized)` is hardcoded
+- Audit logs `AuditDecision.SIMULATED` with comment "real credentials present
+  but simulation enforced in this build" even when `ANTHROPIC_API_KEY` is set
+- No `FORCE_REAL` / `REAL_LLM` flag exists in `domain/assurance_providers.py`
+- Synchronous, fast, deterministic — **streaming is moot**, the
+  [[anthropic-max-tokens-streaming-threshold]] rule doesn't apply
 
-## Pre-conditions
+This reshapes the work. UI work is safe to ship (no engine bug to fix
+first) but shipping a button labeled "Summarize" returning fake text
+without operator-visible disclosure is misleading.
 
-- [ ] Engine tip is `17683c6` (S67) or later — `/healthz` confirms
+## S68a — ship UI with explicit "Simulated preview" labeling
+
+Scope: G-5 (Summarize finding) + G-6 (Explain release). G-7/G-8/G-9
+follow the same pattern in S69b once S69 has wired real calls.
+
+### Pre-conditions
+- [ ] Engine tip is `800fa48` (S67 close-out) or later
 - [ ] Team-portal SPA tip is `index-B65x86z3.js` (S67) or later
-- [ ] CISO console SPA tip is `index-bVhd18Tk.js` (S66) or later
-- [ ] `pytest tests/ -k "assurance or summarize or explain"` baseline pass count
-      captured (likely already covered by `tests/test_assurance_model.py`)
-- [ ] Confirm `ANTHROPIC_API_KEY` is set on the App Service
-      (`az functionapp config appsettings list` or equivalent for
-      `app-aigovern-dev` — it's a web app, not functions); G-5/G-6 will
-      fail open with operator-visible error otherwise
-- [ ] **Streaming check.** `api/assurance_model.py` summarize/explain
-      endpoints likely set `max_tokens > 2000`. Per
-      [[anthropic-max-tokens-streaming-threshold]], non-streaming above
-      2K disconnects. Audit the call sites BEFORE shipping a UI — if they
-      use `messages.create()` instead of the streaming context manager,
-      fix the engine first (deterministic prod failure otherwise).
+- [ ] `pytest tests/ -k "assurance_model"` baseline pass count
+- [ ] Manual smoke (already done in S67 audit): POST
+      `/api/assurance-model/summarize-finding` with a valid `AskRequest`
+      → returns 200 with `status="simulated"` and `response` non-empty
 
-## Files to create
+### Files to create
+1. `team-portal/src/shared/components/AiSummaryDrawer.tsx`
+   - Module-level signal `openSummaryRequest = signal<{url, title, body} | null>(null)`
+   - `openAiSummary({ url, title, body })` setter
+   - On open: `apiPost<AskResponseOut>(url, body)`, show drawer overlay
+   - Render the `response` field as monospace/preformatted text
+   - **Mandatory "Simulated preview" badge** at top of drawer when
+     `response.status === "simulated"` (will be every response in S68a).
+     Use the existing `badge badge-warning` class with text
+     "Simulated preview — provider routing + audit are live; LLM text is
+     deterministic placeholder until S69 wires the real call."
+   - "Copy markdown" + "Close" affordances
+   - `apiPost` already handles `credentials: 'include'`
+     ([[raw-fetch-drifts-from-shared-client]])
+   - Loading state: rotating "Routing to provider…" / "Drafting summary…"
+     / "Logging audit event…" — 3s cadence (CLAUDE.md "Loading states")
 
-1. `team-portal/src/shared/components/AiSummaryDrawer.tsx` — shared
-   right-side drawer/panel that:
-   - takes an endpoint URL + display title
-   - opens via `openAiSummary({ url, title })`
-   - streams (SSE) the response token-by-token; fallback to non-streaming
-     read on SSE failure with operator-visible warning
-   - renders a "Generated by Claude" attribution chip + the actual
-     `claude-sonnet-4-6` model id from the response footer (engine should
-     return both)
-   - has a "Copy markdown" affordance and "Close" button
-   - error states match other drawers (`error-banner` class)
-   - guarded by [[raw-fetch-drifts-from-shared-client]]:
-     `credentials: 'include'` on the SSE EventSource (or `apiPost` for
-     non-stream fallback)
+2. `team-portal/src/shared/types/assurance.ts`
+   - `AskRequest` + `AskResponseOut` + `PolicyDecisionOut` types
+     mirroring `api/assurance_model.py` Pydantic models. Engine source
+     of truth is `api/assurance_model.py::AskResponseOut`.
 
-## Files to modify
+### Files to modify
+1. `team-portal/src/pages/findings/FindingsPage.tsx` (verify exists)
+   - Add **Summarize** button per finding row → calls
+     `openAiSummary({ url: '/assurance-model/summarize-finding',
+       title: 'Summary: ' + f.id, body: { ai_system_id: f.system_id,
+       use_case: '', user: currentUser, data_classes: [], payload: { finding_id: f.id } } })`
+   - If FindingsPage doesn't exist as a standalone surface, drop G-5
+     from S68a and ship G-6 only — don't synthesize a new page in this
+     session.
 
-1. `team-portal/src/pages/findings/FindingsPage.tsx` — add **"Summarize"**
-   button on each finding row (or in a row-drawer if one exists). Wires
-   to `openAiSummary({ url: '/assurance/findings/{id}/summarize', title })`.
-   - Check first: does FindingsPage exist? If not, slice-1 might need
-     to be G-6 only (release gates lives in the AiSystemDrawer release-gate
-     section already — easier to bolt onto).
+2. `team-portal/src/pages/ai-systems/AiSystemDrawer.tsx`
+   - In the Release Gate Status section, add **Explain** button per
+     failed gate row → calls
+     `openAiSummary({ url: '/assurance-model/explain-release', ... })`
 
-2. `team-portal/src/pages/ai-systems/AiSystemDrawer.tsx` — add **"Explain"**
-   button on each failed release gate row in the Release Gate Status
-   section. Wires to `openAiSummary({ url: '/assurance/release-gates/{id}/explain' })`.
+3. `team-portal/src/app.tsx` — mount `<AiSummaryDrawer />` once at shell
 
-3. `team-portal/src/app.tsx` — mount `<AiSummaryDrawer />` once at the
-   shell so any page can call `openAiSummary()`.
+### Verification
+- `pytest tests/ -k "assurance_model"` — same pass count
+- Browser smoke: click Summarize → drawer opens → simulated preview
+  badge visible → response text streams in → close → audit trail in
+  CISO Console shows the new SIMULATED event
+- Bundle-hash + string-grep for "Simulated preview" in the deployed bundle
 
-## Files NOT to touch
+### Deploy
+- Engine: no commit (engine unchanged)
+- SPA: `cd team-portal && npm run build && swa deploy ./dist --env production`
+  per [[spa-deploy-is-manual-swa]]
 
-- `ciso-console/src/` — slice 1 is team-portal only; CISO surfaces in S69
-  if pattern proves out.
-- `api/assurance_model.py` — engine endpoints already exist; touch only
-  if the streaming audit (pre-condition) shows a `max_tokens > 2000` +
-  non-streaming bug.
-- `static/*.html` — V1 stays as is, do not delete.
+## S69 — wire real LLM in `assurance_providers.simulate_response()`'s caller
 
-## Architectural constraints (from CLAUDE.md + memory)
+Out of scope for S68. Separate session. High-level:
 
-- **Streaming.** Any LLM call with `max_tokens > 2000` MUST use the
-  streaming context manager
-  ([[anthropic-max-tokens-streaming-threshold]]). The frontend uses SSE.
-  The engine endpoint either is already SSE or needs to be flipped — do
-  the audit first.
-- **Loading states.** Never blank — the AiSummaryDrawer must show
-  "Reading the finding…" → "Drafting summary…" → "Polishing…" rotating
-  every 3s while streaming. Per CLAUDE.md "Loading states — always
-  meaningful."
-- **Auth.** SSE EventSource sends cookies by default for same-origin;
-  cross-origin needs `withCredentials: true`. portal.* vs apex
-  ([[two-origins-spa-vs-engine]]) — verify in real environment, not
-  just locally.
-- **Token budget.** Cap UI request to `max_tokens=2000` for summarize
-  (short), `max_tokens=3000` for explain (deeper); engine MUST be
-  streaming at either value per the rule above.
-- **No raw fetch.** EventSource is fine (browser primitive); any
-  fallback non-stream call goes through `apiPost`.
+1. Add `REAL_LLM_ENABLED` env flag in `domain/assurance_providers.py`;
+   default OFF for backward compat.
+2. When flag ON + `have_real_credentials(provider)` + use_case allowed,
+   route to a real `anthropic.AsyncAnthropic` streaming call.
+   `max_tokens` per use_case (likely all > 2K → streaming context
+   manager mandatory per [[anthropic-max-tokens-streaming-threshold]]).
+3. Replace synchronous `simulate_response()` line with conditional:
+   real → stream → assemble text → record `AuditDecision.LIVE` with
+   real token/cost metrics.
+4. Change `api/assurance_model.py` endpoints to SSE response (when
+   real path active). Keep simulated path synchronous.
+5. Frontend: switch `AiSummaryDrawer` from `apiPost` to SSE consumer
+   when response is streaming. Drop the "Simulated preview" badge
+   when `response.status === "live"`.
 
-## Verification
+Scope makes this a full session on its own. S68a's UI work transitions
+cleanly because the drawer already handles `response.status` discrimination.
 
-- `pytest tests/ -k "assurance or summarize or explain"` — same pass count.
-- Smoke: team-portal Findings page → click Summarize on a real finding
-  → drawer streams → "Generated by Claude · claude-sonnet-4-6" footer
-  visible → close → reopen → re-streams (no stale cache).
-- Smoke: team-portal AI system Drawer → expand a system with a failed
-  release gate → click Explain → drawer streams → close.
-- Browser DevTools Network: confirm `text/event-stream` content-type,
-  confirm `credentials: include` on the request.
-- After SPA deploy: bundle-hash compare on `portal.aigovern.sandboxhub.co`
-  + string-grep for "Generated by Claude" + the new endpoint paths.
+## Open carry-forward NOT addressed by S68a (for S69+)
 
-## Deploy
-
-- Engine: only if streaming audit finds a bug — otherwise no engine commit.
-- SPA: manual `swa deploy --env production` per [[spa-deploy-is-manual-swa]].
-  Deployment token: `az staticwebapp secrets list --name swa-aigovern-portal-dev --resource-group rg-aigovern-dev --query properties.apiKey -o tsv`.
-
-## Open carry-forward NOT addressed by S68 (for S69+)
-
-- **G-7 (Summarize evidence), G-8 (Draft report), G-9 (Ask)** — pattern
-  repeats once AiSummaryDrawer is shaken out in slice 1.
-- **CISO Console parity** for G-5..G-9 if the team-portal version
-  validates with operators.
+- **G-7 / G-8 / G-9** — same pattern as G-5/G-6; deferrable
+- **CISO Console parity** for G-5..G-9
+- **Real LLM wiring (S69)** — the bigger work
 - **STEP 4 spillover** — Mermaid synthesis + per-tool eval rubric
-  (deferred since S60).
-- **Remaining ARM read stubs** — `list_subscriptions`,
-  `list_role_assignments`, `get_network_topology`.
-- **F-021** — framework mapping data for `ai-sys-bae72e75`.
-- **UI-promise audit re-run** — due ~S74 per [[ui-promise-audit-owed]].
+- **Remaining ARM read stubs** — list_subscriptions, list_role_assignments,
+  get_network_topology
+- **F-021** — framework mapping data for `ai-sys-bae72e75`
+- **UI-promise audit re-run** — due ~S74 per [[ui-promise-audit-owed]]
