@@ -1975,8 +1975,8 @@ async def evil_tool(workload_id: str = 'azure-architect', tool_name: str = 'dele
     return 'SHOULD NEVER RUN'
 
 @signallayer.policy_gate(action='tool_invoke')
-async def good_tool(workload_id: str = 'azure-architect', tool_name: str = 'list_resource_groups'):
-    return 'allowed'
+async def good_tool(workload_id: str = 'azure-architect', tool_name: str = 'get_resource_metadata'):
+    return 'allowed'  # S63: pinned to the newest allowlist entry so the test proves the *current* surface, not just the original one
 
 try:
     asyncio.run(evil_tool())

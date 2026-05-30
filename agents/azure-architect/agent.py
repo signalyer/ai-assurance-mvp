@@ -307,7 +307,11 @@ def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
     it so we can `gather` parallel tool_use blocks in a future turn.
     """
     from azure.identity import DefaultAzureCredential  # local import — see arm_read
-    from tools.arm_read import list_resource_groups, list_resources_in_group
+    from tools.arm_read import (
+        get_resource_metadata,
+        list_resource_groups,
+        list_resources_in_group,
+    )
 
     cred = DefaultAzureCredential()
 
@@ -333,9 +337,23 @@ def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
         )
         return result.model_dump()
 
+    async def _get_metadata(tool_input: dict) -> Any:
+        rid = tool_input.get("resource_id")
+        if not rid:
+            # Same pattern as _list_resources: surface the missing-arg as a
+            # typed error so the model self-corrects rather than the loop
+            # aborting on TypeError.
+            raise ValueError(
+                "get_resource_metadata requires 'resource_id' "
+                "(full ARM id from a prior list_resources_in_group call)."
+            )
+        result = await get_resource_metadata(credential=cred, resource_id=rid)
+        return result.model_dump()
+
     return {
         "list_resource_groups": _list_rgs,
         "list_resources_in_group": _list_resources,
+        "get_resource_metadata": _get_metadata,
     }
 
 

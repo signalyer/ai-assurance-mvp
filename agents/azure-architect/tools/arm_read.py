@@ -231,30 +231,166 @@ async def list_resources_in_group(
 
 
 # ---------------------------------------------------------------------------
-# Tool 3 — get_resource_metadata
+# Tool 3 — get_resource_metadata  (S63)
 # ---------------------------------------------------------------------------
 
 
-async def get_resource_metadata(
-    credential: _Cred, resource_id: str
-) -> ResourceMetadata:
-    """Fetch detailed metadata for one Azure resource.
+def _parse_resource_id(resource_id: str) -> tuple[str, str, str, str]:
+    """Parse an ARM resource_id into (subscription_id, resource_group, namespace, type_path).
 
-    Wraps `azure.mgmt.resource.ResourceManagementClient.resources.get_by_id`.
+    ARM resource IDs follow the shape
+        /subscriptions/<sub>/resourceGroups/<rg>/providers/<ns>/<type>/<name>[/<subtype>/<subname>...]
+    Nested child types use alternating type/name pairs after the provider
+    namespace; we collapse those back into a slash-joined type path
+    (e.g. `sites/slots`) which is the shape Azure expects when looking up
+    `api_versions` on the provider.
+
+    Raises ValueError on any shape mismatch — the orchestration loop catches
+    it and surfaces it back to the model as a typed tool_result error so the
+    model can self-correct (e.g. fix a malformed id from a prior turn).
+    """
+    parts = resource_id.strip("/").split("/")
+    if (
+        len(parts) < 8
+        or parts[0].lower() != "subscriptions"
+        or parts[2].lower() != "resourcegroups"
+        or parts[4].lower() != "providers"
+    ):
+        raise ValueError(
+            f"Malformed resource_id: {resource_id!r}. Expected "
+            "/subscriptions/<sub>/resourceGroups/<rg>/providers/<ns>/<type>/<name>"
+        )
+    subscription_id = parts[1]
+    resource_group = parts[3]
+    namespace = parts[5]
+    # parts[6:] alternates type, name, type, name, ... — take every other.
+    type_parts = parts[6:]
+    if len(type_parts) % 2 != 0:
+        raise ValueError(
+            f"Malformed resource_id: {resource_id!r}. Type/name segments are unpaired."
+        )
+    type_path = "/".join(type_parts[::2])
+    return subscription_id, resource_group, namespace, type_path
+
+
+@signallayer.policy_gate(action="tool_invoke")
+async def get_resource_metadata(
+    credential: _Cred,
+    resource_id: str,
+    *,
+    tool_name: str = "get_resource_metadata",
+    workload_id: str = "azure-architect",
+) -> ResourceMetadata:
+    """Fetch detailed metadata for one Azure resource by full ARM id.
+
+    Wraps `ResourceManagementClient.resources.get_by_id`. ARM requires an
+    explicit `api_version` per resource type (the polymorphic `properties`
+    blob is api-version-pinned), so this tool does a two-step:
+
+      1. Parse the resource_id to extract namespace + type_path.
+      2. Call `providers.get(namespace)` to discover available api_versions
+         for that type and pick the newest.
+      3. Call `resources.get_by_id(resource_id, api_version=<latest>)`.
+
+    The extra round-trip is acceptable for an audit tool. The `properties`
+    dict is returned verbatim — the per-resource WAF synthesis (or a
+    downstream Haiku summarizer) is responsible for normalising it.
+
+    Multi-turn chaining contract: the model gets resource ids from
+    `list_resources_in_group`, then calls THIS tool with one id to drill
+    into a specific resource (storage tier, app service SKU, vault
+    soft-delete, etc.). Canonical three-step audit pattern:
+        list_resource_groups → list_resources_in_group → get_resource_metadata.
 
     Args:
-        credential: Azure credential.
-        resource_id: Full ARM resource ID
-            (e.g. `/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Web/sites/<name>`).
+        credential: Azure credential injected at agent startup.
+        resource_id: Full ARM resource ID. Must begin with `/subscriptions/`.
+        tool_name: Identity for the policy engine. DO NOT override at call
+            site — it is the contract key used by rego Rule 1 (allowlist)
+            and Rule 2 (mutation-verb prefix). Default matches function name.
+        workload_id: Workload identity for policy + audit attribution.
 
     Returns:
-        Strict ResourceMetadata. The `properties` field is intentionally
-        a polymorphic dict — schema varies per ARM resource type.
+        Strict ResourceMetadata (pydantic v2, frozen, extra="forbid").
 
     Raises:
-        ValueError: If `resource_id` is malformed.
+        signallayer.PolicyDeniedError: If rego denies the call.
+        ValueError: If `resource_id` is malformed or its provider type has
+            no published api_versions.
+        RuntimeError: If azure-mgmt-resource is not installed.
+        azure.core.exceptions.ResourceNotFoundError: If the resource_id
+            does not resolve. Surfaced to the model as a typed tool_result
+            error by the orchestration loop.
     """
-    raise NotImplementedError("P4 Day-1 — wrap ResourceManagementClient.resources.get_by_id")
+    try:
+        from azure.mgmt.resource import ResourceManagementClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-mgmt-resource not installed. Run "
+            "`pip install azure-mgmt-resource azure-identity` before "
+            "invoking ARM read tools."
+        ) from exc
+
+    subscription_id, resource_group, namespace, type_path = _parse_resource_id(
+        resource_id
+    )
+
+    def _call_sync() -> ResourceMetadata:
+        client = ResourceManagementClient(credential, subscription_id)
+
+        # Discover the latest api_version for this resource type. ARM lists
+        # newest-first in `api_versions`, but we also filter out preview
+        # tags when a stable one exists — preview api_versions can mutate
+        # `properties` shape without warning and aren't safe for audit.
+        provider = client.providers.get(namespace)
+        api_version: str | None = None
+        for rt in (provider.resource_types or []):
+            if (rt.resource_type or "").lower() == type_path.lower():
+                versions = list(rt.api_versions or [])
+                stable = [v for v in versions if "preview" not in v.lower()]
+                api_version = (stable or versions or [None])[0]
+                break
+        if not api_version:
+            raise ValueError(
+                f"No api_version found for {namespace}/{type_path}. "
+                "Resource type may be retired or not registered in this subscription."
+            )
+
+        resource = client.resources.get_by_id(resource_id, api_version=api_version)
+
+        # `resource.properties` is the polymorphic blob; coerce to dict so
+        # pydantic's ConfigDict(extra='forbid') doesn't choke on an SDK
+        # model object. ARM returns plain dicts in modern SDK versions, but
+        # some sub-resources still hand back typed objects.
+        props_raw = getattr(resource, "properties", None) or {}
+        if isinstance(props_raw, dict):
+            properties = dict(props_raw)
+        else:
+            # Best-effort serialise SDK objects; falls back to empty rather
+            # than raising, because a missing properties blob is a finding,
+            # not a tool failure.
+            try:
+                properties = dict(props_raw.__dict__)
+            except (AttributeError, TypeError):
+                properties = {}
+
+        sku_val: str | None = None
+        sku_obj = getattr(resource, "sku", None)
+        if sku_obj is not None:
+            sku_val = getattr(sku_obj, "name", None) or None
+
+        return ResourceMetadata(
+            id=resource.id or resource_id,
+            name=resource.name or "",
+            type=resource.type or f"{namespace}/{type_path}",
+            location=resource.location or "",
+            resource_group=resource_group,
+            sku=sku_val,
+            tags=dict(resource.tags or {}),
+            properties=properties,
+        )
+
+    return await asyncio.to_thread(_call_sync)
 
 
 # ---------------------------------------------------------------------------

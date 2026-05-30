@@ -607,4 +607,28 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### S63 P4 STEP 1 — drill-down trio complete · STATUS
+
+**`get_resource_metadata` wired + live trio validated — DONE (2026-05-29):**
+- Rego allowlist gate: `get_resource_metadata` already in `readonly_azure_tools` (reserved in S60 scaffolding). Per [[rego-files-were-decorative]] discipline, ran the rego positive+negative replay anyway with the new tool as the positive case — DENY held for `delete_resource_group`, ALLOW held for `get_resource_metadata`.
+- Schema reused: `ResourceMetadata` was already defined in [tools/schemas.py](tools/schemas.py) from S60 (polymorphic `properties: dict[str, object]`, schema_version 1.0).
+- Implementation: [tools/arm_read.py](tools/arm_read.py)::`get_resource_metadata` + `_parse_resource_id` helper. Three-step: parse ARM id → discover newest stable api_version via `providers.get(namespace)` (filter preview tags) → `resources.get_by_id`. Wrapped in `asyncio.to_thread`, governed by `@signallayer.policy_gate(action="tool_invoke")`. Malformed `resource_id` raises `ValueError` which the orchestration loop renders as `is_error` tool_result so the model self-corrects.
+- Anthropic tool spec added to [prompts.py](prompts.py)::`PLAN_TOOL_SPECS` (now 3 tools). Dispatch wired in [agent.py](agent.py)::`_build_tool_dispatch` with missing-`resource_id` ValueError mirror of `_list_resources`.
+- **Live trio run:** `plan-867aa0931a0a`, Sonnet 4.6, 3 turns. Turn 0: 1× `list_resources_in_group` (skipped `list_resource_groups` — operator named RG, correct planning). Turn 1: **3× parallel `get_resource_metadata`** drilling into Key Vault, App Service, PostgreSQL. Turn 2: full WAF synthesis with REAL CRITICAL findings — KV purge protection disabled, PostgreSQL public network access + Entra ID auth disabled, App Service `minTlsVersion: null`, prod-named Log Analytics + App Insights co-located inside `rg-aigovern-dev`.
+
+**Bug found + fixed during S63: `plan_turn` is now bottleneck on synthesis turn** (extends [[anthropic-max-tokens-streaming-threshold]]):
+- The live trio synthesis truncated at `stop=max_tokens` at 4096 output tokens, mid-verdict-table. Drill-down depth scales synthesis size — each `get_resource_metadata` result feeds per-resource prose into the final turn.
+- Fix: bumped `TOKEN_BUDGETS["plan_turn"]` 4096 → 8192. 5-turn cap × 8192 = 40K bounded; intermediate tool turns rarely exceed 500 output tokens so the headroom serves the synthesis turn specifically. Streaming was already in place from S62 so no transport change needed.
+- Pattern lesson: every tool added to the drill-down chain raises the synthesis token floor. Future allowlist additions should re-check the `plan_turn` ceiling against worst-case fan-out (turn-cap × max-parallel-calls × per-result prose).
+
+**Verify block updated:** [ARCHITECTURE.md](../../ARCHITECTURE.md) rego positive test pinned from `list_resource_groups` to `get_resource_metadata` so the test proves the *current* allowlist surface, not just the original entry. Future tool additions should rotate the positive test to the newest entry by convention.
+
+**Remaining for S64+:**
+- STEP 4 spillover (Mermaid + per-tool eval rubric). Still deferred.
+- 4 read-surface stubs remain: `list_subscriptions`, `list_role_assignments`, `get_network_topology` + the two property-bag tools (`get_storage_account_properties`, `get_key_vault_properties`). Storage/KV property-bag tools are partly redundant now that `get_resource_metadata` returns full polymorphic properties; reassess scope before implementing.
+- **Quadruple-overdue UI-promise audit** ([[ui-promise-audit-owed]]).
+- F-021 — framework mapping data for `ai-sys-bae72e75`.
+
+---
+
 _(Append further findings below as P3-P10 progress.)_

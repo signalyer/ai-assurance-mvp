@@ -24,11 +24,15 @@ MODEL_FAST: Final[str] = "claude-sonnet-4-6"
 TOKEN_BUDGETS: Final[dict[str, int]] = {
     "architecture_review": 4096,  # Generation; WAF pillar analysis is long-form
     "scratchpad": 1024,           # Reserved for follow-up extractions in later phases
-    # S62 bump 2048 → 4096: multi-turn runs concentrate the WAF synthesis into
-    # one final turn whose output shape matches `architecture_review`. Sonnet
-    # truncated at stop=max_tokens during the S62 first multi-turn run
-    # (plan-bd7d73ca00b5). The 5-turn cap × 4096 = 20K max output, still bounded.
-    "plan_turn": 4096,
+    # S62 bump 2048 → 4096 (mid-run tool_use truncation).
+    # S63 bump 4096 → 8192: with the drill-down trio live
+    # (list_rgs → list_resources → get_resource_metadata × N parallel),
+    # synthesis volume scales with N. Live run plan-867aa0931a0a fanned
+    # 3 parallel drill-downs and hit stop=max_tokens mid-verdict-table at
+    # 4096. 5-turn cap × 8192 = 40K bounded; intermediate tool turns
+    # rarely exceed 500 output tokens, so the headroom is for the
+    # synthesis turn specifically.
+    "plan_turn": 8192,
 }
 
 
@@ -84,6 +88,39 @@ PLAN_TOOL_SPECS: Final[list[dict]] = [
                 },
             },
             "required": ["subscription_id", "resource_group"],
+        },
+    },
+    {
+        "name": "get_resource_metadata",
+        "description": (
+            "Fetch the full metadata for ONE Azure resource by its ARM "
+            "resource ID. Read-only. Returns id, name, type, location, "
+            "resource_group, sku, tags, and the polymorphic `properties` "
+            "blob (schema varies per resource type — e.g. storage account "
+            "returns encryption + access tier + network rules; key vault "
+            "returns soft-delete + purge protection). Call this AFTER "
+            "list_resources_in_group when the WAF review needs per-resource "
+            "depth: specific SKU tier, encryption posture, network exposure, "
+            "soft-delete state. Pass `resource_id` verbatim from the prior "
+            "tool's `id` field. Costs one extra ARM round-trip per call "
+            "(provider api_version lookup) so budget your remaining turns — "
+            "don't call it for every resource in a large RG."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "resource_id": {
+                    "type": "string",
+                    "description": (
+                        "Full ARM resource ID, e.g. "
+                        "/subscriptions/<sub>/resourceGroups/<rg>/providers/"
+                        "Microsoft.Storage/storageAccounts/<name>. Must match "
+                        "the `id` field from a prior list_resources_in_group "
+                        "result."
+                    ),
+                },
+            },
+            "required": ["resource_id"],
         },
     },
 ]
