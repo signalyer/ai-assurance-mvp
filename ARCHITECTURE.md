@@ -78,7 +78,7 @@ Session 18 under different paths — `api/rag.py` exists; the UI shipped as
 `team-portal/src/pages/rag/RagCorpusPage.tsx` instead of `static/rag-governance.html`.
 Cleaned in Session 25.)
 
-## Files — Built (2026-05-29 → 2026-05-30, Sessions 63–66)
+## Files — Built (2026-05-29 → 2026-05-30, Sessions 63–67)
 
 Detail lives in `docs/plans/SESSION-63-*.md` through `SESSION-66-*.md`.
 Summary index of net-new files + materially-changed surfaces:
@@ -104,7 +104,14 @@ Summary index of net-new files + materially-changed surfaces:
 - `api/intake.py` — materialize 8 Step 5 URL fields as typed `Evidence` rows after successful AISystem write (mapping: arch→ARCHITECTURE_DIAGRAM, iac→TERRAFORM_SNAPSHOT, iam→IAM_POLICY_SNAPSHOT, bedrock→BEDROCK_CONFIG, rag→RAG_CONFIG, eval→EVAL_RUN, logging→AUDIT_LOG, security→PEN_TEST)
 - `team-portal/src/pages/ai-systems/AiSystemEditModal.tsx` — new `EvidencePanel` section (list + add form); 12-entry curated EvidenceType dropdown
 
-Live tips: engine `f496106`; team-portal SPA `index-DV_nv_8B.js`; ciso-console SPA `index-bVhd18Tk.js`.
+**S67 — `get_ai_system` evidence consolidation + Drawer Evidence display:**
+- `api/grc.py::get_ai_system` — flipped from `mock_data.EVIDENCE` filter to `domain.repository.evidence_for()`; bundled detail and dedicated `/evidence` endpoint now agree (5 seed systems: detail evidence counts went 3-5 → 15-25 to match framework matrix)
+- `team-portal/src/pages/ai-systems/types.ts` — hoisted `EvidenceRow` + `EvidenceListResponse` from EditModal so Drawer can share
+- `team-portal/src/pages/ai-systems/AiSystemDrawer.tsx` — new read-only Evidence section (first 8 rows + "+N more" overflow); fetches `/grc/ai-systems/{id}/evidence` on drawer open; refreshes after Edit modal save
+- `team-portal/src/pages/ai-systems/AiSystemEditModal.tsx` — imports `EvidenceRow` / `EvidenceListResponse` from `./types`
+- `docs/openapi-v1.json` — regen (S66 evidence schemas + S67 shape)
+
+Live tips: engine `17683c6`; team-portal SPA `index-B65x86z3.js`; ciso-console SPA `index-bVhd18Tk.js` (unchanged from S66).
 
 **/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
 

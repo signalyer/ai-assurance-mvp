@@ -631,3 +631,30 @@ Constrains: the audit should run every ~10 sessions OR whenever a major
      audit. Findings should be logged as G-N gaps in the same retro the
      primary audit uses. `[[ui-promise-audit-owed]]` memory updated
      accordingly.
+
+## 2026-05-30 — S67: get_ai_system reads evidence_for(); EVIDENCE_PREVIEW_LIMIT in Drawer
+Decision: `api/grc.py::get_ai_system` now reads
+     `domain.repository.evidence_for()` (consolidating the dual read
+     path called out in the 2026-05-30 layered-store decision above).
+     The Drawer renders the first 8 rows + "+N more" overflow hint;
+     full list lives in the Edit modal.
+Alternatives: leave dual-path tech debt for another session · render
+     full list in Drawer (unbounded) · server-side pagination on the
+     evidence endpoints
+Why: S67 baseline parity audit confirmed `evidence_for()` is a strict
+     superset of `mock_data.EVIDENCE` for every seed system (3-5 → 15-25
+     rows). Consolidation aligns the Drawer with the framework matrix,
+     so what an operator sees in one place agrees with what they see in
+     the other. Server-side pagination is premature (5 systems × 25 max
+     rows is trivial payload); the client-side preview cap keeps the
+     Drawer scannable without changing the API contract or capping the
+     canonical store. Add affordance stays in the modal only — the
+     Drawer is a read surface, mutation is one-place per [[wizard-
+     mounts-create-resources]].
+Constrains: any future Drawer section that surfaces a list with O(N)
+     growth potential should follow the same pattern: read the full
+     canonical store, render a bounded preview, hint at overflow with
+     a link to the dedicated surface. The bundled detail endpoint's
+     `evidence` field is still typed `list[dict[str, Any]]` (loose) for
+     V1 compat; tightening to `EvidenceRowOut` is a future minor
+     version bump.
