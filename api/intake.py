@@ -476,6 +476,49 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
             draft_reason=gates_failed_reason,
         )
 
+    # F-023 fix (S66): materialize Step 5 URL fields as typed Evidence rows.
+    # Previously these 8 fields were collected by the wizard and silently
+    # dropped — the AISystem model has no URL fields, no Evidence rows were
+    # written, and the framework completeness rollup saw nothing. This loop
+    # closes that gap. Failures here are non-fatal: the system + assessment
+    # + gates already shipped successfully; missing evidence becomes a
+    # ticked-down completeness %, not a 500 or a draft status.
+    try:
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        from domain.models import Evidence, EvidenceType
+        from domain.repository import append_evidence
+
+        _INTAKE_URL_TO_TYPE: dict[str, EvidenceType] = {
+            "architecture_diagram_url": EvidenceType.ARCHITECTURE_DIAGRAM,
+            "iac_url": EvidenceType.TERRAFORM_SNAPSHOT,
+            "iam_policy_url": EvidenceType.IAM_POLICY_SNAPSHOT,
+            "bedrock_config_url": EvidenceType.BEDROCK_CONFIG,
+            "rag_pipeline_config_url": EvidenceType.RAG_CONFIG,
+            "eval_report_url": EvidenceType.EVAL_RUN,
+            "logging_config_url": EvidenceType.AUDIT_LOG,
+            "security_review_url": EvidenceType.PEN_TEST,
+        }
+        for field_name, et in _INTAKE_URL_TO_TYPE.items():
+            url = getattr(payload, field_name, None)
+            if not url:
+                continue
+            ev = Evidence(
+                id=f"ev-{uuid4().hex[:12]}",
+                ai_system_id=system_id,
+                evidence_type=et,
+                source="intake",
+                uri=url,
+                hash=None,
+                collected_at=datetime.now(timezone.utc),
+                summary=f"Evidence linked at intake (field: {field_name}).",
+                immutable=True,
+                data_source="real",
+            )
+            append_evidence(ev)
+    except Exception as e:  # noqa: BLE001
+        _log.exception("intake_submit: evidence materialisation failed for %s", system_id)
+
     return IntakeSubmitOut(
         ai_system_id=system_id,
         assessment_id=assessment.id,

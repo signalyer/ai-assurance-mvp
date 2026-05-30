@@ -152,9 +152,18 @@ def findings_for(system_id: str) -> list[Finding]:
 
 
 def evidence_for(system_id: str) -> list[Evidence]:
+    # F-023 fix (S66): intake- and operator-added evidence now persist to
+    # EVIDENCE_FILE alongside the seed/overlay/demo paths. Order preserves
+    # priority: seed first (canonical), then mutable layers, then real
+    # operator-written rows. The framework completeness rollup reads
+    # `evidence_for()` directly, so adding the new file here is enough for
+    # newly-added evidence to flow into the matrix without further wiring.
+    intake = [Evidence.model_validate(r) for r in _read_jsonl(EVIDENCE_FILE)
+              if r.get("ai_system_id") == system_id]
     return (seed.evidence_for(system_id)
             + _overlays().overlay_evidence_for(system_id)
-            + _demo_evidence_for(system_id))
+            + _demo_evidence_for(system_id)
+            + intake)
 
 
 def eval_results_for(system_id: str) -> list[EvalResult]:
@@ -183,12 +192,33 @@ def assessments_for(system_id: str) -> list[Assessment]:
 
 EVENTS_FILE = _DATA_DIR / "events.jsonl"
 
+# F-023 fix (S66): operator-added evidence (intake Step 5 + Edit modal Evidence
+# section). Read by evidence_for() above. JSONL one Evidence per line.
+EVIDENCE_FILE = _DATA_DIR / "evidence.jsonl"
+
 
 def _append_jsonl(path: Path, record: dict) -> None:
     """Append a single JSON record as a line to path, creating parent dirs if needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+
+def append_evidence(evidence: Evidence) -> None:
+    """Persist a single Evidence row to EVIDENCE_FILE.
+
+    Used by:
+      - api.intake.submit_intake — materializes the 8 Step 5 URL fields as
+        typed Evidence rows after the AISystem record itself is written.
+      - api.grc POST /grc/ai-systems/{id}/evidence — operator-driven add
+        from the Edit modal Evidence section.
+
+    Per CLAUDE.md project rule "JSONL only via _append_jsonl pattern".
+    `evidence.id` must be unique — callers should generate via uuid; we do
+    NOT dedupe on append (the seed/overlay layers already produce stable ids
+    and operator adds use uuid4).
+    """
+    _append_jsonl(EVIDENCE_FILE, evidence.model_dump(mode="json"))
 
 
 def append_agent_event(event_type: str, payload: dict) -> None:
@@ -249,4 +279,5 @@ __all__ = [
     "runtime_events_for", "release_gates_for", "assessments_for",
     "DEMO_OVERLAY_FILE", "FINDINGS_EVENTS_FILE",
     "append_agent_event", "read_agent_events", "read_chain_tail", "EVENTS_FILE",
+    "append_evidence", "EVIDENCE_FILE",
 ]

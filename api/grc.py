@@ -779,6 +779,166 @@ async def get_ai_system(system_id: str) -> AiSystemDetailOut:
     )
 
 
+# ---------------------------------------------------------------------------
+# F-023 fix (S66): operator-readable + operator-writable evidence surface.
+#
+# The bundled get_ai_system endpoint above reads from mock_data.EVIDENCE only —
+# that path stays intact to avoid disturbing the existing drawer + framework
+# matrix wiring. These two new endpoints surface the canonical layered store
+# (seed + overlays + demo + intake-written) via domain.repository.evidence_for,
+# which is what the framework completeness rollup uses. So evidence added here
+# DOES tick the completeness % up.
+# ---------------------------------------------------------------------------
+
+class EvidenceRowOut(BaseModel):
+    """One evidence row in the canonical layered-store shape.
+
+    Mirrors `domain.models.Evidence`. `data_source` lets V1/V2 toggle the
+    distinction between fixture rows and real operator-added rows.
+    """
+    model_config = _strict()
+
+    id: str
+    ai_system_id: str
+    evidence_type: str
+    source: str
+    uri: str | None = None
+    hash: str | None = None
+    collected_at: str
+    summary: str
+    immutable: bool = True
+    linked_control_ids: list[str] = Field(default_factory=list)
+    linked_finding_ids: list[str] = Field(default_factory=list)
+    linked_frameworks: list[str] = Field(default_factory=list)
+    data_source: str = "seed"
+
+
+class EvidenceListOut(BaseModel):
+    model_config = _strict()
+    ai_system_id: str
+    evidence: list[EvidenceRowOut]
+    count: int
+
+
+class AddEvidencePayload(BaseModel):
+    """POST payload — operator-driven add from the Edit modal Evidence section."""
+    model_config = _strict()
+
+    evidence_type: str = Field(
+        ...,
+        description="Must be a member of domain.models.EvidenceType (e.g. ARCHITECTURE_DIAGRAM).",
+    )
+    uri: str = Field(..., min_length=1, description="URL or URI for the artifact.")
+    summary: str = Field("", description="Short human-readable description.")
+    hash: str | None = Field(
+        None,
+        description="Optional SHA-256 hex. If absent, the engine does NOT compute it — "
+                    "we don't fetch external URIs at write time.",
+    )
+    source: str = Field("operator", description="The actor or system that produced this row.")
+
+
+@router.get(
+    "/ai-systems/{system_id}/evidence",
+    response_model=EvidenceListOut,
+    operation_id="ai_systems_evidence_list",
+)
+async def list_evidence_for_system(system_id: str) -> EvidenceListOut:
+    """Canonical evidence list for one system via the layered store.
+
+    Newest-first. Feeds the Edit modal's Evidence tab. Distinct from the
+    bundled get_ai_system endpoint above which surfaces the mock fixture
+    rows only — this one is what the rollup actually reads.
+    """
+    from domain.repository import evidence_for  # local import — circular guard
+
+    rows = evidence_for(system_id)
+    out: list[EvidenceRowOut] = []
+    for e in rows:
+        out.append(
+            EvidenceRowOut(
+                id=e.id,
+                ai_system_id=e.ai_system_id,
+                evidence_type=str(e.evidence_type.value if hasattr(e.evidence_type, "value") else e.evidence_type),
+                source=e.source,
+                uri=e.uri,
+                hash=e.hash,
+                collected_at=e.collected_at.isoformat() if hasattr(e.collected_at, "isoformat") else str(e.collected_at),
+                summary=e.summary,
+                immutable=e.immutable,
+                linked_control_ids=list(e.linked_control_ids),
+                linked_finding_ids=list(e.linked_finding_ids),
+                linked_frameworks=list(e.linked_frameworks),
+                data_source=str(e.data_source),
+            ),
+        )
+    # Newest-first for the Edit modal UX. collected_at is ISO so string sort works.
+    out.sort(key=lambda r: r.collected_at, reverse=True)
+    return EvidenceListOut(ai_system_id=system_id, evidence=out, count=len(out))
+
+
+@router.post(
+    "/ai-systems/{system_id}/evidence",
+    response_model=EvidenceRowOut,
+    operation_id="ai_systems_evidence_add",
+)
+async def add_evidence_for_system(
+    system_id: str, payload: AddEvidencePayload,
+) -> EvidenceRowOut:
+    """Append one Evidence row for this system.
+
+    Validates evidence_type against the EvidenceType enum; 400 on unknown.
+    System existence is intentionally NOT validated here — operator may pre-
+    stage evidence before intake completes (uncommon but allowed by the
+    immutable append-only model).
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from domain.models import Evidence, EvidenceType
+    from domain.repository import append_evidence
+
+    # Reject unknown evidence types up-front rather than letting Pydantic raise
+    # a less actionable validation error during model_validate below.
+    try:
+        et = EvidenceType(payload.evidence_type)
+    except ValueError:
+        valid = sorted(t.value for t in EvidenceType)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown evidence_type {payload.evidence_type!r}. Valid: {valid}",
+        )
+
+    ev = Evidence(
+        id=f"ev-{uuid4().hex[:12]}",
+        ai_system_id=system_id,
+        evidence_type=et,
+        source=payload.source or "operator",
+        uri=payload.uri,
+        hash=payload.hash,
+        collected_at=datetime.now(timezone.utc),
+        summary=payload.summary,
+        immutable=True,
+        data_source="real",
+    )
+    append_evidence(ev)
+    return EvidenceRowOut(
+        id=ev.id,
+        ai_system_id=ev.ai_system_id,
+        evidence_type=ev.evidence_type.value,
+        source=ev.source,
+        uri=ev.uri,
+        hash=ev.hash,
+        collected_at=ev.collected_at.isoformat(),
+        summary=ev.summary,
+        immutable=ev.immutable,
+        linked_control_ids=list(ev.linked_control_ids),
+        linked_finding_ids=list(ev.linked_finding_ids),
+        linked_frameworks=list(ev.linked_frameworks),
+        data_source=ev.data_source,
+    )
+
+
 # ===========================================================================
 # === Findings
 # ===========================================================================
