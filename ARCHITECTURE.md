@@ -121,6 +121,20 @@ Summary index of net-new files + materially-changed surfaces:
 
 Live tips: engine `17683c6` (unchanged from S67); team-portal SPA `index-yKOGPBUx.js`; ciso-console SPA `index-bVhd18Tk.js` (unchanged from S66).
 
+**S69 — real Anthropic streaming on `/explain-release`:**
+- `domain/assurance_providers.py` — `AuditDecision.LIVE`; `real_llm_enabled()` env-flag reader (read at call time, not module load); `stream_anthropic_response()` async generator using `client.messages.stream()` context manager per [[anthropic-max-tokens-streaming-threshold]]; `_build_prompt()` colocated per CLAUDE.md prompts-in-one-place; `_MAX_TOKENS_BY_USE_CASE` table (release narrative 3500); `_COST_PER_INPUT/OUTPUT_TOKEN_USD` Sonnet rates; `streaming_complete` audit field with default False (backward-compatible with existing audit JSONL).
+- `api/assurance_model.py` — `_dispatch_streaming()` returns `sse_starlette.EventSourceResponse`; blocked/sim emit a single terminal `event: done` (drawer parses the AskResponseOut identically to S68a); live emits `event: delta` frames then `event: done` with `status='live'` + `token_estimate` + `cost_estimate_usd`; client-disconnect handled (`CancelledError` → LIVE audit with `streaming_complete=False`); Anthropic exception → BLOCKED audit + drawer error event (no 500); `AskResponseOut` extended with `token_estimate` / `cost_estimate_usd` / `streaming_complete` optional fields; `POST /explain-release` no longer carries `response_model` (OpenAPI cannot represent SSE).
+- `team-portal/src/shared/api/client.ts` — `apiSse()` wrapper using `@microsoft/fetch-event-source` (native EventSource cannot POST a body); preserves `credentials='include'` + `X-Data-Mode` per [[raw-fetch-drifts-from-shared-client]]; `openWhenHidden:true` so backgrounded tabs don't kill the stream.
+- `team-portal/src/shared/components/AiSummaryDrawer.tsx` — full rewrite for SSE consumption: progressive delta render into `streamedText`, streaming-cursor affordance until `done`, badge drops automatically on `status='live'`, `Tokens` + `Cost` rows added to routing dl, partial-stream warning when `streaming_complete=false`, `AbortController` aborts the stream on drawer close.
+- `team-portal/src/shared/types/assurance.ts` — `AskResponseOut.token_estimate` / `cost_estimate_usd` / `streaming_complete` optional.
+- `team-portal/src/pages/ai-systems/AiSystemDrawer.tsx` — `FailedGateRow.onExplain` pins `preferred_provider:'anthropic-prod'` (Bedrock outranks Anthropic for `RELEASE_DECISION_NARRATIVE` but App Service has no AWS creds; without this pin the live path would silently fall back to sim). S69b will drop the pin once Bedrock streaming adapter lands.
+- `team-portal/src/shared/styles/base.css` — `@keyframes aiCursorBlink` for the streaming-cursor affordance.
+- `requirements.txt` + `requirements-deploy.txt` — `sse-starlette>=2.1.0` (must be in BOTH; Oryx builds antenv from the slim deploy file — see `feedback_requirements_deploy_drift.md` memory + the broken deploy that taught it).
+- `tests/test_api_assurance_model.py` — first pytest for this router: sim-when-flag-off, live-stream-with-mocked-Anthropic, sim-fallback-no-creds. Run with `-p no:deepeval`.
+- App Service: `REAL_LLM_ENABLED=true` set on `app-aigovern-dev` after deploy (non-slot setting).
+
+Live tips after S69: engine `8a942b6` (commit 4faac22 carrying the engine + SPA changes + 8a942b6 fixing the requirements-deploy.txt drift); team-portal SPA `index-CaTHiUwg.js` on `portal.aigovern.sandboxhub.co`; ciso-console SPA `index-bVhd18Tk.js` (unchanged — S69b will mount the drawer there).
+
 **/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
 
 ## Files — Built (2026-05-21, Session 05)
