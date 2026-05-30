@@ -9,6 +9,11 @@ gunicorn>=21.2.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0  # used by providers/config.py:24 (BaseSettings) — lazy-loaded during first LLM call
 python-multipart>=0.0.9
+# S69: SSE streaming for /assurance-model/explain-release (real LLM path).
+# Imported at module load by api/assurance_model.py — must be slim/deploy
+# requirements, not just full requirements.txt. Drift here was the S69 boot
+# crash (ModuleNotFoundError: sse_starlette, container exit code 3).
+sse-starlette>=2.1.0
 
 # LLM clients (used by api/assurance_model.py)
 anthropic>=0.40.0
