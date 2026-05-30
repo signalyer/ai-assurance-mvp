@@ -78,6 +78,36 @@ Session 18 under different paths — `api/rag.py` exists; the UI shipped as
 `team-portal/src/pages/rag/RagCorpusPage.tsx` instead of `static/rag-governance.html`.
 Cleaned in Session 25.)
 
+## Files — Built (2026-05-29 → 2026-05-30, Sessions 63–66)
+
+Detail lives in `docs/plans/SESSION-63-*.md` through `SESSION-66-*.md`.
+Summary index of net-new files + materially-changed surfaces:
+
+**S63 — P4 drill-down trio:**
+- `agents/azure-architect/tools/arm_read.py` — `get_resource_metadata` body + `_parse_resource_id` helper
+- `agents/azure-architect/prompts.py` — 3rd `PLAN_TOOL_SPECS` entry; `plan_turn` budget 4096→8192
+
+**S64 — UI-promise audit + G-3 + G-2:**
+- `team-portal/src/pages/adversarial/AdversarialPage.tsx` — `credentials:'include'` added
+- `team-portal/src/pages/onboarding/OnboardingPage.tsx` — `revokeKey()` + `mintFreshKey()` + revoke banner + Revoke button on existing-key card; `rotateKey()` now calls /revoke first
+
+**S65 — G-1 CISO Revisions Queue:**
+- `domain/ai_system_edit.py` — `pending_revisions_across_systems()` aggregate helper
+- `api/ai_system_edit.py` — `GET /api/ai-systems/revisions/pending` (declared before `/{revision_id}` for FastAPI route order)
+- `ciso-console/src/pages/revisions/{types.ts,RevisionsQueuePage.tsx}` — new SPA surface
+- `ciso-console/src/app.tsx` — `/revisions` route
+- `ciso-console/src/shared/components/Sidebar.tsx` — nav item
+
+**S66 — G-4/F-023 evidence write surface:**
+- `domain/repository.py` — `EVIDENCE_FILE` + `append_evidence(Evidence)` helper; `evidence_for()` now reads the new file alongside seed/overlay/demo
+- `api/grc.py` — `EvidenceRowOut` + `AddEvidencePayload` + `EvidenceListOut`; new `GET` and `POST /grc/ai-systems/{id}/evidence`
+- `api/intake.py` — materialize 8 Step 5 URL fields as typed `Evidence` rows after successful AISystem write (mapping: arch→ARCHITECTURE_DIAGRAM, iac→TERRAFORM_SNAPSHOT, iam→IAM_POLICY_SNAPSHOT, bedrock→BEDROCK_CONFIG, rag→RAG_CONFIG, eval→EVAL_RUN, logging→AUDIT_LOG, security→PEN_TEST)
+- `team-portal/src/pages/ai-systems/AiSystemEditModal.tsx` — new `EvidencePanel` section (list + add form); 12-entry curated EvidenceType dropdown
+
+Live tips: engine `f496106`; team-portal SPA `index-DV_nv_8B.js`; ciso-console SPA `index-bVhd18Tk.js`.
+
+**/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
+
 ## Files — Built (2026-05-21, Session 05)
 ### Session 05 (provider abstraction + legacy cleanup)
 `providers/__init__.py` (re-exports five factory functions), `providers/protocols.py` (five runtime_checkable Protocol interfaces: ScrubberBackend, TracerBackend, EvaluatorBackend, MemoryBackend, RagBackend), `providers/config.py` (Pydantic v2 BaseSettings with enum-validated backend choices: presidio|regex|noop for scrubber, langfuse|stdout|noop for tracer, deepeval|noop for evaluator, postgres|jsonl|noop for memory, azure_search|noop for RAG), `providers/registry.py` (five factory functions with lru_cache singleton caching), `providers/backends/__init__.py`, `providers/backends/scrubber_presidio.py` (wraps scrubber._tokenise_impl/_restore_impl), `providers/backends/scrubber_regex.py` (regex-only fallback), `providers/backends/tracer_langfuse.py` (wraps tracer._trace_call_impl), `providers/backends/memory_postgres.py` (wraps domain.agent_memory._write_episode_impl), `providers/backends/rag_azure_search.py` (wraps domain.rag_engine._index_document_impl/_search_corpus_impl/_rag_stats_impl), `providers/backends/noop.py`, `providers/backends/deepeval_evaluator.py` (wraps evaluator._evaluate_impl). Refactored `scrubber.py`, `tracer.py`, `evaluator.py`, `domain/agent_memory.py`, `domain/rag_engine.py` to proxy through providers registry. Deleted `legacy_guardrails.py`; rewrote `api/security.py`, `api/batch.py`, `api/demo_run.py` to use new guardrails package via middleware/injection and guardrails/llama_guard_adapter.

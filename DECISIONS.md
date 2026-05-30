@@ -549,3 +549,85 @@ Constrains: `[[project-v1-to-v2-real-data-arc]]` memory file updated
      preserve the live risk-classification surface — no silent defaulting
      of risk-relevant fields. POC P3 (Architect runbook) will use the
      full wizard.
+
+## 2026-05-30 — Drill-down trio is the canonical P4 read surface
+Decision: `list_resource_groups → list_resources_in_group → get_resource_metadata`
+     is the minimum-viable + sufficient Azure read surface for the architect
+     agent. Adding tools beyond this requires a concrete review pattern the
+     trio can't satisfy.
+Alternatives: ship all 8 originally-scaffolded tools (list_subscriptions,
+     list_role_assignments, get_network_topology, get_storage_account_properties,
+     get_key_vault_properties) · stop at the 2-tool S62 state
+Why: live `plan-867aa0931a0a` (S63) confirmed the trio reliably produces
+     real CRITICAL findings via 3-turn fan-out: pick RG → enumerate →
+     parallel-drill 3 resources → WAF synthesis. The polymorphic
+     `properties` blob `get_resource_metadata` returns covers the
+     storage/KV depth that motivated the separate property-bag tools,
+     making those redundant. Per-call ARM round-trip cost (provider
+     api_version lookup) is acceptable for an audit tool, not for
+     high-volume.
+Constrains: future ARM tools must justify against this baseline. Property-
+     bag tools `get_storage_account_properties` + `get_key_vault_properties`
+     downgraded from "to ship" to "reassess scope before implementing."
+     `plan_turn` budget is the bottleneck on drill-down depth, not
+     intermediate turns — bump to 8192 (S63) covers 5-turn × parallel-3
+     synthesis; further depth needs another budget review.
+
+## 2026-05-30 — SPA manual `swa deploy` is the standard cadence, not a special promotion
+Decision: SPA changes ship via `cd <spa-dir> && export SWA_CLI_DEPLOYMENT_TOKEN=$(az staticwebapp secrets list ...) && swa deploy ./dist --env production --no-use-keychain`.
+     Run after every commit that touches `team-portal/src/` or
+     `ciso-console/src/`. Fold into session close-out checklists.
+Alternatives: build a GitHub Actions workflow for the SPAs (engine has
+     one; SPAs do not) · trigger swa deploy from a local script after CI ·
+     leave SPA deploys to manual operator cadence on demand
+Why: SWA Free SKU has no GitHub Actions integration — verified at S48
+     and S57. The manual `swa deploy` invocation is reliable, takes ~30s,
+     and the SWA CLI surfaces clear deploy status. Building a GH Actions
+     workflow would add complexity for marginal benefit on a Free SKU.
+     S64-S66 confirmed the cadence: 3 SPA deploys in 2 days, all clean.
+Constrains: every session that touches SPA source MUST run the swa deploy
+     before claiming the change is "live." Until S64, "merged" was
+     conflated with "live" — the gap caused S64's G-3 fix to sit
+     un-deployed for hours. Verification = bundle-hash compare + string-grep
+     of the live origin bundle (the SPA equivalent of S19d's engine SHA
+     round-trip). New memory: `[[spa-deploy-is-manual-swa]]` (to be
+     written next session).
+
+## 2026-05-30 — Layered evidence store as canonical read path; mock_data.EVIDENCE stays for the bundled detail endpoint
+Decision: new `GET/POST /api/grc/ai-systems/{id}/evidence` reads
+     `domain.repository.evidence_for()` (the layered seed/overlay/demo/
+     intake-jsonl stack). The bundled `get_ai_system` detail endpoint
+     continues to surface `mock_data.EVIDENCE` filtered.
+Alternatives: refactor `get_ai_system` to use `evidence_for()` (clean) ·
+     keep mock_data as the only path and skip the new endpoint
+Why: the framework completeness rollup already reads `evidence_for()`,
+     so adding operator-written rows there is enough to tick the
+     completeness % up. Refactoring `get_ai_system` in the same session
+     risks breaking the existing drawer + framework matrix wiring with
+     no compensating gain. Tech-debt traded for low blast radius.
+Constrains: dual read paths are a known tech-debt. Consolidation is owed
+     in a future session that can test against the full demo flow
+     (S55-style smoke). Until then, the bundled drawer view will lag
+     operator-added evidence — operators see what they added on next
+     Edit-modal open, not in the drawer immediately. Documented as
+     S66 carry-forward.
+
+## 2026-05-30 — UI-promise audit method extended: V1→V2 carryover sub-pattern
+Decision: when auditing UI-promise gaps in V1→V2 split products, grep
+     `static/` (the V1 surface) for endpoint consumers in addition to
+     plan documents. Any endpoint with `static/*.html` consumer but no
+     `team-portal/src/` or `ciso-console/src/` consumer is a likely
+     feature-parity gap, distinct from "scaffolding for a planned
+     feature."
+Alternatives: rely on plan-document grep alone · case-by-case per
+     endpoint
+Why: S66 close-out investigation of `api/assurance_model.py` proved
+     the method works: 5 endpoints (S64 audit said 4), all wired into
+     V1 pages (`findings.html`, `release-gates.html`, `evidence.html`,
+     `reports.html`), zero V2 SPA consumers. Without the V1-grep step
+     they could have been mis-classified as scaffolding indefinitely.
+Constrains: the audit should run every ~10 sessions OR whenever a major
+     V2 surface ships. The carryover sub-pattern adds ~5 minutes to the
+     audit. Findings should be logged as G-N gaps in the same retro the
+     primary audit uses. `[[ui-promise-audit-owed]]` memory updated
+     accordingly.

@@ -90,3 +90,6 @@ docs/architecture/*.zip
 # Stray local zips (build artefacts / downloaded skill bundles)
 azure-arch-designer-skill.zip
 deploy.zip
+
+# Stray agent-session transcripts (handoff S66 close)
+agent-*.jsonl
