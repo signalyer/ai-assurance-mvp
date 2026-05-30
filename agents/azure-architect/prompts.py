@@ -24,7 +24,11 @@ MODEL_FAST: Final[str] = "claude-sonnet-4-6"
 TOKEN_BUDGETS: Final[dict[str, int]] = {
     "architecture_review": 4096,  # Generation; WAF pillar analysis is long-form
     "scratchpad": 1024,           # Reserved for follow-up extractions in later phases
-    "plan_turn": 2048,            # Per-turn budget for the agent orchestration loop (S60)
+    # S62 bump 2048 → 4096: multi-turn runs concentrate the WAF synthesis into
+    # one final turn whose output shape matches `architecture_review`. Sonnet
+    # truncated at stop=max_tokens during the S62 first multi-turn run
+    # (plan-bd7d73ca00b5). The 5-turn cap × 4096 = 20K max output, still bounded.
+    "plan_turn": 4096,
 }
 
 
@@ -50,6 +54,36 @@ PLAN_TOOL_SPECS: Final[list[dict]] = [
                 },
             },
             "required": ["subscription_id"],
+        },
+    },
+    {
+        "name": "list_resources_in_group",
+        "description": (
+            "List every resource inside ONE resource group. Read-only. "
+            "Returns id, name, type (e.g. Microsoft.Web/sites), location, "
+            "sku, kind, and tags for each resource. Call this AFTER "
+            "list_resource_groups to drill into a specific group — pass "
+            "the resource_group name verbatim from the prior tool's output. "
+            "Use this when the WAF review needs per-RG inventory (resource "
+            "types, SKUs, regional spread). Do NOT call it for every RG in "
+            "a large subscription — budget your remaining turns first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subscription_id": {
+                    "type": "string",
+                    "description": "Azure subscription GUID. Required.",
+                },
+                "resource_group": {
+                    "type": "string",
+                    "description": (
+                        "Name of the resource group to enumerate. Must match "
+                        "a name returned by a prior list_resource_groups call."
+                    ),
+                },
+            },
+            "required": ["subscription_id", "resource_group"],
         },
     },
 ]

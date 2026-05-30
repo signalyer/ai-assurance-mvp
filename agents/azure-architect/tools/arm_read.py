@@ -32,6 +32,8 @@ from .schemas import (
     ResourceGroupSummary,
     ResourceGroupsListOut,
     ResourceMetadata,
+    ResourceSummary,
+    ResourcesInGroupOut,
     RoleAssignmentsListOut,
     SubscriptionsListOut,
 )
@@ -135,6 +137,96 @@ async def list_resource_groups(
     return ResourceGroupsListOut(
         subscription_id=subscription_id,
         resource_groups=resource_groups,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 2b — list_resources_in_group  (S62)
+# ---------------------------------------------------------------------------
+
+
+@signallayer.policy_gate(action="tool_invoke")
+async def list_resources_in_group(
+    credential: _Cred,
+    subscription_id: str,
+    resource_group: str,
+    *,
+    tool_name: str = "list_resources_in_group",
+    workload_id: str = "azure-architect",
+) -> ResourcesInGroupOut:
+    """List every resource inside one resource group.
+
+    Wraps `ResourceManagementClient.resources.list_by_resource_group`. Uses
+    the same client + credential as `list_resource_groups` so no extra Azure
+    SDK install is needed. The SDK call is synchronous; we wrap in
+    `asyncio.to_thread` so the orchestration loop can fan-out future calls.
+
+    Returns a thin `ResourceSummary` per item (id/name/type/location/sku/kind/
+    tags). The polymorphic ARM `properties` blob is omitted by ARM at this
+    endpoint; use `get_resource_metadata(resource_id)` to drill into one
+    resource's full property set.
+
+    Multi-turn chaining contract: the model gets RG names from
+    `list_resource_groups`, then calls THIS tool with one of those names to
+    enumerate contents. That's the canonical two-turn pattern for a
+    subscription audit.
+
+    Args:
+        credential: Azure credential injected at agent startup.
+        subscription_id: Target subscription GUID.
+        resource_group: Name of the RG to enumerate. Must match a name
+            returned by a prior `list_resource_groups` call.
+        tool_name: Identity for the policy engine. DO NOT override.
+        workload_id: Workload identity for policy + audit attribution.
+
+    Returns:
+        Strict ResourcesInGroupOut (pydantic v2, frozen, extra="forbid").
+
+    Raises:
+        signallayer.PolicyDeniedError: If rego denies the call.
+        RuntimeError: If azure-mgmt-resource is not installed.
+        azure.core.exceptions.ResourceNotFoundError: If `resource_group`
+            does not exist in `subscription_id`. The orchestration loop
+            converts this to an `is_error` tool_result so the model can
+            self-correct (e.g. retry with a typo'd name fixed).
+    """
+    try:
+        from azure.mgmt.resource import ResourceManagementClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-mgmt-resource not installed. Run "
+            "`pip install azure-mgmt-resource azure-identity` before "
+            "invoking ARM read tools."
+        ) from exc
+
+    def _call_sync() -> list[ResourceSummary]:
+        client = ResourceManagementClient(credential, subscription_id)
+        out: list[ResourceSummary] = []
+        # list_by_resource_group returns GenericResource iterable. `.sku` is
+        # a SkuDescription object (or None) — we flatten to its name; full
+        # SKU detail is available via get_resource_metadata if needed.
+        for r in client.resources.list_by_resource_group(resource_group):
+            sku_val: str | None = None
+            if getattr(r, "sku", None) is not None:
+                sku_val = getattr(r.sku, "name", None) or None
+            out.append(
+                ResourceSummary(
+                    id=r.id or "",
+                    name=r.name or "",
+                    type=r.type or "",
+                    location=r.location or "",
+                    sku=sku_val,
+                    kind=getattr(r, "kind", None) or None,
+                    tags=dict(r.tags or {}),
+                )
+            )
+        return out
+
+    resources = await asyncio.to_thread(_call_sync)
+    return ResourcesInGroupOut(
+        subscription_id=subscription_id,
+        resource_group=resource_group,
+        resources=resources,
     )
 
 

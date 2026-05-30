@@ -307,7 +307,7 @@ def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
     it so we can `gather` parallel tool_use blocks in a future turn.
     """
     from azure.identity import DefaultAzureCredential  # local import — see arm_read
-    from tools.arm_read import list_resource_groups
+    from tools.arm_read import list_resource_groups, list_resources_in_group
 
     cred = DefaultAzureCredential()
 
@@ -316,7 +316,27 @@ def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
         result = await list_resource_groups(credential=cred, subscription_id=sub)
         return result.model_dump()
 
-    return {"list_resource_groups": _list_rgs}
+    async def _list_resources(tool_input: dict) -> Any:
+        sub = tool_input.get("subscription_id") or subscription_id
+        rg = tool_input.get("resource_group")
+        if not rg:
+            # The Anthropic input_schema marks resource_group required, but a
+            # missing-arg here would still raise TypeError downstream. Render
+            # it back as a typed error so the model self-corrects on the next
+            # turn rather than the loop aborting.
+            raise ValueError(
+                "list_resources_in_group requires 'resource_group' "
+                "(name from a prior list_resource_groups call)."
+            )
+        result = await list_resources_in_group(
+            credential=cred, subscription_id=sub, resource_group=rg
+        )
+        return result.model_dump()
+
+    return {
+        "list_resource_groups": _list_rgs,
+        "list_resources_in_group": _list_resources,
+    }
 
 
 async def _run_plan(
@@ -353,13 +373,22 @@ async def _run_plan(
 
     for turn in range(PLAN_TURN_CAP):
         started = time.monotonic()
-        msg = anthropic.messages.create(
+        # Streaming is REQUIRED per CLAUDE.md "Use streaming for any call with
+        # max_tokens > 2000". Non-streaming messages.create() at max_tokens
+        # 4096 disconnects intermittently via anthropic.APIConnectionError
+        # ("Server disconnected without sending a response") — the edge times
+        # out before the full payload flushes. The streaming context manager
+        # collects the full message via get_final_message() while keeping
+        # the connection alive. S62 caught this; prior S61 single-turn run
+        # worked at 2048 (under the threshold) and masked the bug.
+        with anthropic.messages.stream(
             model=model,
             max_tokens=TOKEN_BUDGETS["plan_turn"],
             system=PLAN_SYSTEM_PROMPT,
             tools=PLAN_TOOL_SPECS,
             messages=messages,
-        )
+        ) as stream:
+            msg = stream.get_final_message()
         elapsed_ms = int((time.monotonic() - started) * 1000)
 
         # Extract any text blocks emitted this turn (the final turn typically

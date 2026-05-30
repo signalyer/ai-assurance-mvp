@@ -70,6 +70,44 @@ class ResourceGroupsListOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# list_resources_in_group
+# ---------------------------------------------------------------------------
+
+
+class ResourceSummary(BaseModel):
+    """One Azure resource as returned by a list endpoint.
+
+    Deliberately thin: list endpoints in ARM omit the polymorphic per-type
+    `properties` blob, and including it would blow the per-turn token budget
+    when the model fans out across multiple RGs. For drill-down detail use
+    `get_resource_metadata(resource_id)` — that tool returns the full
+    `ResourceMetadata` with properties populated.
+
+    `sku` and `kind` are upstream-optional; we surface them as `None` rather
+    than empty string so the WAF synthesis can distinguish "no SKU concept
+    for this resource type" from "SKU=Free".
+    """
+
+    model_config = _strict()
+
+    id: str = Field(..., description="Full ARM resource ID")
+    name: str
+    type: str = Field(..., description="ARM type, e.g. Microsoft.Web/sites")
+    location: str
+    sku: str | None = None
+    kind: str | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class ResourcesInGroupOut(BaseModel):
+    model_config = _strict()
+    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    subscription_id: str
+    resource_group: str
+    resources: list[ResourceSummary]
+
+
+# ---------------------------------------------------------------------------
 # get_resource_metadata
 # ---------------------------------------------------------------------------
 
@@ -178,6 +216,8 @@ __all__ = [
     "SubscriptionsListOut",
     "ResourceGroupSummary",
     "ResourceGroupsListOut",
+    "ResourceSummary",
+    "ResourcesInGroupOut",
     "ResourceMetadata",
     "RoleAssignment",
     "RoleAssignmentsListOut",

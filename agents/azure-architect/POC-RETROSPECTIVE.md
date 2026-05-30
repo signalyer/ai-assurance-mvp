@@ -580,4 +580,31 @@ The dry-run was hitting **`slk_5b4dfc09`** (the very first key minted in this se
 
 ---
 
+### S62 P4 STEP 1 EXPANSION · STATUS
+
+**2nd read tool wired + multi-turn validated — DONE (2026-05-29):**
+- Rego allowlist edited FIRST (per [[rego-files-were-decorative]]): added `list_resources_in_group` to `readonly_azure_tools` in [policies/azure-architect.rego](../../policies/azure-architect.rego). Re-ran the rego positive+negative test; new tool ALLOWs, mutation-verb guard still DENYs.
+- Schema: `ResourceSummary` + `ResourcesInGroupOut` added to [tools/schemas.py](tools/schemas.py). Thin shape — no polymorphic `properties` blob (list endpoints omit it in ARM anyway; use `get_resource_metadata` for drill-down).
+- Implementation: [tools/arm_read.py](tools/arm_read.py)::`list_resources_in_group` wraps `ResourceManagementClient.resources.list_by_resource_group` via `asyncio.to_thread`. `@signallayer.policy_gate(action="tool_invoke")` governed. Same client + credential as `list_resource_groups` — no extra SDK install.
+- Anthropic tool spec added to [prompts.py](prompts.py)::`PLAN_TOOL_SPECS`. Dispatch wired in [agent.py](agent.py)::`_build_tool_dispatch` — missing-`resource_group` ValueError surfaces as `is_error` tool_result so the model self-corrects.
+- **Live multi-turn run:** `plan-799bcfdd3311`, Sonnet 4.6, 2 turns, stop=end_turn. Turn 0 fanned out BOTH tool calls in parallel (model derived `rg-aigovern-dev` from the prompt). Turn 1 produced 12,244 chars of WAF synthesis — 3,707 output tokens, well past the prior 2,048 ceiling. Parallel tool dispatch works without code changes; `_run_plan` already iterates over `tool_uses` and appends an aggregated `user` message with all `tool_result` blocks.
+
+**Bug fixed during S62: streaming required at `max_tokens > 2000`** ([[anthropic-max-tokens-streaming-threshold]]):
+- Bumped `TOKEN_BUDGETS["plan_turn"]` 2048 → 4096 to give the final-turn synthesis the same room as the standalone `architecture_review` path. The non-streaming `anthropic.messages.create()` then disconnected on every retry with `APIConnectionError: Connection error` (httpx `RemoteProtocolError: Server disconnected without sending a response`). CLAUDE.md global rule: "Use streaming for any call with `max_tokens > 2000`."
+- Fix: switched the loop to the streaming context manager, `with anthropic.messages.stream(...) as s: msg = s.get_final_message()`. Same `msg` shape downstream; `.content`, `.stop_reason`, `.usage` unchanged. The 5-turn cap × 4096 = 20K max output, still bounded.
+- New memory entry [[anthropic-max-tokens-streaming-threshold]] captures the non-obvious failure mode (network-shaped error, real cause is token budget).
+
+**Synthesis quality from the live run** (Sonnet 4.6, dev subscription):
+- Surfaced a real **CRITICAL** finding: `log-aigovern-prod` + `appi-aigovern-prod` live inside `rg-aigovern-dev`. RBAC blast radius wraps dev contributors over prod telemetry. Genuine issue, not hallucinated.
+- Correctly flagged P2v3 over-provision for dev, no zone-redundant Postgres HA, no Private Endpoints, cross-region latency (compute in westus2 vs search/secrets in eastus).
+- Token cost: ~6.4K input + 3.9K output ≈ $0.07 per run with Sonnet. P4 economics confirmed healthy for routine subscription audits.
+
+**Remaining for S63+:**
+- STEP 4 spillover (Mermaid + per-tool eval rubric). Still deferred.
+- Implement `get_resource_metadata` (rego-allowed already, body still `NotImplementedError`). This is the natural "drill into one resource" tool to round out the read surface.
+- Triple-overdue UI-promise audit ([[ui-promise-audit-owed]]).
+- F-021 — framework mapping data for `ai-sys-bae72e75`.
+
+---
+
 _(Append further findings below as P3-P10 progress.)_

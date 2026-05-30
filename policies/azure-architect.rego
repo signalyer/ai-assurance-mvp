@@ -45,6 +45,7 @@ is_azure_architect if {
 readonly_azure_tools := {
     "list_subscriptions",
     "list_resource_groups",
+    "list_resources_in_group",
     "get_resource_metadata",
     "get_network_topology",
     "list_role_assignments",
