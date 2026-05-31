@@ -10,6 +10,7 @@
 import { signal, computed } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
+import { openAiSummary } from '../../shared/components/AiSummaryDrawer';
 import type {
   SectionedResponse,
   SectionedSection,
@@ -117,6 +118,44 @@ function pctBar(pct: number): string {
   if (pct >= 90) return 'badge badge-pass';
   if (pct >= 60) return 'badge badge-medium';
   return 'badge badge-critical';
+}
+
+// S73: roll the currently-filtered evidence rows into a compact "evidence
+// type ×N" string the prompt can see. Same shape as
+// team-portal/AiSystemDrawer.tsx::summarizeEvidenceSections.
+function summarizeEvidenceSections(rows: EvidenceRow[]): string {
+  if (rows.length === 0) return '';
+  const byType: Record<string, number> = {};
+  for (const r of rows) byType[r.evidence_type] = (byType[r.evidence_type] ?? 0) + 1;
+  return Object.entries(byType)
+    .map(([k, v]) => (v > 1 ? `${k} ×${v}` : k))
+    .join(', ');
+}
+
+// S73: Summarize-evidence button binds to the currently-filtered view. When
+// filterSystem is "ALL" the prompt sees portfolio-wide evidence; when scoped
+// to a system, it sees per-system. ai_system_id is nullable in AskRequest —
+// portfolio-wide passes null; per-system finds one row's id.
+function openSummarizeFilteredEvidence(): void {
+  const rows = filteredRows.value;
+  if (rows.length === 0) return;
+  const scope = filterSystem.value;
+  const sysId = scope === 'ALL' ? null : (rows[0]?.ai_system_id ?? null);
+  const scopeLabel = scope === 'ALL' ? 'portfolio-wide' : scope;
+  openAiSummary({
+    url: '/assurance-model/summarize-evidence',
+    title: `Evidence summary · ${scopeLabel}`,
+    body: {
+      ai_system_id: sysId,
+      data_classes: [],
+      payload: {
+        evidence_sections: summarizeEvidenceSections(rows) || '(no evidence on file)',
+        evidence_completeness: `${rows.length} records on file · scope=${scopeLabel}`,
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'ciso-console',
+    },
+  });
 }
 
 // ============================================================
@@ -264,6 +303,14 @@ function EvidenceCard() {
             <option value="IMMUTABLE">Immutable only</option>
             <option value="MUTABLE">Mutable only</option>
           </select>
+          <button
+            class="btn btn-sm btn-secondary"
+            onClick={() => openSummarizeFilteredEvidence()}
+            disabled={filteredRows.value.length === 0}
+            title="AI summary of the currently filtered evidence view"
+          >
+            Summarize this view
+          </button>
         </div>
       </div>
 

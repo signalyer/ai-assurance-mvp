@@ -7,6 +7,7 @@ import { openRevisions } from './AiSystemRevisionsPanel';
 import { openFrameworks } from './AiSystemFrameworksPanel';
 import { openBoundAgents } from './AiSystemBoundAgentsPanel';
 import { openAiSummary } from '../../shared/components/AiSummaryDrawer';
+import { AiActionsMenu } from '../../shared/components/AiActionsMenu';
 import type { AiSystemDetail, EditStatus, EvidenceListResponse, EvidenceRow, ReleaseGate } from './types';
 
 // Open-system signal: drives the side drawer.
@@ -223,10 +224,13 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         </button>
         <button class="btn btn-sm btn-secondary" onClick={() => openFrameworks(s.id)}>Frameworks</button>
         <button class="btn btn-sm btn-secondary" onClick={() => openBoundAgents(s.id)}>Bound Agents</button>
-        {/* S72: AI action surface — inline buttons. SUMMARIZE_FINDING is per-row above.
-            ASK prompts for the question; DRAFT_REPORT scopes to this system's posture. */}
-        <button class="btn btn-sm btn-secondary" onClick={() => openAskAboutSystem(s)}>Ask AI</button>
-        <button class="btn btn-sm btn-secondary" onClick={() => openDraftReport(s)}>Draft Report</button>
+        {/* S73: AI actions consolidated into menu. SUMMARIZE_FINDING is per-row above. */}
+        <AiActionsMenu
+          items={[
+            { key: 'ask',         label: 'Ask AI…',     onClick: () => openAskAboutSystem(s) },
+            { key: 'draft-report', label: 'Draft Report', onClick: () => openDraftReport(s) },
+          ]}
+        />
       </div>
     </>
   );

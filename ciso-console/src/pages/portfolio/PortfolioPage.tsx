@@ -5,8 +5,10 @@
 // CISO-specific: no team filter (CISO sees all); per-row drill link to /findings?system_id=<id>
 
 import { signal, computed } from '@preact/signals';
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
+import { openAiSummary } from '../../shared/components/AiSummaryDrawer';
+import { AiActionsMenu } from '../../shared/components/AiActionsMenu';
 import type { AiSystemSummary, AiSystemsListResponse } from './types';
 
 // ============================================================
@@ -221,10 +223,16 @@ export function PortfolioPage() {
                       <td><span class="critical">{s.critical_findings ?? 0}</span></td>
                       <td>{s.open_findings ?? 0}</td>
                       <td class="text-xs text-tertiary">{fmtDate(s.last_assessment)}</td>
-                      <td>
+                      <td style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <a href={`/findings?system_id=${encodeURIComponent(s.id)}`} class="btn btn-sm">
                           Findings
                         </a>
+                        <AiActionsMenu
+                          items={[
+                            { key: 'ask',          label: 'Ask AI…',     onClick: () => openAskAboutSystem(s) },
+                            { key: 'draft-report', label: 'Draft Report', onClick: () => openDraftReport(s) },
+                          ]}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -234,6 +242,189 @@ export function PortfolioPage() {
           </div>
         </>
       )}
+      <AskAiPromptModal />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// S73: AI action surface — Ask + Draft Report, per-system from portfolio row.
+//
+// Helpers ported from team-portal/AiSystemDrawer.tsx and adapted for
+// AiSystemSummary (this page's row shape) rather than AiSystemDetail. Summary
+// carries critical_findings + open_findings as counts (not the full findings
+// array), so prompt grounding uses count summaries instead of per-finding
+// detail. evidence_summary is unknown at this surface — the prompt receives
+// a placeholder, matching the S72b graceful empty-evidence path.
+//
+// Anthropic pinned per S72; drops with Bedrock streaming adapter (S74).
+// ---------------------------------------------------------------------------
+
+const askPromptSystem = signal<AiSystemSummary | null>(null);
+
+function openAskAboutSystem(s: AiSystemSummary): void {
+  askPromptSystem.value = s;
+}
+
+function closeAskPrompt(): void {
+  askPromptSystem.value = null;
+}
+
+function summarizeFindingCounts(s: AiSystemSummary): string {
+  const crit = s.critical_findings ?? 0;
+  const open = s.open_findings ?? 0;
+  if (open === 0 && crit === 0) return '(no open findings)';
+  return `${crit} critical, ${open} open`;
+}
+
+function submitAskPrompt(s: AiSystemSummary, question: string): void {
+  const trimmed = question.trim();
+  if (!trimmed) return;
+  closeAskPrompt();
+  openAiSummary({
+    url: '/assurance-model/ask',
+    title: `Ask: ${s.name}`,
+    body: {
+      ai_system_id: s.id,
+      data_classes: [],
+      payload: {
+        question: trimmed,
+        risk_tier: s.risk_level,
+        open_findings_summary: summarizeFindingCounts(s),
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'ciso-console',
+    },
+  });
+}
+
+function openDraftReport(s: AiSystemSummary): void {
+  openAiSummary({
+    url: '/assurance-model/draft-report',
+    title: `Report: ${s.name}`,
+    body: {
+      ai_system_id: s.id,
+      data_classes: [],
+      payload: {
+        portfolio_stats: (
+          `1 system · risk=${s.risk_level} · decision=${s.release_decision} · ` +
+          `runtime=${s.runtime_status}`
+        ),
+        top_risks: (
+          `${s.critical_findings ?? 0} critical, ${s.open_findings ?? 0} open ` +
+          `on ${s.name}; domain=${s.domain}`
+        ),
+        evidence_summary: 'Evidence detail not loaded at portfolio surface — see Evidence page for full posture',
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'ciso-console',
+    },
+  });
+}
+
+function AskAiPromptModal() {
+  const s = askPromptSystem.value;
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (s && inputRef.current) inputRef.current.focus();
+  }, [s]);
+
+  if (!s) return null;
+
+  function onSubmit(e: Event) {
+    e.preventDefault();
+    submitAskPrompt(s!, inputRef.current?.value ?? '');
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      submitAskPrompt(s!, inputRef.current?.value ?? '');
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAskPrompt();
+    }
+  }
+
+  return (
+    <>
+      <div
+        class="drawer-overlay open"
+        style={{ zIndex: 200 }}
+        onClick={closeAskPrompt}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Ask AI about ${s.name}`}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 201,
+          width: 'min(560px, calc(100vw - 32px))',
+          background: 'var(--bg-card)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.55)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderBottom: '1px solid var(--border)',
+            fontWeight: 600,
+            fontSize: '0.95rem',
+          }}
+        >
+          Ask AI about {s.name}
+        </div>
+        <form onSubmit={onSubmit} style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label
+            for="ask-ai-question"
+            class="text-xs text-secondary"
+            style={{ fontWeight: 500 }}
+          >
+            Your question
+          </label>
+          <textarea
+            id="ask-ai-question"
+            ref={inputRef}
+            rows={4}
+            onKeyDown={onKeyDown}
+            placeholder='e.g. "What is the assurance posture of this system?"'
+            style={{
+              width: '100%',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
+              padding: '0.6rem 0.75rem',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div class="text-xs text-tertiary">
+            ⌘/Ctrl+Enter to send · Esc to cancel · Grounded in this system's risk tier + finding counts.
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" class="btn btn-sm btn-secondary" onClick={closeAskPrompt}>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-sm btn-primary">
+              Ask
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
   );
 }
