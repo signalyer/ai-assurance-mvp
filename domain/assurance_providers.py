@@ -985,15 +985,22 @@ def _build_prompt(use_case: str, payload: dict) -> tuple[str, str]:
             "  · Critical exposure: <which systems carry the most open P0 risk "
             "and why>\n"
             "  · Framework posture: <coverage % across 2-3 framing frameworks>\n"
+            "  · Evidence posture: <evidence-pack completeness, strongest "
+            "artifacts on file, named gaps that block close-out>\n"
             "  · Recommendation: <one concrete release/defer call with the "
             "reason in plain English>\n\n"
-            "Sanitize: never name individuals. Keep total length under 220 words."
+            "If evidence context is sparse or marked empty, say so explicitly "
+            "in the Evidence posture line rather than fabricating artifacts. "
+            "Sanitize: never name individuals. Keep total length under 240 "
+            "words."
         )
         portfolio_stats = payload.get("portfolio_stats") or "(no stats provided)"
         top_risks = payload.get("top_risks") or "(no top-risk list provided)"
+        evidence_summary = payload.get("evidence_summary") or "(no evidence summary provided)"
         user_prompt = (
             f"Portfolio stats: {portfolio_stats}\n"
-            f"Top open risks: {top_risks}\n\n"
+            f"Top open risks: {top_risks}\n"
+            f"Evidence posture: {evidence_summary}\n\n"
             f"Draft the executive summary."
         )
         return system_prompt, user_prompt

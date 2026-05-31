@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { apiGet } from '../../shared/api/client';
 import { SeverityBadge, DecisionBadge, RuntimeStatusDot } from '../../shared/components/Badges';
@@ -110,6 +110,7 @@ export function AiSystemDrawer() {
           {s && <DrawerContent system={s} />}
         </div>
       </aside>
+      <AskAiPromptModal />
     </>
   );
 }
@@ -240,14 +241,22 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
 // adapter yet. Drop the pin in S71b/S73 when Bedrock streaming lands.
 // ---------------------------------------------------------------------------
 
+// S72b: in-app modal replaces window.prompt for Ask AI. Module-level signal
+// drives the open/close state — same pattern as openAiSummary above.
+const askPromptSystem = signal<AiSystemDetail | null>(null);
+
 function openAskAboutSystem(s: AiSystemDetail): void {
-  // Minimal UX: window.prompt for the question. A drawer-side input would
-  // be cleaner but ships in S73 alongside the menu refactor.
-  const question = window.prompt(
-    `Ask about ${s.name}:\n(e.g. "What is the current release decision and why?")`,
-    '',
-  );
-  if (!question || !question.trim()) return;
+  askPromptSystem.value = s;
+}
+
+function closeAskPrompt(): void {
+  askPromptSystem.value = null;
+}
+
+function submitAskPrompt(s: AiSystemDetail, question: string): void {
+  const trimmed = question.trim();
+  if (!trimmed) return;
+  closeAskPrompt();
   openAiSummary({
     url: '/assurance-model/ask',
     title: `Ask: ${s.name}`,
@@ -255,7 +264,7 @@ function openAskAboutSystem(s: AiSystemDetail): void {
       ai_system_id: s.id,
       data_classes: [],
       payload: {
-        question: question.trim(),
+        question: trimmed,
         risk_tier: s.risk_level,
         open_findings_summary: summarizeOpenFindings(s),
       },
@@ -263,6 +272,123 @@ function openAskAboutSystem(s: AiSystemDetail): void {
       user: 'team-portal',
     },
   });
+}
+
+export function AskAiPromptModal() {
+  const s = askPromptSystem.value;
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Autofocus the textarea when the modal opens.
+  useEffect(() => {
+    if (s && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [s]);
+
+  if (!s) return null;
+
+  function onSubmit(e: Event) {
+    e.preventDefault();
+    const text = inputRef.current?.value ?? '';
+    submitAskPrompt(s!, text);
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    // Cmd/Ctrl+Enter submits; Escape cancels (overlay click handles backdrop).
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      const text = inputRef.current?.value ?? '';
+      submitAskPrompt(s!, text);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAskPrompt();
+    }
+  }
+
+  return (
+    <>
+      <div
+        class="drawer-overlay open"
+        style={{ zIndex: 200 }}
+        onClick={closeAskPrompt}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Ask AI about ${s.name}`}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 201,
+          width: 'min(560px, calc(100vw - 32px))',
+          background: 'var(--bg-card)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.55)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderBottom: '1px solid var(--border)',
+            fontWeight: 600,
+            fontSize: '0.95rem',
+          }}
+        >
+          Ask AI about {s.name}
+        </div>
+        <form onSubmit={onSubmit} style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label
+            for="ask-ai-question"
+            class="text-xs text-secondary"
+            style={{ fontWeight: 500 }}
+          >
+            Your question
+          </label>
+          <textarea
+            id="ask-ai-question"
+            ref={inputRef}
+            rows={4}
+            onKeyDown={onKeyDown}
+            placeholder='e.g. "What is blocking this system from production release?"'
+            style={{
+              width: '100%',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
+              padding: '0.6rem 0.75rem',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div class="text-xs text-tertiary">
+            ⌘/Ctrl+Enter to send · Esc to cancel · Grounded in this system's risk tier + open findings.
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              class="btn btn-sm btn-secondary"
+              onClick={closeAskPrompt}
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-sm btn-primary">
+              Ask
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
 }
 
 function openSummarizeFinding(
@@ -316,6 +442,12 @@ function openDraftReport(s: AiSystemDetail): void {
   const openHigh = s.findings.filter(
     (f) => (f.status === 'OPEN' || f.status === 'IN_PROGRESS') && f.severity === 'HIGH',
   ).length;
+  // S72b: feed the evidence rows the drawer already loaded into the prompt
+  // so the new Evidence posture line in the report has real input.
+  const rows = evidenceRows.value;
+  const evidenceSummary = rows.length === 0
+    ? '0 evidence records on file — assurance pack is empty'
+    : `${rows.length} records on file: ${summarizeEvidenceSections(rows)}`;
   openAiSummary({
     url: '/assurance-model/draft-report',
     title: `Report: ${s.name}`,
@@ -331,6 +463,7 @@ function openDraftReport(s: AiSystemDetail): void {
           `${openCrit} open CRITICAL, ${openHigh} open HIGH on ${s.name}; ` +
           `domain=${s.domain}`
         ),
+        evidence_summary: evidenceSummary,
       },
       preferred_provider: 'anthropic-prod',
       user: 'team-portal',
@@ -434,8 +567,11 @@ function EvidenceSection({ systemId }: { systemId: string }) {
         <button
           class="btn btn-xs btn-secondary"
           onClick={() => openSummarizeEvidence(systemId, rows)}
-          disabled={rows.length === 0}
-          title={rows.length === 0 ? 'No evidence to summarize' : 'Summarize evidence with AI'}
+          title={
+            rows.length === 0
+              ? 'Summarize evidence with AI (will report that none is on file)'
+              : 'Summarize evidence with AI'
+          }
         >
           Summarize evidence
         </button>

@@ -147,8 +147,18 @@ export function AiSummaryDrawer() {
 
   return (
     <>
-      <div class={`drawer-overlay ${isOpen ? 'open' : ''}`} onClick={closeAiSummary} />
-      <aside class={`drawer ${isOpen ? 'open' : ''}`} aria-hidden={!isOpen}>
+      {/* z-index above .drawer (101) so this stacks ABOVE the FindingDrawer
+          the operator opened first. Same fix pattern as team-portal. */}
+      <div
+        class={`drawer-overlay ${isOpen ? 'open' : ''}`}
+        style={{ zIndex: 200 }}
+        onClick={closeAiSummary}
+      />
+      <aside
+        class={`drawer ${isOpen ? 'open' : ''}`}
+        style={{ zIndex: 201 }}
+        aria-hidden={!isOpen}
+      >
         <div class="drawer-header">
           <div class="drawer-title">{req?.title ?? 'AI Summary'}</div>
           <button class="drawer-close" onClick={closeAiSummary} aria-label="Close">×</button>
@@ -202,7 +212,8 @@ export function AiSummaryDrawer() {
                   fontSize: '0.875rem',
                   lineHeight: 1.5,
                   padding: '0.75rem',
-                  background: 'var(--surface-2, #f6f7f9)',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
                   borderRadius: 4,
                   margin: 0,
