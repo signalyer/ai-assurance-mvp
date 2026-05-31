@@ -68,10 +68,17 @@ def _sign(method: str, path: str, body: bytes) -> dict[str, str]:
 
 @pytest.fixture(autouse=True)
 def _hmac_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Provide a known HMAC secret + reset nonce cache between tests."""
+    """Provide a known HMAC secret + reset nonce cache between tests.
+
+    Uses env-var fallback only — does NOT mutate ``hmac_auth._SECRET``
+    because that survives the fixture and pollutes the later
+    ``test_missing_secret_returns_500`` check in ``test_hmac_auth.py``.
+    ``_resolve_secret_for_key`` falls back to ``_read_secret_env()``
+    when ``_SECRET is None``, so the env var alone is enough provided
+    ``_SECRET`` was None at module import (the normal pytest case).
+    """
     monkeypatch.setenv("SL_HMAC_SECRET", TEST_SECRET)
     from middleware import hmac_auth
-    hmac_auth._SECRET = TEST_SECRET.encode("utf-8")
     hmac_auth._nonce_cache.clear()
 
 
