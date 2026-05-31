@@ -8,6 +8,7 @@ import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { apiGet } from '../../shared/api/client';
 import { dataMode } from '../../shared/components/DataModeToggle';
+import { openAiSummary } from '../../shared/components/AiSummaryDrawer';
 import type {
   Finding, FindingsV2Response, FindingPriority, FindingStatus, FindingImpact,
 } from './types';
@@ -386,6 +387,18 @@ function FindingDrawer() {
                 </div>
               )}
 
+              {/* S72: AI summarize action — same streaming SSE contract
+                  as team-portal. Anthropic-pinned because Bedrock has no
+                  streaming adapter yet ([[FailedGateRow.onExplain pattern]]). */}
+              <div class="drawer-section" style={{ display: 'flex', gap: 8 }}>
+                <button
+                  class="btn btn-sm btn-primary"
+                  onClick={() => openSummarizeFinding(f)}
+                >
+                  Summarize with AI
+                </button>
+              </div>
+
               <div class="text-xs text-tertiary" style={{ marginTop: '1rem' }}>
                 Mutation (acknowledge / resolve) available in CSM-2.
               </div>
@@ -395,4 +408,23 @@ function FindingDrawer() {
       </div>
     </>
   );
+}
+
+function openSummarizeFinding(f: Finding): void {
+  openAiSummary({
+    url: '/assurance-model/summarize-finding',
+    title: `Finding: ${f.id.slice(0, 10)}`,
+    body: {
+      ai_system_id: f.ai_system_id,
+      data_classes: [],
+      payload: {
+        finding_id: f.id,
+        severity: f.priority,            // CISO Console uses priority (P0-P3); engine prompt treats as severity label
+        title: f.title,
+        finding_note: f.description ?? null,
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'ciso-console',
+    },
+  });
 }

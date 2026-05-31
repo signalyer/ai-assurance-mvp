@@ -111,3 +111,55 @@ export const apiPost = <T>(path: string, body?: unknown) =>
 
 export const apiDelete = <T>(path: string) =>
   apiRequest<T>(path, { method: 'DELETE' });
+
+// ---------------------------------------------------------------------------
+// SSE (Server-Sent Events) — S72 (port of team-portal S69 wrapper)
+// ---------------------------------------------------------------------------
+// Native EventSource doesn't support POST bodies, so we use
+// @microsoft/fetch-event-source which gives full fetch() semantics
+// (POST + body + credentials + custom headers) on the SSE wire format.
+//
+// Per [[raw-fetch-drifts-from-shared-client]]: this wrapper is the ONLY
+// way SPA code should consume SSE. Bypassing it would drop credentials or
+// X-Data-Mode and produce the F-019-class cross-origin auth bug.
+
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+
+export interface SseHandlers {
+  onEvent: (event: string, data: string) => void;
+  onError?: (err: unknown) => void;
+  onClose?: () => void;
+  signal?: AbortSignal;
+}
+
+export async function apiSse(
+  path: string,
+  body: unknown,
+  handlers: SseHandlers,
+): Promise<void> {
+  const url = buildUrl(path);
+  await fetchEventSource(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      'X-Data-Mode': readDataMode(),
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal ?? null,
+    // openWhenHidden: keep the stream alive when the tab is backgrounded.
+    openWhenHidden: true,
+    onmessage(msg) {
+      handlers.onEvent(msg.event || 'message', msg.data);
+    },
+    onerror(err) {
+      handlers.onError?.(err);
+      // Throw to stop fetchEventSource auto-retry — we want fail-fast UI.
+      throw err;
+    },
+    onclose() {
+      handlers.onClose?.();
+    },
+  });
+}

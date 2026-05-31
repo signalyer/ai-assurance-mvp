@@ -449,24 +449,27 @@ def _dispatch(req: AskRequest) -> AskResponseOut:
 
 @router.post(
     "/ask",
-    response_model=AskResponseOut,
     operation_id="assurance_ask",
 )
-async def ask(req: AskRequest) -> AskResponseOut:
-    """Generic 'Ask about this AI system' -- bound to SYSTEM_QA use case."""
+async def ask(req: AskRequest, request: Request):
+    """Generic 'Ask about this AI system' -- bound to SYSTEM_QA use case.
+
+    S72: streams real Anthropic deltas when REAL_LLM_ENABLED + creds present
+    (same SSE contract as /explain-release).
+    """
     if not req.use_case:
         req.use_case = UseCase.SYSTEM_QA.value
-    return _dispatch(req)
+    return _dispatch_streaming(req, request)
 
 
 @router.post(
     "/summarize-finding",
-    response_model=AskResponseOut,
     operation_id="assurance_summarize_finding",
 )
-async def summarize_finding(req: AskRequest) -> AskResponseOut:
+async def summarize_finding(req: AskRequest, request: Request):
+    """S72: streaming SSE — see /explain-release for the response shape."""
     req.use_case = UseCase.FINDINGS_SUMMARIZATION.value
-    return _dispatch(req)
+    return _dispatch_streaming(req, request)
 
 
 # ---------------------------------------------------------------------------
@@ -725,19 +728,19 @@ async def explain_release(req: AskRequest, request: Request):
 
 @router.post(
     "/summarize-evidence",
-    response_model=AskResponseOut,
     operation_id="assurance_summarize_evidence",
 )
-async def summarize_evidence(req: AskRequest) -> AskResponseOut:
+async def summarize_evidence(req: AskRequest, request: Request):
+    """S72: streaming SSE — see /explain-release for the response shape."""
     req.use_case = UseCase.EVIDENCE_SUMMARIZATION.value
-    return _dispatch(req)
+    return _dispatch_streaming(req, request)
 
 
 @router.post(
     "/draft-report",
-    response_model=AskResponseOut,
     operation_id="assurance_draft_report",
 )
-async def draft_report(req: AskRequest) -> AskResponseOut:
+async def draft_report(req: AskRequest, request: Request):
+    """S72: streaming SSE — see /explain-release for the response shape."""
     req.use_case = UseCase.EXECUTIVE_REPORT_GENERATION.value
-    return _dispatch(req)
+    return _dispatch_streaming(req, request)

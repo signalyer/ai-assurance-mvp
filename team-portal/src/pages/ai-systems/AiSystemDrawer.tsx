@@ -186,16 +186,24 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
               marginBottom: 6,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <span class="font-mono text-xs">{f.id}</span>
-              <SeverityBadge value={f.severity} />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <SeverityBadge value={f.severity} />
+                <button
+                  class="btn btn-xs btn-secondary"
+                  onClick={() => openSummarizeFinding(s.id, f.id, f.severity, f.title)}
+                >
+                  Summarize
+                </button>
+              </div>
             </div>
             <div class="text-sm" style={{ marginTop: 4 }}>{f.title}</div>
           </div>
         ))}
       </div>
 
-      <EvidenceSection />
+      <EvidenceSection systemId={s.id} />
 
       <div class="drawer-section">
         <div class="drawer-section-title">Last Assessment</div>
@@ -214,9 +222,138 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
         </button>
         <button class="btn btn-sm btn-secondary" onClick={() => openFrameworks(s.id)}>Frameworks</button>
         <button class="btn btn-sm btn-secondary" onClick={() => openBoundAgents(s.id)}>Bound Agents</button>
+        {/* S72: AI action surface — inline buttons. SUMMARIZE_FINDING is per-row above.
+            ASK prompts for the question; DRAFT_REPORT scopes to this system's posture. */}
+        <button class="btn btn-sm btn-secondary" onClick={() => openAskAboutSystem(s)}>Ask AI</button>
+        <button class="btn btn-sm btn-secondary" onClick={() => openDraftReport(s)}>Draft Report</button>
       </div>
     </>
   );
+}
+
+// ---------------------------------------------------------------------------
+// S72: AI action surface — inline helpers
+//
+// All four route through the shared AiSummaryDrawer (already SSE-aware from
+// S69). Anthropic pinned per [[FailedGateRow.onExplain pattern]]: all four
+// use cases are in Anthropic's allowed list, and Bedrock has no streaming
+// adapter yet. Drop the pin in S71b/S73 when Bedrock streaming lands.
+// ---------------------------------------------------------------------------
+
+function openAskAboutSystem(s: AiSystemDetail): void {
+  // Minimal UX: window.prompt for the question. A drawer-side input would
+  // be cleaner but ships in S73 alongside the menu refactor.
+  const question = window.prompt(
+    `Ask about ${s.name}:\n(e.g. "What is the current release decision and why?")`,
+    '',
+  );
+  if (!question || !question.trim()) return;
+  openAiSummary({
+    url: '/assurance-model/ask',
+    title: `Ask: ${s.name}`,
+    body: {
+      ai_system_id: s.id,
+      data_classes: [],
+      payload: {
+        question: question.trim(),
+        risk_tier: s.risk_level,
+        open_findings_summary: summarizeOpenFindings(s),
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'team-portal',
+    },
+  });
+}
+
+function openSummarizeFinding(
+  systemId: string,
+  findingId: string,
+  severity: string,
+  title: string,
+): void {
+  openAiSummary({
+    url: '/assurance-model/summarize-finding',
+    title: `Finding: ${findingId}`,
+    body: {
+      ai_system_id: systemId,
+      data_classes: [],
+      payload: {
+        finding_id: findingId,
+        severity,
+        title,
+        finding_note: null,
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'team-portal',
+    },
+  });
+}
+
+function openSummarizeEvidence(systemId: string, rows: EvidenceRow[]): void {
+  // Collapse the rows the drawer already loaded into a compact section list
+  // so the prompt sees what the operator sees (no extra fetch needed).
+  const sections = summarizeEvidenceSections(rows);
+  openAiSummary({
+    url: '/assurance-model/summarize-evidence',
+    title: 'Evidence summary',
+    body: {
+      ai_system_id: systemId,
+      data_classes: [],
+      payload: {
+        evidence_sections: sections || '(no evidence on file)',
+        evidence_completeness: rows.length > 0 ? `${rows.length} records on file` : '0%',
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'team-portal',
+    },
+  });
+}
+
+function openDraftReport(s: AiSystemDetail): void {
+  const openCrit = s.findings.filter(
+    (f) => (f.status === 'OPEN' || f.status === 'IN_PROGRESS') && f.severity === 'CRITICAL',
+  ).length;
+  const openHigh = s.findings.filter(
+    (f) => (f.status === 'OPEN' || f.status === 'IN_PROGRESS') && f.severity === 'HIGH',
+  ).length;
+  openAiSummary({
+    url: '/assurance-model/draft-report',
+    title: `Report: ${s.name}`,
+    body: {
+      ai_system_id: s.id,
+      data_classes: [],
+      payload: {
+        portfolio_stats: (
+          `1 system · risk=${s.risk_level} · decision=${s.release_decision} · ` +
+          `runtime=${s.runtime_status}`
+        ),
+        top_risks: (
+          `${openCrit} open CRITICAL, ${openHigh} open HIGH on ${s.name}; ` +
+          `domain=${s.domain}`
+        ),
+      },
+      preferred_provider: 'anthropic-prod',
+      user: 'team-portal',
+    },
+  });
+}
+
+function summarizeOpenFindings(s: AiSystemDetail): string {
+  const open = s.findings.filter((f) => f.status === 'OPEN' || f.status === 'IN_PROGRESS');
+  if (open.length === 0) return '(no open findings)';
+  const bySev: Record<string, number> = {};
+  for (const f of open) bySev[f.severity] = (bySev[f.severity] ?? 0) + 1;
+  const parts = Object.entries(bySev).map(([k, v]) => `${v} ${k}`);
+  return `${open.length} open: ${parts.join(', ')}`;
+}
+
+function summarizeEvidenceSections(rows: EvidenceRow[]): string {
+  if (rows.length === 0) return '';
+  const byType: Record<string, number> = {};
+  for (const r of rows) byType[r.evidence_type] = (byType[r.evidence_type] ?? 0) + 1;
+  return Object.entries(byType)
+    .map(([k, v]) => (v > 1 ? `${k} ×${v}` : k))
+    .join(', ');
 }
 
 // S68a (G-6): Failed release gate row with Explain button. Routes to
@@ -284,7 +421,7 @@ function FailedGateRow({ gate: g, systemId }: { gate: ReleaseGate; systemId: str
 // for systems with 20+ rows (typical post-S67 consolidation).
 const EVIDENCE_PREVIEW_LIMIT = 8;
 
-function EvidenceSection() {
+function EvidenceSection({ systemId }: { systemId: string }) {
   const rows = evidenceRows.value;
   const err = evidenceError.value;
   const visible = rows.slice(0, EVIDENCE_PREVIEW_LIMIT);
@@ -292,7 +429,17 @@ function EvidenceSection() {
 
   return (
     <div class="drawer-section">
-      <div class="drawer-section-title">Evidence ({rows.length})</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div class="drawer-section-title" style={{ margin: 0 }}>Evidence ({rows.length})</div>
+        <button
+          class="btn btn-xs btn-secondary"
+          onClick={() => openSummarizeEvidence(systemId, rows)}
+          disabled={rows.length === 0}
+          title={rows.length === 0 ? 'No evidence to summarize' : 'Summarize evidence with AI'}
+        >
+          Summarize evidence
+        </button>
+      </div>
       {err && <div class="text-xs text-critical">Could not load evidence: {err}</div>}
       {!err && rows.length === 0 && (
         <div class="text-xs text-tertiary">No evidence on file yet. Add via Edit System → Evidence.</div>

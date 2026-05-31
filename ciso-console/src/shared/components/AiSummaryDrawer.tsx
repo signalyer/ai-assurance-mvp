@@ -1,0 +1,289 @@
+// AiSummaryDrawer — ported from team-portal S69 in S72.
+//
+// Streams real Anthropic deltas via SSE; same response shape across all
+// 4 assurance-model endpoints. Blocked/simulated paths emit a single
+// terminal 'done' event; live path emits 'delta' events then 'done'.
+//
+// Drawer state machine:
+//   loading=true, streamedText='', result=null  -> rotating loading msg
+//   first 'delta'  -> streamedText grows, cursor visible
+//   'done' (live)  -> result set with full text + token/cost; cursor drops
+//   'done' (sim)   -> result set; "Simulated preview" badge shown
+//   'done' (blocked) -> result set; error banner shown
+//   abort on close -> engine writes streaming_complete=false
+//
+// Mount once at Shell; any caller imports openAiSummary({...}) to open.
+
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { signal } from '@preact/signals';
+import { apiSse } from '../api/client';
+import type { AskRequest, AskResponseOut } from '../types/assurance';
+
+interface SummaryRequest {
+  url: string;          // path under /api/v1 (e.g. '/assurance-model/summarize-finding')
+  title: string;        // drawer header
+  body: AskRequest;
+}
+
+const openRequest = signal<SummaryRequest | null>(null);
+
+export function openAiSummary(req: SummaryRequest): void {
+  openRequest.value = req;
+}
+
+export function closeAiSummary(): void {
+  openRequest.value = null;
+}
+
+const LOADING_MESSAGES = [
+  'Routing to provider…',
+  'Validating policy decision…',
+  'Drafting summary…',
+  'Logging audit event…',
+];
+
+export function AiSummaryDrawer() {
+  const req = openRequest.value;
+  const [result, setResult] = useState<AskResponseOut | null>(null);
+  const [streamedText, setStreamedText] = useState<string>('');
+  const [streaming, setStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!req) {
+      setResult(null);
+      setStreamedText('');
+      setStreaming(false);
+      setError(null);
+      setLoading(false);
+      setCopied(false);
+      abortRef.current?.abort();
+      abortRef.current = null;
+      return;
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+    setStreaming(false);
+    setError(null);
+    setResult(null);
+    setStreamedText('');
+    setCopied(false);
+
+    (async () => {
+      try {
+        await apiSse(req.url, req.body, {
+          signal: controller.signal,
+          onEvent: (event, data) => {
+            if (event === 'delta') {
+              try {
+                const chunk = JSON.parse(data) as { text?: string };
+                if (chunk.text) {
+                  setStreaming(true);
+                  setStreamedText((prev) => prev + chunk.text);
+                }
+              } catch {
+                // ignore malformed delta — final done event still wins
+              }
+            } else if (event === 'done') {
+              try {
+                const final = JSON.parse(data) as AskResponseOut;
+                setResult(final);
+              } catch (err) {
+                setError(
+                  `Bad terminal event from engine: ${
+                    err instanceof Error ? err.message : 'parse error'
+                  }`,
+                );
+              }
+              setLoading(false);
+              setStreaming(false);
+            }
+          },
+          onError: (err) => {
+            if (controller.signal.aborted) return;
+            setError(err instanceof Error ? err.message : 'Stream error');
+            setLoading(false);
+            setStreaming(false);
+          },
+        });
+      } catch {
+        // apiSse re-throws on error; UI state already set by onError.
+      }
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [req]);
+
+  useEffect(() => {
+    if (!loading || streaming) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 3000);
+    return () => window.clearInterval(id);
+  }, [loading, streaming]);
+
+  const isOpen = req !== null;
+  const loadingMsg = LOADING_MESSAGES[tick % LOADING_MESSAGES.length];
+
+  async function copyMarkdown(): Promise<void> {
+    const text = result?.response ?? streamedText;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  const displayText = result?.response ?? streamedText;
+  const showCursor = streaming && !result;
+
+  return (
+    <>
+      <div class={`drawer-overlay ${isOpen ? 'open' : ''}`} onClick={closeAiSummary} />
+      <aside class={`drawer ${isOpen ? 'open' : ''}`} aria-hidden={!isOpen}>
+        <div class="drawer-header">
+          <div class="drawer-title">{req?.title ?? 'AI Summary'}</div>
+          <button class="drawer-close" onClick={closeAiSummary} aria-label="Close">×</button>
+        </div>
+        <div class="drawer-body">
+          {loading && !streaming && !displayText && (
+            <div class="loading" style={{ padding: '1rem 0' }}>{loadingMsg}</div>
+          )}
+          {error && (
+            <div class="error-banner">Request failed: {error}</div>
+          )}
+
+          {result?.status === 'simulated' && (
+            <div
+              class="badge badge-medium"
+              style={{
+                display: 'block',
+                padding: '0.5rem 0.75rem',
+                marginBottom: 12,
+                lineHeight: 1.4,
+                whiteSpace: 'normal',
+              }}
+            >
+              <strong>Simulated preview</strong> — provider routing + audit
+              are live; LLM text is a deterministic placeholder. Enable
+              REAL_LLM_ENABLED + Anthropic credentials to switch on the
+              live path.
+            </div>
+          )}
+          {result?.status === 'blocked' && (
+            <div class="error-banner" style={{ marginBottom: 12 }}>
+              <strong>Policy blocked this request.</strong>{' '}
+              {(result.policy_decision?.reason as string) ?? 'See audit log for detail.'}
+            </div>
+          )}
+          {result?.status === 'live' && result.streaming_complete === false && (
+            <div class="error-banner" style={{ marginBottom: 12 }}>
+              <strong>Stream ended early.</strong>{' '}
+              The connection closed before the LLM finished. Audit row marked
+              partial.
+            </div>
+          )}
+
+          {(displayText || showCursor) && (
+            <div class="drawer-section">
+              <div class="drawer-section-title">Response</div>
+              <pre
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  fontSize: '0.875rem',
+                  lineHeight: 1.5,
+                  padding: '0.75rem',
+                  background: 'var(--surface-2, #f6f7f9)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  margin: 0,
+                }}
+              >
+                {displayText}
+                {showCursor && (
+                  <span
+                    aria-label="streaming"
+                    style={{
+                      display: 'inline-block',
+                      width: '0.55em',
+                      height: '1em',
+                      marginLeft: 2,
+                      background: 'currentColor',
+                      verticalAlign: 'text-bottom',
+                      animation: 'aiCursorBlink 1s steps(2) infinite',
+                    }}
+                  />
+                )}
+              </pre>
+            </div>
+          )}
+
+          {result && (
+            <>
+              <div class="drawer-section">
+                <div class="drawer-section-title">Routing</div>
+                <dl class="def-list">
+                  <dt>Status</dt><dd class="mono">{result.status}</dd>
+                  {result.provider && <><dt>Provider</dt><dd>{result.provider}</dd></>}
+                  {result.model && <><dt>Model</dt><dd class="mono">{result.model}</dd></>}
+                  <dt>Use Case</dt><dd class="mono">{result.use_case}</dd>
+                  <dt>Audit Event</dt><dd class="mono text-xs">{result.audit_event_id}</dd>
+                  {typeof result.token_estimate === 'number' && (
+                    <>
+                      <dt>Tokens</dt>
+                      <dd class="mono">{result.token_estimate.toLocaleString()}</dd>
+                    </>
+                  )}
+                  {typeof result.cost_estimate_usd === 'number' && (
+                    <>
+                      <dt>Cost</dt>
+                      <dd class="mono">${result.cost_estimate_usd.toFixed(5)}</dd>
+                    </>
+                  )}
+                  {result.governance?.trace_id && (
+                    <><dt>Trace</dt><dd class="mono text-xs">{result.governance.trace_id}</dd></>
+                  )}
+                </dl>
+              </div>
+
+              {result.sanitized_redactions.length > 0 && (
+                <div class="drawer-section">
+                  <div class="drawer-section-title">
+                    Redacted Fields ({result.sanitized_redactions.length})
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {result.sanitized_redactions.map((f) => (
+                      <span key={f} class="badge badge-info">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div class="drawer-section" style={{ display: 'flex', gap: 8 }}>
+                <button
+                  class="btn btn-sm btn-secondary"
+                  onClick={copyMarkdown}
+                  disabled={!result.response}
+                >
+                  {copied ? 'Copied!' : 'Copy markdown'}
+                </button>
+                <button class="btn btn-sm btn-secondary" onClick={closeAiSummary}>
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}

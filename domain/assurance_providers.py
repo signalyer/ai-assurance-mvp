@@ -918,7 +918,115 @@ def _build_prompt(use_case: str, payload: dict) -> tuple[str, str]:
         )
         return system_prompt, user_prompt
 
-    # Fallback (shouldn't be hit in S69 — _dispatch_streaming guards).
+    if use_case == UseCase.FINDINGS_SUMMARIZATION.value:
+        system_prompt = (
+            "You are an AI assurance specialist summarizing a single open "
+            "finding for a CISO + engineering audience. Tight, factual, "
+            "no hedging.\n\n"
+            "Structure your response exactly as:\n"
+            "  · Root cause: <one sentence>\n"
+            "  · Mapped frameworks: <list of explicit control IDs — NIST 600-1, "
+            "OWASP LLM/AAI, FS-Overlay AI-*, ISO 42001 clauses>\n"
+            "  · Release impact: <BLOCK_PRODUCTION | CONDITIONAL | INFORMATIONAL>\n"
+            "  · Remediation: <ordered list of 2-4 concrete actions>\n\n"
+            "Do NOT fabricate framework IDs you are not certain of. Keep total "
+            "length under 180 words."
+        )
+        fid = payload.get("finding_id") or "—"
+        ai_sys = payload.get("ai_system_id") or "the AI system"
+        severity = payload.get("severity") or "(unspecified)"
+        title = payload.get("title") or "(no title)"
+        finding_note = payload.get("finding_note") or "(no operator note)"
+        user_prompt = (
+            f"Finding ID: {fid}\n"
+            f"AI system: {ai_sys}\n"
+            f"Severity: {severity}\n"
+            f"Title: {title}\n"
+            f"Operator note: {finding_note}\n\n"
+            f"Summarize this finding."
+        )
+        return system_prompt, user_prompt
+
+    if use_case == UseCase.EVIDENCE_SUMMARIZATION.value:
+        system_prompt = (
+            "You are an AI assurance specialist summarizing the evidence "
+            "package attached to a single governed AI system. The audience is "
+            "a CISO reviewing release readiness. Be specific about what is "
+            "present vs missing — never speculate on absent artifacts.\n\n"
+            "Structure your response exactly as:\n"
+            "  · Coverage: <N evidence records across M sections; completeness %>\n"
+            "  · Strongest artifacts: <2-3 concrete items present>\n"
+            "  · Gaps: <specific manifests / sections missing + which framework "
+            "control they map to>\n"
+            "  · Next steps: <2-3 concrete connector / upload actions>\n\n"
+            "Only reference evidence sections that appear in the payload. Keep "
+            "total length under 180 words."
+        )
+        ai_sys = payload.get("ai_system_id") or "the AI system"
+        sections = payload.get("evidence_sections") or "(no section list provided)"
+        completeness = payload.get("evidence_completeness") or "(unknown)"
+        user_prompt = (
+            f"AI system: {ai_sys}\n"
+            f"Evidence sections present: {sections}\n"
+            f"Reported completeness: {completeness}\n\n"
+            f"Summarize the evidence package."
+        )
+        return system_prompt, user_prompt
+
+    if use_case == UseCase.EXECUTIVE_REPORT_GENERATION.value:
+        system_prompt = (
+            "You are an AI assurance specialist drafting a board-ready "
+            "executive summary of the AI assurance portfolio. The audience is "
+            "the board risk committee — non-technical, time-constrained. "
+            "Translate technical findings into business risk.\n\n"
+            "Structure your response exactly as:\n"
+            "  · Portfolio: <N governed AI systems · X production · Y on HOLD · "
+            "Z on Conditional Pilot>\n"
+            "  · Critical exposure: <which systems carry the most open P0 risk "
+            "and why>\n"
+            "  · Framework posture: <coverage % across 2-3 framing frameworks>\n"
+            "  · Recommendation: <one concrete release/defer call with the "
+            "reason in plain English>\n\n"
+            "Sanitize: never name individuals. Keep total length under 220 words."
+        )
+        portfolio_stats = payload.get("portfolio_stats") or "(no stats provided)"
+        top_risks = payload.get("top_risks") or "(no top-risk list provided)"
+        user_prompt = (
+            f"Portfolio stats: {portfolio_stats}\n"
+            f"Top open risks: {top_risks}\n\n"
+            f"Draft the executive summary."
+        )
+        return system_prompt, user_prompt
+
+    if use_case == UseCase.SYSTEM_QA.value:
+        system_prompt = (
+            "You are an AI assurance specialist answering an operator's "
+            "question about a single governed AI system. The audience is a "
+            "risk officer or engineer who needs a direct answer grounded in "
+            "the system's current posture — not generic AI safety commentary.\n\n"
+            "Rules:\n"
+            "  · Answer the question directly in the first sentence.\n"
+            "  · Reference the system's risk tier, open findings, or failed "
+            "gates only when relevant to the question asked.\n"
+            "  · If the question cannot be answered from the supplied context, "
+            "say so explicitly — do not fabricate posture details.\n"
+            "  · Keep total length under 150 words."
+        )
+        ai_sys = payload.get("ai_system_id") or "the AI system"
+        question = (payload.get("question") or "").strip() or "(no question)"
+        risk_tier = payload.get("risk_tier") or "(unknown)"
+        open_findings = payload.get("open_findings_summary") or "(no findings summary)"
+        user_prompt = (
+            f"AI system: {ai_sys}\n"
+            f"Risk tier: {risk_tier}\n"
+            f"Open findings summary: {open_findings}\n\n"
+            f"Operator question: {question}\n\n"
+            f"Answer the question."
+        )
+        return system_prompt, user_prompt
+
+    # Fallback (only hit if a new use case wires into streaming without a
+    # prompt branch — _dispatch_streaming's caller should always set use_case).
     return (
         "You are an AI assurance specialist. Respond concisely.",
         f"Use case: {use_case}\nPayload: {json.dumps(payload)[:1500]}",

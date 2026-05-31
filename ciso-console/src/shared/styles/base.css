@@ -564,3 +564,9 @@ input:focus { outline: none; border-color: var(--border-focus); }
 }
 .stub-page-title { font-size: 18px; font-weight: 700; }
 .stub-page-subtitle { font-size: 12px; color: var(--text-tertiary); }
+
+/* S72: streaming cursor for AiSummaryDrawer (ported from team-portal S69). */
+@keyframes aiCursorBlink {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}

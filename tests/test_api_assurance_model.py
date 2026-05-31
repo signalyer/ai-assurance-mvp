@@ -210,3 +210,140 @@ def test_explain_release_falls_back_to_sim_when_no_creds(
     name, payload = events[0]
     assert name == "done"
     assert payload["status"] == "simulated"
+
+
+# ---------------------------------------------------------------------------
+# S72: same trio for the 4 newly-streaming routes (ask / summarize-finding /
+# summarize-evidence / draft-report). The dispatcher is shared with
+# /explain-release, so the matrix is about (a) the use_case surfacing through
+# correctly and (b) the sim text mentioning the right use case. Anthropic
+# pinned because all 4 use cases are in its allowed list and Bedrock has no
+# streaming adapter yet (drop pin in S71b/S73).
+# ---------------------------------------------------------------------------
+
+_S72_ROUTES = [
+    # (path, use_case, sim-marker-substring, payload-extras)
+    (
+        "/api/assurance-model/ask",
+        "system_qa",
+        "HIGH inherent risk",
+        {"question": "Why is this system on HOLD?"},
+    ),
+    (
+        "/api/assurance-model/summarize-finding",
+        "findings_summarization",
+        "Root cause",
+        {"finding_id": "F-2026-0312", "severity": "CRITICAL", "title": "Tool-router prompt-injection bypass"},
+    ),
+    (
+        "/api/assurance-model/summarize-evidence",
+        "evidence_summarization",
+        "Evidence summary",
+        {"evidence_sections": "Architecture diagram, IAM policy, Bedrock config", "evidence_completeness": "38%"},
+    ),
+    (
+        "/api/assurance-model/draft-report",
+        "executive_report_generation",
+        "Portfolio",
+        {"portfolio_stats": "6 systems · 1 prod · 2 HOLD · 3 Conditional Pilot", "top_risks": "Customer Service Copilot prompt-injection bypass"},
+    ),
+]
+
+
+def _post_streaming(client: TestClient, path: str, extras: dict):
+    body = {
+        "ai_system_id": "ai-sys-bae72e75",
+        "data_classes": [],
+        "payload": extras,
+        "preferred_provider": "anthropic-prod",
+        "user": "pytest",
+    }
+    return client.stream("POST", path, json=body)
+
+
+@pytest.mark.parametrize("path,use_case,sim_marker,extras", _S72_ROUTES)
+def test_s72_route_simulated_when_flag_off(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    path: str, use_case: str, sim_marker: str, extras: dict,
+) -> None:
+    monkeypatch.setenv("REAL_LLM_ENABLED", "false")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-fake-creds")
+
+    with _post_streaming(client, path, extras) as resp:
+        assert resp.status_code == 200
+        body = resp.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    assert len(events) == 1, f"{path}: expected single done frame, got {events!r}"
+    name, payload = events[0]
+    assert name == "done"
+    assert payload["status"] == "simulated"
+    assert payload["use_case"] == use_case
+    assert sim_marker in (payload.get("response") or ""), (
+        f"{path}: sim text missing marker {sim_marker!r}: {payload.get('response')!r}"
+    )
+
+
+@pytest.mark.parametrize("path,use_case,sim_marker,extras", _S72_ROUTES)
+def test_s72_route_streams_when_real_llm_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    path: str, use_case: str, sim_marker: str, extras: dict,
+) -> None:
+    monkeypatch.setenv("REAL_LLM_ENABLED", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-fake-creds")
+
+    fake_chunks = [f"Live response for {use_case}: ", "line two.\n"]
+    expected_use_case = use_case  # capture before shadowing in fake_stream
+
+    async def fake_stream(provider, use_case, sanitized) -> AsyncIterator:
+        assert use_case == expected_use_case  # dispatcher must forward the right use_case
+        for ch in fake_chunks:
+            yield ("delta", ch)
+        yield (
+            "done",
+            {
+                "input_tokens": 200,
+                "output_tokens": 120,
+                "token_estimate": 320,
+                "cost_estimate_usd": 0.0024,
+                "model": "claude-sonnet-4-6",
+                "full_text": "".join(fake_chunks),
+            },
+        )
+
+    monkeypatch.setattr("api.assurance_model.stream_anthropic_response", fake_stream)
+
+    with _post_streaming(client, path, extras) as resp:
+        assert resp.status_code == 200
+        body = resp.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    deltas = [p for n, p in events if n == "delta"]
+    done = [p for n, p in events if n == "done"]
+    assert len(deltas) == len(fake_chunks), f"{path}: deltas={deltas!r}"
+    assert len(done) == 1
+    final = done[0]
+    assert final["status"] == "live"
+    assert final["use_case"] == use_case
+    assert final["token_estimate"] == 320
+    assert final["streaming_complete"] is True
+
+
+@pytest.mark.parametrize("path,use_case,sim_marker,extras", _S72_ROUTES)
+def test_s72_route_falls_back_to_sim_when_no_creds(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    path: str, use_case: str, sim_marker: str, extras: dict,
+) -> None:
+    monkeypatch.setenv("REAL_LLM_ENABLED", "true")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    with _post_streaming(client, path, extras) as resp:
+        assert resp.status_code == 200
+        body = resp.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    assert len(events) == 1
+    name, payload = events[0]
+    assert name == "done"
+    assert payload["status"] == "simulated"
+    assert payload["use_case"] == use_case
