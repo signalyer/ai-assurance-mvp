@@ -374,6 +374,41 @@
         "title": "AgentOut",
         "type": "object"
       },
+      "AgentSpecOut": {
+        "additionalProperties": false,
+        "description": "One agent as the picker sees it.",
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "cli_only": {
+            "title": "Cli Only",
+            "type": "boolean"
+          },
+          "default_system_id": {
+            "title": "Default System Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "description",
+          "default_system_id",
+          "cli_only"
+        ],
+        "title": "AgentSpecOut",
+        "type": "object"
+      },
       "AgentSubscriberOut": {
         "additionalProperties": true,
         "description": "AgentSubscriber record. Loosely typed; underlying shape from domain.agent_subscribers.",
@@ -417,6 +452,24 @@
           "semver"
         ],
         "title": "AgentVersionOut",
+        "type": "object"
+      },
+      "AgentsListOut": {
+        "additionalProperties": false,
+        "description": "GET /agents response.",
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSpecOut"
+            },
+            "title": "Agents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agents"
+        ],
+        "title": "AgentsListOut",
         "type": "object"
       },
       "AiSystemContextOut": {
@@ -9089,6 +9142,66 @@
         "title": "RunAcceptedResponse",
         "type": "object"
       },
+      "RunRequest": {
+        "additionalProperties": false,
+        "description": "POST /run body.",
+        "properties": {
+          "agent_id": {
+            "description": "Registry id, e.g. 'finadvice'.",
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "demo_mode": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When True, the scrub_pii event payload includes a raw_preview of the operator prompt (DEMO_MODE locked at S80 entry). When None, resolved from the DEMO_MODE env var (default false). Never set True on a real prod stream.",
+            "title": "Demo Mode"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional Anthropic model override. None uses the agent's default.",
+            "title": "Model"
+          },
+          "prompt": {
+            "description": "Raw operator request.",
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "system_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional override for the onboarded AI system id used in routing + audit.",
+            "title": "System Id"
+          }
+        },
+        "required": [
+          "agent_id",
+          "prompt"
+        ],
+        "title": "RunRequest",
+        "type": "object"
+      },
       "RunStatusResponse": {
         "additionalProperties": true,
         "description": "Response for GET /api/demo-control/run/{run_id}/status.\n\nPermissive (extra=\"allow\"): the ``result`` field carries whichever scenario\nhandler's payload was returned. Shapes differ across all 6 scenarios \u2014\nvault_stats dict, 14-day trend list, right-to-forget cascade model_dump,\nagent publish dict, PDF pack hash. A closed schema would reject valid\npayloads. Same bare-by-design rationale as DemoRunResponse (S38, compound\n27a).",
@@ -11997,6 +12110,68 @@
         "summary": "Run Suite",
         "tags": [
           "adversarial"
+        ]
+      }
+    },
+    "/api/agent-runner/agents": {
+      "get": {
+        "description": "Return the registry catalog for the team-portal Agent Runner picker.\n\nBoth runner-invocable and cli_only agents are returned. The SPA decides\nrendering (cli_only typically renders as a disabled row with a tooltip).",
+        "operationId": "list_agents_api_agent_runner_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentsListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Agents",
+        "tags": [
+          "agent-runner"
+        ]
+      }
+    },
+    "/api/agent-runner/run": {
+      "post": {
+        "description": "Stream chain events for one agent run as Server-Sent Events.\n\nThe SPA (S81+) opens an EventSource against this endpoint. Each SSE\nmessage's `event` matches a chain step; `data` is the JSON-encoded\nevent dict. Terminate on `chain.done`.\n\nError semantics: the dispatcher never raises \u2014 uncaught errors during\nthe chain are emitted as `chain.error` followed by `chain.done`. The\none path that DOES raise is registry/spec resolution (handled inside\nthe dispatcher too). The try/except below catches the truly\nunexpected \u2014 e.g. EventSourceResponse infrastructure failure \u2014 and\nsurfaces it as a final chain.error.",
+        "operationId": "run_agent_api_agent_runner_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Agent",
+        "tags": [
+          "agent-runner"
         ]
       }
     },
