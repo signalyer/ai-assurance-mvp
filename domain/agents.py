@@ -804,6 +804,45 @@ _SEED_AGENTS: list[dict] = [
         "semver": "1.0.0",
         "changelog": "Initial release — extractive + abstractive summarisation pipeline.",
     },
+    # ------------------------------------------------------------------
+    # S82f-2: backfill runtime-registry agents into the domain registry
+    # so the Agent Library page (/api/agents → /agent-library) surfaces
+    # them. These mirror entries in agents/_registry.py; the runtime
+    # registry is the source of truth for execution, the domain entries
+    # below are for catalog visibility + versioning + framework mapping.
+    #
+    # Pattern: agent_id matches the runtime registry slug exactly so
+    # cross-references (bindings, evidence, audit) join correctly.
+    # ------------------------------------------------------------------
+    {
+        "agent_id": "vendor_risk",
+        "name": "Third-Party Vendor Risk Analyzer",
+        "description": (
+            "Reviews a vendor package (SOC 2, ISO 27001, DPA, subprocessor "
+            "list, security questionnaire) and returns a structured risk "
+            "tier with concerns, citations, and mitigations. Two AI systems: "
+            "EXT (sys-vendor-risk-ext-001, cloud LLM) and INT "
+            "(sys-vendor-risk-int-001, internal-policy-controlled). INT "
+            "requires runtime-flag attestation (dlp_completed + "
+            "network_egress_lock_engaged) per ADR-004."
+        ),
+        "team": "risk",
+        "owner_type": AgentOwnerType.REUSABLE,
+        "inherent_risk": RiskLevel.HIGH,
+        "framework_refs": [
+            "NIST_AI_RMF:MANAGE-2.1",
+            "NIST_AI_RMF:GOVERN-6.1",
+            "OWASP_LLM_TOP10:LLM01",
+            "OWASP_LLM_TOP10:LLM05",
+            "US_FINSERV_OVERLAY:AI-006",
+        ],
+        "semver": "1.0.0",
+        "changelog": (
+            "Initial release — locked baseline 17/18 (S82e) · 10/10 EXT "
+            "tier-match · INT calibration unblocked S82f-2 via "
+            "ADR-004 Option B (sticky PATCH runtime-flag attestation)."
+        ),
+    },
 ]
 
 
