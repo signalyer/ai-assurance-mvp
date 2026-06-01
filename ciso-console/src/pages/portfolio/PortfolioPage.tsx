@@ -299,6 +299,15 @@ function submitAskPrompt(s: AiSystemSummary, question: string): void {
 }
 
 function openDraftReport(s: AiSystemSummary): void {
+  // S74b: evidence_count + evidence_types are now populated at portfolio
+  // load time by /grc/ai-systems, giving Draft Report the same grounding
+  // shape as team-portal AiSystemDrawer (which has live evidenceRows).
+  const evCount = s.evidence_count ?? 0;
+  const evTypes = (s.evidence_types ?? []).join(', ');
+  const evidenceSummary = evCount > 0
+    ? `${evCount} evidence records on file; types: ${evTypes || '(unspecified)'}`
+    : '(no evidence on file)';
+
   openAiSummary({
     url: '/assurance-model/draft-report',
     title: `Report: ${s.name}`,
@@ -314,7 +323,7 @@ function openDraftReport(s: AiSystemSummary): void {
           `${s.critical_findings ?? 0} critical, ${s.open_findings ?? 0} open ` +
           `on ${s.name}; domain=${s.domain}`
         ),
-        evidence_summary: 'Evidence detail not loaded at portfolio surface — see Evidence page for full posture',
+        evidence_summary: evidenceSummary,
       },
       preferred_provider: 'anthropic-prod',
       user: 'ciso-console',

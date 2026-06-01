@@ -273,6 +273,11 @@ class AiSystemSummaryOut(BaseModel):
     data_residency: str
     trust_boundaries: str
     data_source: str = "seed"
+    # S74b: portfolio-surface evidence summary so CISO Console Draft Report
+    # has grounding parity with team-portal AiSystemDrawer (which has live
+    # evidenceRows). Counts only — full rows still require /ai-systems/{id}/evidence.
+    evidence_count: int = 0
+    evidence_types: list[str] = Field(default_factory=list)
 
 
 class AiSystemsListOut(BaseModel):
@@ -685,9 +690,25 @@ async def list_ai_systems(request: Request) -> AiSystemsListOut:
     intake_rows = [_intake_to_summary_view(s) for s in _list_intake_systems() if not _is_seed(s.id)]
     merged = seed_rows + intake_rows
     rows = filter_by_mode(merged, get_data_mode(request))
+
+    # S74b: enrich each row with evidence_count + evidence_types so the
+    # CISO Console Draft Report (Portfolio surface) has the same grounding
+    # as the team-portal AiSystemDrawer. evidence_for(system_id) scans the
+    # full EVIDENCE_FILE per call — O(systems × file-size) here. Acceptable
+    # at demo scale (<25 systems); revisit if portfolio grows.
+    from domain.repository import evidence_for as _evidence_for
+    enriched: list[dict[str, Any]] = []
+    for r in rows:
+        ev = _evidence_for(r["id"])
+        types = sorted({
+            str(e.evidence_type.value if hasattr(e.evidence_type, "value") else e.evidence_type)
+            for e in ev
+        })
+        enriched.append({**r, "evidence_count": len(ev), "evidence_types": types})
+
     return AiSystemsListOut(
-        systems=[AiSystemSummaryOut(**s) for s in rows],
-        total=len(rows),
+        systems=[AiSystemSummaryOut(**s) for s in enriched],
+        total=len(enriched),
     )
 
 

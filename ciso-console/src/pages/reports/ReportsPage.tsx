@@ -76,7 +76,11 @@ function reportUrl(reportType: string, systemId: string | null, suffix: string):
 }
 
 async function triggerDownload(url: string, filename: string): Promise<void> {
-  const resp = await fetch(url, { credentials: 'same-origin' });
+  // credentials: 'include' — engine + SPA live on different subdomains; per
+  // [[raw-fetch-drifts-from-shared-client]] same-origin silently drops the
+  // session cookie cross-origin and 401s in prod. Shared apiClient uses
+  // 'include' everywhere; this raw fetch must match.
+  const resp = await fetch(url, { credentials: 'include' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const blob = await resp.blob();
   const objectUrl = URL.createObjectURL(blob);

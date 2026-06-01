@@ -23,6 +23,11 @@ export interface AiSystemSummary {
   human_oversight: string;
   data_residency: string;
   trust_boundaries: string;
+  // S74b: portfolio-surface evidence summary for Draft Report grounding parity
+  // with team-portal AiSystemDrawer. Optional for backwards compat with cached
+  // responses; engine always populates them now.
+  evidence_count?: number;
+  evidence_types?: string[];
 }
 
 export interface AiSystemsListResponse {
