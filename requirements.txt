@@ -73,9 +73,11 @@ python-multipart>=0.0.7
 # export + CI tests can import dashboard.py.
 authlib>=1.3.0
 
-# Observability — Session 10
-opentelemetry-sdk>=1.27
-azure-monitor-opentelemetry-exporter>=1.0.0b30
+# Observability — Session 10 / S77 #2
+# Switched from bare `azure-monitor-opentelemetry-exporter` (1.0.0b30 beta —
+# broken against current opentelemetry-sdk: LogData import error) to the GA
+# distro, which pins compatible SDK + exporter + auto-instrumentations.
+azure-monitor-opentelemetry>=1.6
 prometheus-client>=0.20
 
 # File locking — audit_chain cross-process advisory lock (Session 10)

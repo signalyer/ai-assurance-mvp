@@ -202,17 +202,11 @@ app = FastAPI(
 # Per docs/plans/SESSION-13-api-typing-audit.md §1.2.
 register_error_handlers(app)
 
-# S77 #2: Wire OpenTelemetry's FastAPIInstrumentor so every HTTP request
-# produces a span exported to App Insights. init_app_insights() above only
-# configured the TracerProvider + AzureMonitorTraceExporter — without this
-# call there are no spans for the exporter to ship. Silent no-op if AI
-# is disabled or the instrumentor package is missing. Must run AFTER `app`
-# is constructed but BEFORE the first request, so module-load is correct.
-try:
-    from observability.app_insights import instrument_fastapi_app as _instrument_ai
-    _instrument_ai(app)
-except ImportError:
-    pass  # observability package not yet installed -- safe to skip
+# S77 #2 update: FastAPI instrumentation is now handled automatically by the
+# azure-monitor-opentelemetry distro inside init_app_insights() (called at
+# the top of this file, BEFORE `from fastapi import FastAPI`). No manual
+# FastAPIInstrumentor.instrument_app() call is needed here — and adding one
+# would be a no-op (or worse, double-instrumentation) per the distro docs.
 
 
 def _validate_openapi_artifact() -> None:

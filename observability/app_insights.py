@@ -1,9 +1,22 @@
-"""Azure Monitor / App Insights exporter wiring via OpenTelemetry SDK.
+"""Azure Monitor / App Insights wiring via the GA distro.
 
 ``init_app_insights`` is designed to be called exactly once from
-``dashboard.py`` at startup.  It is idempotent (subsequent calls are no-ops),
-never raises, and degrades silently when the connection string is absent or
-the SDK is not installed.
+``dashboard.py`` at startup, BEFORE ``from fastapi import FastAPI``.
+It is idempotent (subsequent calls are no-ops), never raises, and
+degrades silently when the connection string is absent or the SDK is
+not installed.
+
+S77 #2: Switched from the beta `azure-monitor-opentelemetry-exporter`
+(which crashed on cold start with `cannot import name 'LogData'` against
+current opentelemetry-sdk releases) to the GA distro
+`azure-monitor-opentelemetry`. The distro pins compatible exporter +
+SDK versions AND bundles FastAPIInstrumentor (auto-enabled). The prior
+manual TracerProvider / BatchSpanProcessor wiring is no longer needed.
+
+Ordering note: `configure_azure_monitor()` MUST run before
+`from fastapi import FastAPI` is imported. Otherwise the FastAPI
+instrumentor binds to the no-op default tracer provider. See:
+  https://learn.microsoft.com/troubleshoot/azure/azure-monitor/app-insights/telemetry/opentelemetry-troubleshooting-python
 """
 from __future__ import annotations
 
@@ -15,14 +28,20 @@ _initialised: bool = False
 
 
 def init_app_insights(connection_string: str | None) -> None:
-    """Configure the OpenTelemetry / Azure Monitor exporter.
+    """Configure Azure Monitor OpenTelemetry for the current process.
 
     If *connection_string* is ``None`` or empty the function logs an info
     message and returns immediately -- the application continues without
     telemetry rather than failing.
 
     Any exception raised during SDK configuration is caught and logged at
-    ERROR level.  The function NEVER propagates an exception to the caller.
+    ERROR level. The function NEVER propagates an exception to the caller.
+
+    Side-effects when the call succeeds:
+      - Sets the global OpenTelemetry TracerProvider, MeterProvider, and
+        LoggerProvider to Azure Monitor exporters.
+      - Enables all distro-bundled instrumentations including FastAPI,
+        Requests, and Django, which create spans automatically.
 
     Args:
         connection_string: The ``APPLICATIONINSIGHTS_CONNECTION_STRING`` value
@@ -41,69 +60,24 @@ def init_app_insights(connection_string: str | None) -> None:
         return
 
     try:
-        # These imports are intentionally deferred so the module can be
-        # loaded even if the azure-monitor SDK is not installed.
-        from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+        # Deferred import so the module can be loaded even when the distro
+        # is not installed (e.g. in some dev / test environments).
+        from azure.monitor.opentelemetry import configure_azure_monitor
 
-        resource = Resource.create({SERVICE_NAME: "ai-assurance-platform"})
-        provider = TracerProvider(resource=resource)
-
-        exporter = AzureMonitorTraceExporter(
-            connection_string=connection_string.strip()
-        )
-        provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(provider)
+        configure_azure_monitor(connection_string=connection_string.strip())
 
         _initialised = True
-        # Do NOT log any portion of the connection string — the InstrumentationKey
-        # GUID grants write access to the telemetry workspace.
-        _log.info("app_insights_initialised connection_string_present=true")
+        # Do NOT log any portion of the connection string -- the
+        # InstrumentationKey GUID grants write access to the workspace.
+        _log.info(
+            "app_insights_initialised "
+            "connection_string_present=true "
+            "fastapi_instrumented=auto"
+        )
     except ImportError as exc:
         _log.error(
-            "app_insights_sdk_missing error=%s hint=install azure-monitor-opentelemetry-exporter",
+            "app_insights_sdk_missing error=%s hint=install azure-monitor-opentelemetry",
             exc,
         )
     except Exception as exc:
         _log.error("app_insights_init_failed error=%s", exc)
-
-
-def instrument_fastapi_app(app: object) -> None:
-    """Attach OpenTelemetry's FastAPI instrumentor to *app*.
-
-    Must be called AFTER ``init_app_insights`` has set the global
-    TracerProvider, otherwise the instrumentor binds to the no-op
-    default provider and never emits any spans.
-
-    Silently no-ops when:
-      - ``init_app_insights`` did not initialise (no connection string,
-        or SDK missing), OR
-      - ``opentelemetry-instrumentation-fastapi`` is not installed.
-
-    Never raises -- a missing instrumentor must not crash startup.
-
-    S77 #2: without this call, observability/app_insights.py wired the
-    AzureMonitorTraceExporter but no spans were ever created for HTTP
-    requests, so App Insights workspace `appi-aigovern-dev` stayed empty.
-    """
-    if not _initialised:
-        _log.info(
-            "fastapi_instrument_skipped reason=tracer_provider_not_initialised"
-        )
-        return
-
-    try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-
-        FastAPIInstrumentor.instrument_app(app)  # type: ignore[arg-type]
-        _log.info("fastapi_instrumented spans_per_request=true")
-    except ImportError as exc:
-        _log.error(
-            "fastapi_instrumentor_missing error=%s hint=install opentelemetry-instrumentation-fastapi",
-            exc,
-        )
-    except Exception as exc:
-        _log.error("fastapi_instrument_failed error=%s", exc)

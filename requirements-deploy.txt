@@ -51,17 +51,16 @@ presidio-anonymizer>=2.2.0
 # Observability — Langfuse trace export (used by tracer.py at module load)
 langfuse>=4.0.0
 
-# Observability — Azure App Insights / OpenTelemetry (S77 #2 / S76 carryover).
-# Without these, observability/app_insights.py logs `app_insights_sdk_missing`
-# at startup and the AzureMonitorTraceExporter is never wired. S76 confirmed
-# App Insights workspace `appi-aigovern-dev` empty for 24h+ because these
-# packages live only in requirements.txt — same drift class as sqlalchemy.
-# opentelemetry-instrumentation-fastapi: provides FastAPIInstrumentor for
-# automatic span creation around every HTTP request — without it, the
-# TracerProvider is configured but emits zero spans.
-opentelemetry-sdk>=1.27
-azure-monitor-opentelemetry-exporter>=1.0.0b30
-opentelemetry-instrumentation-fastapi>=0.48b0
+# Observability — Azure Monitor / App Insights via the GA distro (S77 #2).
+# The bare `azure-monitor-opentelemetry-exporter` (still 1.0.0b*) was tried
+# first and crashed on cold start with
+# `cannot import name 'LogData' from 'opentelemetry.sdk._logs'` — the beta
+# exporter is incompatible with current opentelemetry-sdk releases.
+# `azure-monitor-opentelemetry` is the Microsoft-supported GA distro that
+# pins exporter + SDK to compatible versions AND bundles
+# opentelemetry-instrumentation-fastapi (enabled by default via
+# configure_azure_monitor()). One package, no manual instrumentor wiring.
+azure-monitor-opentelemetry>=1.6
 
 # Database — Postgres (used by domain/agent_memory.py + projection at module load)
 psycopg[binary]>=3.2
