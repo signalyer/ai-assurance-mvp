@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 from dotenv import load_dotenv
@@ -155,7 +155,7 @@ def _trace_call_impl(
     # operator-visible source of truth — Langfuse Cloud is optional gravy.
     _append_trace_jsonl({
         "trace_id": trace_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "model": model,
         "prompt": prompt,  # already scrubbed (asserted by vault_id check above)
         "response": response,

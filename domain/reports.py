@@ -11,7 +11,7 @@ report dict. Persistence is the caller's job.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from domain import repository, seed
@@ -333,7 +333,7 @@ def executive_report() -> dict:
         "report_title": "Executive AI Risk Report",
         "audience": ["CISO", "Chief Risk Officer", "AI Governance Board",
                      "Internal Audit", "Model Risk Management"],
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "scope": "Portfolio — all AI systems",
         "portfolio_kpis": portfolio,
         "needs_attention": [
@@ -373,7 +373,7 @@ def assessment_report(system_id: str) -> dict:
     return {
         "report_type": "ai_system_assessment",
         "report_title": f"AI System Assessment Report — {s.name}",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_summary": _system_summary(s),
         "risk_classification": {
             "inherent_risk": report.inherent_risk,
@@ -420,7 +420,7 @@ def release_gate_report(system_id: str, target_env: str = "PILOT") -> dict:
     return {
         "report_type": "release_gate",
         "report_title": f"Release Gate Report — {s.name}",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_summary": _system_summary(s),
         "target_environment": target_env,
         "release_decision": {
@@ -526,7 +526,7 @@ def framework_coverage_report(system_id: str | None = None) -> dict:
     return {
         "report_type": "framework_coverage",
         "report_title": title,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_summary": sys_summary,
         "scope": scope,
         "frameworks": by_framework,
@@ -573,7 +573,7 @@ def findings_remediation_report(system_id: str) -> dict:
     return {
         "report_type": "findings_remediation",
         "report_title": f"Findings & Remediation Report — {s.name}",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_summary": _system_summary(s),
         "totals": {
             "total": len(fs),
@@ -627,7 +627,7 @@ def audit_evidence_report(system_id: str) -> dict:
     return {
         "report_type": "audit_evidence",
         "report_title": f"Audit Evidence Report — {s.name}",
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "system_summary": _system_summary(s),
         "evidence_count": len(evidence),
         "evidence_completeness": report.evidence_completeness,

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from uuid import uuid4
@@ -174,7 +174,7 @@ def _record_action(ai_system_id: str, action_type: str, actor: str, payload: dic
         raise ValueError(f"AI system not found: {ai_system_id}")
     ra = RuntimeAction(
         id=f"RA-{uuid4().hex[:8].upper()}", ai_system_id=ai_system_id,
-        ts=datetime.utcnow().isoformat() + "Z",
+        ts=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         action_type=action_type, actor=actor.strip(), payload=payload,
     )
     _append(_STATE_FILE, asdict(ra))
@@ -207,7 +207,7 @@ def set_monitoring_level(ai_system_id: str, level: str, actor: str) -> RuntimeAc
 
 def _expire_old_approvals(records: list[dict]) -> None:
     """In-memory expiry — when an approval has expired, surface it as EXPIRED."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for r in records:
         if r.get("status") == ApprovalStatus.PENDING.value:
             try:
@@ -235,7 +235,7 @@ def require_human_approval(ai_system_id: str, action_description: str,
     if repository.get_ai_system(ai_system_id) is None:
         raise ValueError(f"AI system not found: {ai_system_id}")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     req = ApprovalRequest(
         id=f"AP-{uuid4().hex[:8].upper()}",
         ai_system_id=ai_system_id,
@@ -270,7 +270,7 @@ def resolve_approval(approval_id: str, decision: str, approver: str, note: str |
         requested_at=original["requested_at"],
         expires_at=original["expires_at"],
         status=decision, approver=approver.strip(),
-        decision_ts=datetime.utcnow().isoformat() + "Z",
+        decision_ts=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         note=note,
     )
     _append(_APPROVALS_FILE, asdict(resolved))
@@ -335,7 +335,7 @@ def create_incident(from_event_id: str | None, ai_system_id: str, severity: str,
 
     inc = Incident(
         id=f"INC-{uuid4().hex[:8].upper()}", ai_system_id=ai_system_id,
-        created_at=datetime.utcnow().isoformat() + "Z",
+        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         created_by=actor.strip(), severity=severity,
         status=IncidentStatus.OPEN.value, summary=summary.strip(),
         owner=owner.strip(), from_event_id=from_event_id, updates=[],
@@ -366,7 +366,7 @@ def update_incident(incident_id: str, new_status: str, actor: str, note: str | N
         "from_event_id": existing.get("from_event_id"),
         "updates": [],
         "_update": {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "actor": actor.strip(),
             "new_status": new_status,
             "note": note,

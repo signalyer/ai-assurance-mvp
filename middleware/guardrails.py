@@ -5,7 +5,7 @@ import asyncio
 import functools
 import json
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from middleware.injection import detect_injection, InjectionResult
@@ -193,7 +193,7 @@ class GuardrailsMiddleware:
         """
         try:
             log_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "passed": result.passed,
                 "violations": result.violations,
                 "check_type": result.metadata.get("check_type"),

@@ -4,10 +4,10 @@ Realistic data for financial services AI systems demonstration.
 This represents the state of an enterprise AI governance program at a tier-1 bank.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 
-NOW = datetime.utcnow()
+NOW = datetime.now(timezone.utc)
 
 
 # ============================================================================

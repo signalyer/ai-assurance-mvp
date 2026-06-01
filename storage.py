@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Any
 import threading
@@ -54,7 +54,7 @@ def _read_jsonl(file_path: Path, limit: Optional[int] = None) -> list[dict]:
 def save_run(run_data: dict) -> None:
     """Persist a run to disk."""
     if "timestamp" not in run_data:
-        run_data["timestamp"] = datetime.utcnow().isoformat() + "Z"
+        run_data["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     _append_jsonl(RUNS_FILE, run_data)
 
 
@@ -101,7 +101,7 @@ def get_run_by_id(run_id: str) -> Optional[dict]:
 
 def calculate_analytics(days: int = 30) -> dict:
     """Calculate analytics over recent period."""
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
 
     runs = get_runs(limit=10000, start_date=start_date, end_date=end_date)
@@ -247,7 +247,7 @@ def _calculate_daily_trends(runs: list[dict], days: int) -> list[dict]:
 def save_batch(batch_data: dict) -> None:
     """Save a batch evaluation record."""
     if "timestamp" not in batch_data:
-        batch_data["timestamp"] = datetime.utcnow().isoformat() + "Z"
+        batch_data["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     _append_jsonl(BATCH_FILE, batch_data)
 
 
@@ -259,7 +259,7 @@ def get_batches(limit: int = 50) -> list[dict]:
 def save_adversarial_result(result: dict) -> None:
     """Save adversarial test result."""
     if "timestamp" not in result:
-        result["timestamp"] = datetime.utcnow().isoformat() + "Z"
+        result["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     _append_jsonl(ADVERSARIAL_FILE, result)
 
 

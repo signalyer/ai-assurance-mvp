@@ -48,7 +48,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse, Response
@@ -239,7 +239,7 @@ async def export_pdf(report_type: str, system_id: str | None = Query(None)) -> H
 
 
 def _filename(report_type: str, system_id: str | None, ext: str) -> str:
-    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     parts = ["report", report_type]
     if system_id:
         parts.append(system_id)

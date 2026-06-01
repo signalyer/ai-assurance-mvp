@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -124,7 +124,7 @@ class Connector(ABC):
     # Hook methods — concrete connectors can override if they don't simulate
     def run(self) -> SyncResult:
         """Pull from the source, normalize, persist, return summary."""
-        ts = datetime.utcnow().isoformat() + "Z"
+        ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         result = SyncResult(connector=self.name, category=self.category.value, ran_at=ts)
         try:
             raws = self._simulate_pull()
@@ -202,7 +202,7 @@ class GuardrailConnector(Connector):
 # ---------------------------------------------------------------------------
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 def _short_uuid() -> str:

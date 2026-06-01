@@ -6,7 +6,7 @@ gate, evidence, or runtime event. No hardcoded numbers.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from collections import Counter
 
 from domain import repository, seed
@@ -188,7 +188,7 @@ def compute_kpis() -> dict:
         },
         "sla": {"overdue": sla_overdue, "due_7d": sla_due_7d,
                 "due_30d": sla_due_30d, "closed": sla_closed},
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
 

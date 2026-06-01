@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
@@ -156,7 +156,7 @@ def _append_overlay(kind: str, data: dict[str, Any]) -> None:
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +364,7 @@ def _step_6_evals() -> dict[str, Any]:
             })
 
     # Authoritative passing demo evals (will be the latest-by-run_at).
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     demo_evals = [
         _make_demo_eval_record(
             id_="demo-eval-pii", eval_type=EvalType.PII_LEAKAGE,
@@ -490,7 +490,7 @@ def _step_10_attach_evidence() -> dict[str, Any]:
     """Inject the evidence records that the v1 assessment flagged as missing —
     notably RAG_CONFIG (for AI-004 / F-1004) and a fresh REMEDIATION_VERIFICATION.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     items = [
         Evidence(
             id="EV-DEMO-RAG",

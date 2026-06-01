@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, asdict, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -191,7 +191,7 @@ class AssuranceModelUsageAudit:
 # Seed providers
 # ===========================================================================
 
-_NOW = datetime.utcnow().isoformat() + "Z"
+_NOW = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 _OPENAI = AssuranceProvider(
@@ -382,7 +382,7 @@ AUDIT_FILE = _DATA_DIR / "assurance_audit.jsonl"
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _append_audit(rec: AssuranceModelUsageAudit) -> None:

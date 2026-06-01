@@ -7,7 +7,7 @@ POST /api/grc/intake/submit   — create AISystem, assessment, release gates; pe
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -256,7 +256,7 @@ def _build_ai_system(p: IntakePayload, *, system_id: str, risk: RiskLevel) -> AI
         for src in p.rag_sources
     ] if p.rag_enabled else []
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     return AISystem(
         id=system_id,
@@ -382,7 +382,7 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
 
     required = get_required_controls(system)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     assessment = Assessment(
         id=f"assess-{uuid4().hex[:8]}",
         ai_system_id=system_id,

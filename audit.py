@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional, Dict
 from functools import wraps
 import hashlib
@@ -61,7 +61,7 @@ class AuditLog:
         Returns:
             Log ID (hash) for verification
         """
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         # Create immutable record
         log_entry = {
@@ -306,8 +306,8 @@ if __name__ == "__main__":
     from datetime import timedelta
 
     report = generate_compliance_report(
-        datetime.utcnow() - timedelta(hours=1),
-        datetime.utcnow(),
+        datetime.now(timezone.utc) - timedelta(hours=1),
+        datetime.now(timezone.utc),
     )
     print(f"✓ Compliance report generated: {report['total_actions']} actions logged")
     print(f"  Actions by type: {report['by_action']}")

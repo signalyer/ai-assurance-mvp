@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -304,7 +304,7 @@ def apply_event(
     ev = FindingEvent(
         id=f"EV-{uuid4().hex[:8].upper()}",
         finding_id=finding_id,
-        ts=datetime.utcnow().isoformat() + "Z",
+        ts=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         actor=actor.strip(),
         event_type=event_type,
         data=d,

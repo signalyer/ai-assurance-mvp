@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from pathlib import Path
 
 from domain import repository, seed
@@ -94,7 +94,7 @@ def _resolved_ids() -> set[str]:
 
 
 def mark_resolved(notif_id: str, actor: str = "user") -> dict:
-    rec = {"id": notif_id, "actor": actor, "ts": datetime.utcnow().isoformat() + "Z"}
+    rec = {"id": notif_id, "actor": actor, "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
     with RESOLVED_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
     return rec
@@ -346,7 +346,7 @@ def _reassessment_required() -> list[Notification]:
     """High-risk or pilot/production systems whose latest assessment is older
     than 30 days, or that have no assessment at all."""
     out: list[Notification] = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     high_risk_status = {RuntimeStatus.PRODUCTION, RuntimeStatus.PILOT,
                          RuntimeStatus.STAGED}
     high_risk_autonomy = {AutonomyLevel.TOOL_USING_AUTONOMOUS,
@@ -382,7 +382,7 @@ def _reassessment_required() -> list[Notification]:
             framework=None,
             control_id=None,
             gate_id=None,
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             action_required=f"Run assessment ({days_label}).",
             linked_workflow=f"/assessment?system={s.id}",
             ref_id=s.id,
@@ -419,7 +419,7 @@ def _framework_drift() -> list[Notification]:
             framework=fw_name,
             control_id=None,
             gate_id=None,
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             action_required="Review failing controls + attach missing evidence per framework item.",
             linked_workflow=f"/governance?framework={fw_name}",
             ref_id=fw_name,
@@ -539,7 +539,7 @@ def all_notifications() -> list[Notification]:
                 detail=str(e),
                 system_id=None, system_name=None,
                 framework=None, control_id=None, gate_id=None,
-                timestamp=datetime.utcnow().isoformat() + "Z",
+                timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 action_required="Investigate notifications.py.",
                 linked_workflow="/",
                 ref_id=None,
@@ -571,7 +571,7 @@ def summary() -> dict:
         "counts_by_category": counts_by_category,
         "items": [n.to_dict() for n in items],
         "categories": CATEGORIES,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
 

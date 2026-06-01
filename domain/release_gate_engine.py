@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Callable
@@ -619,7 +619,7 @@ def evaluate_gates(ai_system_id: str, target_environment: str = "PILOT") -> Gate
         ai_system_id=ai_system_id,
         ai_system_name=system.name,
         target_environment=target_environment,
-        generated_at=datetime.utcnow().isoformat() + "Z",
+        generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         gates=results,
         release_decision=decision,
         release_rationale=rationale,
@@ -744,7 +744,7 @@ def apply_exception(
         expires_at=expires_at,
         status="APPROVED",
         compensating_controls=compensating_controls or [],
-        created_at=datetime.utcnow().isoformat() + "Z",
+        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
     with _EXCEPTIONS_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(asdict(ex)) + "\n")

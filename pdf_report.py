@@ -19,7 +19,7 @@ the internal API and the public generate_*_pack() signatures unchanged.
 from __future__ import annotations
 
 import html
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -288,8 +288,8 @@ def generate_compliance_report_html(
         <div class="meta">
             <strong>Organization:</strong> {safe_org}<br>
             <strong>Report Period:</strong> {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}<br>
-            <strong>Generated:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}<br>
-            <strong>Report ID:</strong> RPT-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}
+            <strong>Generated:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}<br>
+            <strong>Report ID:</strong> RPT-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}
         </div>
     </div>
 
@@ -515,7 +515,7 @@ def generate_nist_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     rmf_items = fw_overview("NIST_AI_RMF", scope=system_id)
     nist600_items = fw_overview("NIST_AI_600_1", scope=system_id)
@@ -570,7 +570,7 @@ def generate_owasp_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     llm_items = fw_overview("OWASP_LLM", scope=system_id)
     agentic_items = fw_overview("OWASP_AGENTIC", scope=system_id)
@@ -625,7 +625,7 @@ def generate_eu_ai_act_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     # EU AI Act maps most closely to NIST AI RMF governance + 600-1 safety controls.
     # We surface NIST AI RMF as the primary proxy framework while labelling the pack
@@ -703,7 +703,7 @@ def generate_iso_42001_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     items = fw_overview("ISO_42001", scope=system_id)
     avg_coverage = round(sum(i.coverage_pct for i in items) / len(items), 1) if items else 0.0
@@ -770,7 +770,7 @@ def generate_sr_11_7_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     items = fw_overview("SR_11_7", scope=system_id)
     avg_coverage = round(sum(i.coverage_pct for i in items) / len(items), 1) if items else 0.0
@@ -858,7 +858,7 @@ def generate_ffiec_pack(system_id: str) -> bytes:
     from domain.framework_coverage import framework_overview as fw_overview
 
     system, evidence = _load_system_and_evidence(system_id)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     items = fw_overview("FFIEC", scope=system_id)
     avg_coverage = round(sum(i.coverage_pct for i in items) / len(items), 1) if items else 0.0

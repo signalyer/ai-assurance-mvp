@@ -58,13 +58,27 @@ Care" rule (never hardcode; never log; CLI-only).
 5. **`requirements.txt` + `requirements-deploy.txt`** — add `boto3>=1.35`.
    Per `[[requirements-deploy-drift]]` the deploy file is the source of
    truth for runtime imports.
-6. **Drop SPA Anthropic pins.** Expected count: 8.
-   - team-portal: 1 `FailedGateRow` + 4 `AiSystemDrawer` = 5
-   - ciso-console: 1 `FindingsInboxPage` + 2 `PortfolioPage` + 1 `EvidencePage` = 4
-   Wait — that's 9, not 8. Recount during S75 with `grep -rn "preferred_provider:
-   'anthropic-prod'"` before editing. Plan said 8; verify the truth.
-   Remove all pins; routing engine picks Bedrock first for restricted
-   data classes per existing config.
+6. **Drop SPA Anthropic pins.** Authoritative count (audited 2026-05-31 in S74b):
+   **9 pins across 5 files.** S73 plan said 8 because it counted the
+   original `FailedGateRow.onExplain` pin and the AiSystemDrawer pins
+   separately, but `FailedGateRow` logic was inlined into AiSystemDrawer
+   in a later session — actual AiSystemDrawer count is 5, not 4.
+
+   ```
+   team-portal/src/pages/ai-systems/AiSystemDrawer.tsx:275  (Ask AI body)
+   team-portal/src/pages/ai-systems/AiSystemDrawer.tsx:416  (summarize finding)
+   team-portal/src/pages/ai-systems/AiSystemDrawer.tsx:436  (summarize evidence)
+   team-portal/src/pages/ai-systems/AiSystemDrawer.tsx:472  (draft report)
+   team-portal/src/pages/ai-systems/AiSystemDrawer.tsx:519  (explain release — original S69 FailedGateRow)
+   ciso-console/src/pages/findings/FindingsInboxPage.tsx:426  (summarize finding)
+   ciso-console/src/pages/evidence/EvidencePage.tsx:155  (summarize this view)
+   ciso-console/src/pages/portfolio/PortfolioPage.tsx:295  (ask AI per system)
+   ciso-console/src/pages/portfolio/PortfolioPage.tsx:319  (draft report per system)
+   ```
+
+   Remove all 9; routing engine picks Bedrock first for restricted
+   data classes per existing config. Two SPA deploys after engine
+   smoke proves the Bedrock path.
 7. **Live smoke each button** post-deploy. Cookie + browser per
    `[[smoke-scripts-must-run-live]]`. Defer execution to user — they
    click, we watch logs.

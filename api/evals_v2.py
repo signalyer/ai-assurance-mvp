@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -277,7 +277,7 @@ async def run_simulated_suite(ai_system_id: str) -> SimulatedRunOut:
     if not system:
         raise HTTPException(status_code=404, detail="System not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     rng = random.Random(f"{ai_system_id}-{now.timestamp()}")
 
     refreshed: list[RefreshedEvalOut] = []

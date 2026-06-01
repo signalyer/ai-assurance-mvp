@@ -5,7 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -169,7 +169,7 @@ def detect_injection(text: str, model_name: str = "gpt-4o-mini") -> InjectionRes
     # Log all injection attempts (both positive and negative for monitoring)
     try:
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "text_hash": hash(text),
             "is_injection": result.is_injection,
             "confidence": result.confidence,

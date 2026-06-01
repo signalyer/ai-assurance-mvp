@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -270,7 +270,7 @@ async def test_connection(provider_id: str) -> TestConnectionOut:
         trust_boundary=p.trust_boundary,
         data_residency=p.data_residency,
         has_real_credentials=real,
-        checked_at=datetime.utcnow().isoformat() + "Z",
+        checked_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         audit_event_id=rec.id,
         note="Test routed through policy engine; no real API call was made.",
     )

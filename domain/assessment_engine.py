@@ -21,7 +21,7 @@ Public API:
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from uuid import uuid4
@@ -808,7 +808,7 @@ def run_assessment(ai_system_id: str) -> AssessmentReport:
     return AssessmentReport(
         ai_system_id=ai_system_id,
         ai_system_name=system.name,
-        generated_at=datetime.utcnow().isoformat() + "Z",
+        generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         overall_score=overall,
         inherent_risk=inherent.risk_level.value,
         inherent_risk_rules=inherent.rules_fired,

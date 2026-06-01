@@ -17,7 +17,7 @@ import logging
 import os
 import re
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
@@ -368,7 +368,7 @@ def evaluate_response(
     # F-017: persist + push. Both are best-effort; never block the caller.
     _append_eval_jsonl({
         "trace_id": trace_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "workload_id": workload_id,
         "model": model,
         "results": results,
@@ -463,7 +463,7 @@ def evaluate_response_v2(
     # format_version=2 distinguishes envelope records from legacy 5-key ones.
     _append_eval_jsonl({
         "trace_id": trace_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "workload_id": workload_id,
         "model": model,
         "format_version": 2,

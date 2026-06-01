@@ -451,7 +451,7 @@ async def get_compliance_report(
     from storage import get_runs
     from audit import global_audit
 
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
 
     runs = get_runs(limit=10000, start_date=start_date, end_date=end_date)

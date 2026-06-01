@@ -11,7 +11,7 @@ but still earn a stable SDK method name in the OpenAPI document.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -120,7 +120,7 @@ async def export_csv(
     days: int = Query(30, ge=1, le=365),
 ) -> PlainTextResponse:
     """Export runs as CSV."""
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
     csv_data = export_runs_csv(
         domain=domain,
@@ -131,7 +131,7 @@ async def export_csv(
     return PlainTextResponse(
         content=csv_data,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=runs-{datetime.utcnow().strftime('%Y%m%d')}.csv"},
+        headers={"Content-Disposition": f"attachment; filename=runs-{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"},
     )
 
 
@@ -145,7 +145,7 @@ async def export_json(
     days: int = Query(30, ge=1, le=365),
 ) -> Response:
     """Export runs as JSON."""
-    end_date = datetime.utcnow()
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
     json_data = export_runs_json(
         domain=domain,
@@ -156,5 +156,5 @@ async def export_json(
     return Response(
         content=json_data,
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename=runs-{datetime.utcnow().strftime('%Y%m%d')}.json"},
+        headers={"Content-Disposition": f"attachment; filename=runs-{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"},
     )
