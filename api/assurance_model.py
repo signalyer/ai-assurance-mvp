@@ -35,6 +35,7 @@ from domain.assurance_providers import (
     real_llm_enabled, stream_anthropic_response,
     stream_bedrock_response, ProviderType,
 )
+from domain.assurance_providers import _build_prompt  # S78: episodic memory write
 
 _log = logging.getLogger(__name__)
 
@@ -558,6 +559,29 @@ async def _stream_live_assurance_response(
             cost_estimate_usd=final_usage["cost_estimate_usd"],
             streaming_complete=True,
         )
+        # S78: persist episode to T2 (Postgres). Non-fatal — the user's SSE
+        # response has already been sent. workload_id = ai_system_id when
+        # present, else use_case (covers non-system surfaces like Ask AI).
+        try:
+            from domain.agent_memory import write_episode
+            _sys_prompt, _user_prompt = _build_prompt(req.use_case, sanitized)
+            write_episode(
+                workload_id=(req.ai_system_id or req.use_case or "unknown"),
+                prompt=_user_prompt,
+                response=final_usage["full_text"],
+                outcome="success",
+                metadata={
+                    "trace_id": audit.id,
+                    "use_case": req.use_case,
+                    "provider_id": decision.provider.provider_id,
+                    "model": final_usage["model"],
+                    "token_estimate": final_usage["token_estimate"],
+                    "cost_estimate_usd": final_usage["cost_estimate_usd"],
+                    "user": req.user,
+                },
+            )
+        except Exception:
+            _log.exception("S78: write_episode failed (non-fatal)")
         yield {"event": "done", "data": final_resp.model_dump_json()}
     except asyncio.CancelledError:
         # Client closed the SSE stream before we finished. Record a partial
@@ -603,6 +627,26 @@ async def _stream_live_assurance_response(
             governance=GovernanceMetadata(policy_decision="DENY"),
             streaming_complete=False,
         )
+        # S78: persist failure episode to T2 so reliability metrics see it.
+        try:
+            from domain.agent_memory import write_episode
+            _sys_prompt, _user_prompt = _build_prompt(req.use_case, sanitized)
+            write_episode(
+                workload_id=(req.ai_system_id or req.use_case or "unknown"),
+                prompt=_user_prompt,
+                response="".join(partial_text),
+                outcome="failure",
+                metadata={
+                    "trace_id": audit.id,
+                    "use_case": req.use_case,
+                    "provider_id": decision.provider.provider_id,
+                    "model": decision.provider.default_model,
+                    "error_type": type(exc).__name__,
+                    "user": req.user,
+                },
+            )
+        except Exception:
+            _log.exception("S78: write_episode (failure path) failed (non-fatal)")
         yield {"event": "done", "data": err_resp.model_dump_json()}
 
 
