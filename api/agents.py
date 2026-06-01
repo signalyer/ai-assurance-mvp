@@ -486,6 +486,16 @@ def _summarize_run(run: dict[str, Any], *, include_cases: bool = False) -> dict[
         if case.get("passed"):
             bucket["passed"] += 1
         if include_cases:
+            metrics_all = [
+                {
+                    "name": m.get("name"),
+                    "score": m.get("score"),
+                    "passed": bool(m.get("passed")),
+                    "details": m.get("details"),
+                }
+                for m in (case.get("metrics") or [])
+                if isinstance(m, dict)
+            ]
             cases.append({
                 "id": case.get("id"),
                 "label": case.get("label"),
@@ -494,11 +504,8 @@ def _summarize_run(run: dict[str, Any], *, include_cases: bool = False) -> dict[
                 "passed": bool(case.get("passed")),
                 "overall_score": case.get("overall_score"),
                 "failures": list(case.get("failures") or []),
-                "metric_failures": [
-                    {"name": m.get("name"), "score": m.get("score"), "details": m.get("details")}
-                    for m in (case.get("metrics") or [])
-                    if isinstance(m, dict) and not m.get("passed")
-                ],
+                "metrics": metrics_all,
+                "metric_failures": [m for m in metrics_all if not m["passed"]],
             })
     per_system = {
         sys_key: {

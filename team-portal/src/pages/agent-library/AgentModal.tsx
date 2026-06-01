@@ -8,7 +8,12 @@ type Tab = 'overview' | 'versions' | 'subscribers' | 'eval' | 'publish';
 // S82f-2-extended item 10 (E1): eval visibility. Shape mirrors
 // GET /api/agents/{id}/eval-summary in api/agents.py.
 interface EvalPerSystem { total: number; passed: number; pass_rate: number; }
-interface EvalMetricFailure { name?: string; score?: number; details?: string; }
+interface EvalMetric {
+  name?: string;
+  score?: number;
+  passed?: boolean;
+  details?: string;
+}
 interface EvalCaseSummary {
   id: string | null;
   label: string | null;
@@ -17,7 +22,8 @@ interface EvalCaseSummary {
   passed: boolean;
   overall_score: number | null;
   failures: string[];
-  metric_failures: EvalMetricFailure[];
+  metrics?: EvalMetric[];
+  metric_failures: EvalMetric[];
 }
 interface EvalRunSummary {
   run_id: string | null;
@@ -417,50 +423,139 @@ function fmtPct(x: number): string {
   return `${(x * 100).toFixed(1)}%`;
 }
 
-function CasesTable({ cases }: { cases: EvalCaseSummary[] }) {
+const expandedCases = signal<Set<string>>(new Set());
+
+function toggleCase(id: string): void {
+  const next = new Set(expandedCases.value);
+  if (next.has(id)) next.delete(id); else next.add(id);
+  expandedCases.value = next;
+}
+
+function expandAll(cases: EvalCaseSummary[]): void {
+  expandedCases.value = new Set(cases.map((c) => c.id ?? c.label ?? ''));
+}
+
+function collapseAll(): void {
+  expandedCases.value = new Set();
+}
+
+export function CasesTable({ cases }: { cases: EvalCaseSummary[] }) {
+  const expanded = expandedCases.value;
   return (
-    <table class="version-table">
-      <thead>
-        <tr>
-          <th>Case</th>
-          <th>System</th>
-          <th>Category</th>
-          <th>Passed</th>
-          <th>Score</th>
-          <th>Failures</th>
-        </tr>
-      </thead>
-      <tbody>
-        {cases.map((c) => (
-          <tr key={c.id ?? c.label ?? ''}>
-            <td>
-              <div class="font-mono" style={{ fontSize: 11 }}>{c.id ?? '—'}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.label ?? ''}</div>
-            </td>
-            <td class="font-mono" style={{ fontSize: 11 }}>{c.system}</td>
-            <td>{c.category ?? '—'}</td>
-            <td style={{ color: c.passed ? 'var(--pass)' : 'var(--critical)', fontWeight: 600 }}>
-              {c.passed ? 'PASS' : 'FAIL'}
-            </td>
-            <td>{typeof c.overall_score === 'number' ? c.overall_score.toFixed(2) : '—'}</td>
-            <td>
-              {c.metric_failures.length === 0 ? (
-                <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-              ) : (
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
-                  {c.metric_failures.map((m, i) => (
-                    <li key={i}>
-                      <code>{m.name ?? '?'}</code>
-                      {m.details ? `: ${m.details}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </td>
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 11 }}>
+        <button class="btn btn-xs btn-secondary" onClick={() => expandAll(cases)}>Expand all</button>
+        <button class="btn btn-xs btn-secondary" onClick={collapseAll}>Collapse all</button>
+        <span style={{ color: 'var(--text-tertiary)', alignSelf: 'center' }}>
+          Click a case to drill into every metric.
+        </span>
+      </div>
+      <table class="version-table">
+        <thead>
+          <tr>
+            <th style={{ width: 20 }}></th>
+            <th>Case</th>
+            <th>System</th>
+            <th>Category</th>
+            <th>Passed</th>
+            <th>Score</th>
+            <th>Failures</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {cases.map((c) => {
+            const key = c.id ?? c.label ?? '';
+            const isOpen = expanded.has(key);
+            return (
+              <>
+                <tr
+                  key={key}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => toggleCase(key)}
+                >
+                  <td style={{ color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                    {isOpen ? '▾' : '▸'}
+                  </td>
+                  <td>
+                    <div class="font-mono" style={{ fontSize: 11 }}>{c.id ?? '—'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.label ?? ''}</div>
+                  </td>
+                  <td class="font-mono" style={{ fontSize: 11 }}>{c.system}</td>
+                  <td>{c.category ?? '—'}</td>
+                  <td style={{ color: c.passed ? 'var(--pass)' : 'var(--critical)', fontWeight: 600 }}>
+                    {c.passed ? 'PASS' : 'FAIL'}
+                  </td>
+                  <td>{typeof c.overall_score === 'number' ? c.overall_score.toFixed(2) : '—'}</td>
+                  <td>
+                    {c.metric_failures.length === 0 ? (
+                      <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+                    ) : (
+                      <span style={{ color: 'var(--critical)' }}>
+                        {c.metric_failures.length} metric{c.metric_failures.length === 1 ? '' : 's'} failed
+                      </span>
+                    )}
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr key={`${key}-detail`}>
+                    <td></td>
+                    <td colSpan={6} style={{ background: 'var(--bg-secondary, rgba(255,255,255,0.04))' }}>
+                      <CaseDetail c={c} />
+                    </td>
+                  </tr>
+                )}
+              </>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CaseDetail({ c }: { c: EvalCaseSummary }) {
+  const metrics = c.metrics ?? c.metric_failures;
+  return (
+    <div style={{ padding: '8px 4px' }}>
+      {c.failures.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--critical)' }}>
+            Top-level failures
+          </div>
+          <ul style={{ margin: '4px 0 0 0', paddingLeft: 16, fontSize: 11 }}>
+            {c.failures.map((f, i) => <li key={i}>{f}</li>)}
+          </ul>
+        </div>
+      )}
+      <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4 }}>
+        Metrics ({metrics.length})
+      </div>
+      <table class="version-table" style={{ fontSize: 11 }}>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th style={{ width: 60 }}>Score</th>
+            <th style={{ width: 60 }}>Pass</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {metrics.map((m, i) => (
+            <tr key={i}>
+              <td class="font-mono">{m.name ?? '?'}</td>
+              <td>{typeof m.score === 'number' ? m.score.toFixed(2) : '—'}</td>
+              <td style={{
+                color: m.passed ? 'var(--pass)' : 'var(--critical)',
+                fontWeight: 600,
+              }}>
+                {m.passed ? 'PASS' : 'FAIL'}
+              </td>
+              <td>{m.details ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

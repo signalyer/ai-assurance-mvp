@@ -51,6 +51,15 @@ export function AgentLibraryPage() {
   useEffect(() => {
     registerAgentsReload(loadAgents);
     void loadAgents();
+    // S82f-2-extended W4: deep-link from /evals AgentEvalsPanel etc.
+    // ?open=<agent_id> auto-opens the modal once agents have loaded.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const openId = params.get('open');
+      if (openId) openAgent(openId);
+    } catch {
+      // window/URLSearchParams unavailable — silent.
+    }
   }, []);
   const rows = filtered.value;
 
