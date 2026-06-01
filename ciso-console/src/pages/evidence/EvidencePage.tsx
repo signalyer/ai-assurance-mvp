@@ -152,7 +152,6 @@ function openSummarizeFilteredEvidence(): void {
         evidence_sections: summarizeEvidenceSections(rows) || '(no evidence on file)',
         evidence_completeness: `${rows.length} records on file · scope=${scopeLabel}`,
       },
-      preferred_provider: 'anthropic-prod',
       user: 'ciso-console',
     },
   });

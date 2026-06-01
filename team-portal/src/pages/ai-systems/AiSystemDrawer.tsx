@@ -272,7 +272,6 @@ function submitAskPrompt(s: AiSystemDetail, question: string): void {
         risk_tier: s.risk_level,
         open_findings_summary: summarizeOpenFindings(s),
       },
-      preferred_provider: 'anthropic-prod',
       user: 'team-portal',
     },
   });
@@ -413,7 +412,6 @@ function openSummarizeFinding(
         title,
         finding_note: null,
       },
-      preferred_provider: 'anthropic-prod',
       user: 'team-portal',
     },
   });
@@ -433,7 +431,6 @@ function openSummarizeEvidence(systemId: string, rows: EvidenceRow[]): void {
         evidence_sections: sections || '(no evidence on file)',
         evidence_completeness: rows.length > 0 ? `${rows.length} records on file` : '0%',
       },
-      preferred_provider: 'anthropic-prod',
       user: 'team-portal',
     },
   });
@@ -469,7 +466,6 @@ function openDraftReport(s: AiSystemDetail): void {
         ),
         evidence_summary: evidenceSummary,
       },
-      preferred_provider: 'anthropic-prod',
       user: 'team-portal',
     },
   });
@@ -516,7 +512,6 @@ function FailedGateRow({ gate: g, systemId }: { gate: ReleaseGate; systemId: str
         // live LLM path would fall back to sim and the operator would see
         // the same Simulated preview as S68a. S69b: provider-agnostic
         // streaming will drop this pin.
-        preferred_provider: 'anthropic-prod',
         user: 'team-portal',
       },
     });

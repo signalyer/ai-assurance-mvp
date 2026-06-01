@@ -423,7 +423,6 @@ function openSummarizeFinding(f: Finding): void {
         title: f.title,
         finding_note: f.description ?? null,
       },
-      preferred_provider: 'anthropic-prod',
       user: 'ciso-console',
     },
   });

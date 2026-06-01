@@ -292,7 +292,6 @@ function submitAskPrompt(s: AiSystemSummary, question: string): void {
         risk_tier: s.risk_level,
         open_findings_summary: summarizeFindingCounts(s),
       },
-      preferred_provider: 'anthropic-prod',
       user: 'ciso-console',
     },
   });
@@ -325,7 +324,6 @@ function openDraftReport(s: AiSystemSummary): void {
         ),
         evidence_summary: evidenceSummary,
       },
-      preferred_provider: 'anthropic-prod',
       user: 'ciso-console',
     },
   });
