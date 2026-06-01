@@ -1,0 +1,32 @@
+{
+  "_comment": "Deterministic KYC + risk profiles. kyc_tier 1=basic 2=enhanced 3=high-net-worth. target_equity_band is the recommended equity allocation band given risk_tolerance + horizon — used by the agent to flag concentration risk.",
+  "profiles": {
+    "cln-001": {
+      "kyc_tier": 2,
+      "risk_tolerance": "moderate",
+      "investment_horizon_years": 18,
+      "target_equity_band_pct": [60, 75],
+      "target_tech_band_pct": [40, 50],
+      "restrictions": ["no_leverage", "no_tobacco"],
+      "last_review": "2025-11-12"
+    },
+    "cln-002": {
+      "kyc_tier": 2,
+      "risk_tolerance": "conservative",
+      "investment_horizon_years": 6,
+      "target_equity_band_pct": [30, 45],
+      "target_tech_band_pct": [10, 20],
+      "restrictions": ["no_leverage", "no_tobacco", "no_speculative_options"],
+      "last_review": "2026-02-08"
+    },
+    "cln-003": {
+      "kyc_tier": 3,
+      "risk_tolerance": "aggressive",
+      "investment_horizon_years": 35,
+      "target_equity_band_pct": [85, 100],
+      "target_tech_band_pct": [50, 70],
+      "restrictions": ["no_tobacco"],
+      "last_review": "2026-04-20"
+    }
+  }
+}

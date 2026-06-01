@@ -1,0 +1,62 @@
+{
+  "_comment": "Deterministic fixtures for finadvice. PII fields (client_name, account_number, tax_id, dob) are present on purpose — they let the @scrub_pii decorator demonstrate redaction when the operator includes them in the request prompt. Do NOT use real client data here.",
+  "as_of": "2026-05-30",
+  "clients": {
+    "cln-001": {
+      "client_name": "Marcus Chen",
+      "account_number": "AC-48201-7733",
+      "tax_id": "412-58-9023",
+      "dob": "1978-03-14",
+      "positions": [
+        { "ticker": "NVDA",  "shares": 133, "avg_cost": 320.10, "current_value": 59892.56 },
+        { "ticker": "MSFT",  "shares": 109, "avg_cost": 295.40, "current_value": 44927.62 },
+        { "ticker": "AAPL",  "shares": 186, "avg_cost": 145.20, "current_value": 34977.30 },
+        { "ticker": "VTI",   "shares": 112, "avg_cost": 220.10, "current_value": 30072.00 },
+        { "ticker": "BND",   "shares": 345, "avg_cost": 78.40,  "current_value": 24978.00 },
+        { "ticker": "AMZN",  "shares": 112, "avg_cost": 130.50, "current_value": 19960.64 },
+        { "ticker": "GOOGL", "shares": 90,  "avg_cost": 132.20, "current_value": 14922.00 },
+        { "ticker": "TSLA",  "shares": 48,  "avg_cost": 215.00, "current_value": 11851.68 }
+      ],
+      "balances": {
+        "cash": 8418.20,
+        "total_equity": 241581.80,
+        "total_value": 250000.00
+      }
+    },
+    "cln-002": {
+      "client_name": "Eleanor Rivera",
+      "account_number": "AC-71042-5519",
+      "tax_id": "583-21-7144",
+      "dob": "1959-11-02",
+      "positions": [
+        { "ticker": "BND",  "shares": 1240, "avg_cost": 76.80,  "current_value": 89776.00 },
+        { "ticker": "VTI",  "shares": 280,  "avg_cost": 242.10, "current_value": 75180.00 },
+        { "ticker": "SPY",  "shares": 95,   "avg_cost": 451.20, "current_value": 51129.00 },
+        { "ticker": "AAPL", "shares": 80,   "avg_cost": 170.00, "current_value": 15044.00 },
+        { "ticker": "MSFT", "shares": 30,   "avg_cost": 320.00, "current_value": 12365.40 }
+      ],
+      "balances": {
+        "cash": 6505.60,
+        "total_equity": 243494.40,
+        "total_value": 250000.00
+      }
+    },
+    "cln-003": {
+      "client_name": "Devon Park",
+      "account_number": "AC-19388-0026",
+      "tax_id": "201-44-8836",
+      "dob": "1995-07-22",
+      "positions": [
+        { "ticker": "TSLA", "shares": 320, "avg_cost": 198.00, "current_value": 79011.20 },
+        { "ticker": "NVDA", "shares": 95,  "avg_cost": 280.00, "current_value": 42780.40 },
+        { "ticker": "META", "shares": 70,  "avg_cost": 380.00, "current_value": 35147.00 },
+        { "ticker": "AMZN", "shares": 65,  "avg_cost": 145.00, "current_value": 11584.30 }
+      ],
+      "balances": {
+        "cash": 1477.10,
+        "total_equity": 168522.90,
+        "total_value": 170000.00
+      }
+    }
+  }
+}

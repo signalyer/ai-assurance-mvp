@@ -1,0 +1,16 @@
+{
+  "_comment": "Deterministic market snapshot. vol_30d is annualized volatility from the trailing 30 days, expressed as a decimal (0.42 = 42% annualized). Prices are as_of the same date as portfolios.json.",
+  "as_of": "2026-05-30",
+  "symbols": {
+    "NVDA":  { "last_price": 450.32, "vol_30d": 0.42 },
+    "MSFT":  { "last_price": 412.18, "vol_30d": 0.21 },
+    "AAPL":  { "last_price": 188.05, "vol_30d": 0.25 },
+    "VTI":   { "last_price": 268.50, "vol_30d": 0.15 },
+    "BND":   { "last_price": 72.40,  "vol_30d": 0.05 },
+    "AMZN":  { "last_price": 178.22, "vol_30d": 0.28 },
+    "GOOGL": { "last_price": 165.80, "vol_30d": 0.24 },
+    "TSLA":  { "last_price": 246.91, "vol_30d": 0.55 },
+    "META":  { "last_price": 502.10, "vol_30d": 0.30 },
+    "SPY":   { "last_price": 538.20, "vol_30d": 0.14 }
+  }
+}
