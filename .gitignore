@@ -93,3 +93,7 @@ deploy.zip
 
 # Stray agent-session transcripts (handoff S66 close)
 agent-*.jsonl
+
+# Local curl/test debris (S69 cookies.txt, etc.)
+cookies.txt
+**/cookies.txt

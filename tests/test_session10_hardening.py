@@ -422,14 +422,21 @@ def test_projection_dispatch_single_source() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rtf_index_sidecar_used() -> None:
+def test_rtf_index_sidecar_used(monkeypatch) -> None:
     """_find_completed_cascade must find a cascade from the sidecar index
-    even when the events file cannot be read."""
+    even when the events file cannot be read.
+
+    S11 hardened the sidecar to reject unsigned entries — this test must
+    write a *signed* entry using the same HMAC scheme the impl validates.
+    """
     import json
     import domain.right_to_forget as rtf
 
     cascade_id = "sidecar-test-cascade-001"
     subject_id = "subj-sidecar-001"
+
+    # Ensure a known SL_HMAC_SECRET so both sign + verify use the same key.
+    monkeypatch.setenv("SL_HMAC_SECRET", "test-sidecar-secret-s74")
 
     with tempfile.TemporaryDirectory() as tmp:
         index_file = Path(tmp) / "rtf_completed_index.jsonl"
@@ -446,6 +453,7 @@ def test_rtf_index_sidecar_used() -> None:
                 "langfuse": {"store": "langfuse", "items_removed": 0, "sha256_digest_after": "jkl", "error": None},
             },
         }
+        entry["_sig"] = rtf._compute_sidecar_sig(entry, "test-sidecar-secret-s74")
         index_file.write_text(json.dumps(entry) + "\n", encoding="utf-8")
 
         original_index = rtf._RTF_INDEX_FILE

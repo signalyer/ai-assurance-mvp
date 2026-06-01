@@ -486,7 +486,7 @@ def _sim_response_to_sse_done(resp: AskResponseOut) -> dict:
     return {"event": "done", "data": resp.model_dump_json()}
 
 
-async def _stream_live_release_narrative(
+async def _stream_live_assurance_response(
     req: AskRequest,
     decision,  # RoutingDecision
     sanitized: dict,
@@ -666,7 +666,7 @@ def _dispatch_streaming(req: AskRequest, request: Request) -> EventSourceRespons
     # plan calls out (failure mode #1 in the verification list).
     if real_llm_enabled() and have_real_credentials(decision.provider):
         async def _live_gen():
-            async for ev in _stream_live_release_narrative(req, decision, sanitized, request):
+            async for ev in _stream_live_assurance_response(req, decision, sanitized, request):
                 yield ev
         return EventSourceResponse(_live_gen())
 

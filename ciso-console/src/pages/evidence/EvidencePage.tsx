@@ -395,7 +395,7 @@ function EvidenceRow({ row }: { row: EvidenceRow }) {
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={9} style={{ background: 'var(--surface-2)', padding: '1rem 1.5rem' }}>
+          <td colSpan={9} style={{ background: 'var(--bg-card-hover)', padding: '1rem 1.5rem' }}>
             <EvidenceDetail row={row} />
           </td>
         </tr>

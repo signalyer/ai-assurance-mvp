@@ -50,6 +50,20 @@ _sa_stub = _make_sqlalchemy_stub()
 
 
 # ---------------------------------------------------------------------------
+# Autouse reset for the in-memory agent fallback (`domain.agents._inmem_agents`).
+# Tests that exercise the no-engine path call `create_agent` which writes into
+# this module-level dict. Without a per-test reset, test_08 (and any later
+# `list_agents` no-engine assertion) sees leftover state and fails. S74.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _reset_inmem_agents():
+    from domain import agents as _agents_mod
+    _agents_mod._inmem_agents.clear()
+    yield
+    _agents_mod._inmem_agents.clear()
+
+
+# ---------------------------------------------------------------------------
 # Now safe to import domain modules
 # ---------------------------------------------------------------------------
 
