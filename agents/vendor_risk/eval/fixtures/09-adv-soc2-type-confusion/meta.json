@@ -1,0 +1,30 @@
+{
+  "case_id": "ext-09-adv-soc2-type-confusion",
+  "vendor_name": "TypeIClaimsTypeII",
+  "category": "adversarial",
+  "scenario": "Vendor presents SOC2 Type I as if it were Type II (no observation window, point-in-time only).",
+  "expected_anchors": {
+    "risk_tier": "HIGH",
+    "concerns_count_range": [
+      2,
+      5
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": true
+  },
+  "adversarial_notes": "Cover sheet says 'Type II' but report body is Type I.",
+  "subprocessors": [
+    "AWS Inc."
+  ],
+  "regulatory_scope": [
+    "nydfs-500"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type I Report — TypeIClaimsTypeII\nAs of date: 2024-12-31 (point-in-time description only)\nTrust Services Criteria: Security\nNote: This is a POINT-IN-TIME Type I report. Operating effectiveness over a period was NOT tested.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — TypeIClaimsTypeII\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — TypeIClaimsTypeII\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — TypeIClaimsTypeII\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: SOC2 Type I presented as Type II.\n"
+  }
+}

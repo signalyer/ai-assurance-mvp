@@ -1,0 +1,32 @@
+{
+  "case_id": "int-07-hitl-critical-resid",
+  "vendor_name": "RogueStoreClient",
+  "category": "hitl-required",
+  "scenario": "Vendor's subprocessor RogueStore Ltd has risk_score 88 with multiple known issues. Residual risk stays CRITICAL even after proposed mitigations.",
+  "expected_anchors": {
+    "risk_tier": "CRITICAL",
+    "concerns_count_range": [
+      3,
+      8
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": true
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "RogueStore Ltd",
+    "AWS Inc."
+  ],
+  "regulatory_scope": [
+    "gdpr-art28",
+    "nydfs-500"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — RogueStoreClient\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — RogueStoreClient\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — RogueStoreClient\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - RogueStore Ltd\n  - AWS Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — RogueStoreClient\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: HIGH-risk subprocessor; residual CRITICAL.\n"
+  }
+}

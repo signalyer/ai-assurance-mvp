@@ -1,0 +1,28 @@
+{
+  "case_id": "ext-04-clean-cdn",
+  "vendor_name": "ByteHost CDN",
+  "category": "clean",
+  "scenario": "Network-only CDN. No payload retention. SOC2 Type II current. No DPA required (no PII processed under contract).",
+  "expected_anchors": {
+    "risk_tier": "LOW",
+    "concerns_count_range": [
+      0,
+      2
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": false
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "Cloudflare Inc.",
+    "Fastly Inc."
+  ],
+  "regulatory_scope": [],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — ByteHost CDN\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — ByteHost CDN\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "subprocessor_list": "Subprocessor list:\n  - Cloudflare Inc.\n  - Fastly Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — ByteHost CDN\nEncryption: TLS 1.3 in transit. No payload retention so at-rest N/A.\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Network-only CDN.\n"
+  }
+}

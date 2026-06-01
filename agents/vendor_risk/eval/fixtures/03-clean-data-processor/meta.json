@@ -1,0 +1,31 @@
+{
+  "case_id": "ext-03-clean-data-processor",
+  "vendor_name": "QuantumLog",
+  "category": "clean",
+  "scenario": "Log-aggregation processor. PII in scope under DPA (log contents). Type II + ISO current. DPA 2021 SCCs.",
+  "expected_anchors": {
+    "risk_tier": "MEDIUM",
+    "concerns_count_range": [
+      1,
+      4
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": false
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "AWS Inc.",
+    "Google Cloud Platform"
+  ],
+  "regulatory_scope": [
+    "gdpr-art28"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — QuantumLog\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — QuantumLog\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — QuantumLog\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Google Cloud Platform\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — QuantumLog\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: DPA-bound processor; PII in scope.\n"
+  }
+}

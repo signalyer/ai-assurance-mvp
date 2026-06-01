@@ -5,9 +5,28 @@
   "scenario": "Well-documented mid-market SaaS vendor with current SOC2 Type II, ISO 27001 valid through 2027, GDPR-compliant DPA referencing 2021 SCCs, subprocessor list current.",
   "expected_anchors": {
     "risk_tier": "LOW",
-    "concerns_count_range": [0, 2],
+    "concerns_count_range": [
+      0,
+      2
+    ],
     "carve_out_expected": false,
     "hitl_expected": false
   },
-  "adversarial_notes": null
+  "adversarial_notes": null,
+  "subprocessors": [
+    "AWS Inc.",
+    "Cloudflare Inc.",
+    "Stripe Inc."
+  ],
+  "regulatory_scope": [
+    "gdpr-art28"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — ExampleCorp Productivity Suite\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — ExampleCorp Productivity Suite\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — ExampleCorp Productivity Suite\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Cloudflare Inc.\n  - Stripe Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — ExampleCorp Productivity Suite\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Clean SaaS package.\n"
+  }
 }

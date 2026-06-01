@@ -129,6 +129,34 @@ REGISTRY: tuple[AgentSpec, ...] = (
         cli_only=True,
         demo_only=True,  # CLI-only PoC; no Phase 1-12 SOP execution — see docs/SOP-agent-onboarding.md
     ),
+    AgentSpec(
+        agent_id="vendor_risk",
+        name="Vendor Risk Analyzer",
+        description=(
+            "Third-party vendor risk assessment for TPRM onboarding. "
+            "Parses vendor-disclosed documents (SOC2, ISO 27001, DPA, "
+            "subprocessor list, questionnaire), retrieves grounding from "
+            "the TPRM policy + regulatory corpus, and produces a "
+            "structured risk tier with concerns, conflicts, mitigations, "
+            "and citations. Two AI systems: ext (cloud LLM) + int "
+            "(internal-only, no network egress) — operator picks via the "
+            "system_id kwarg. Onboarded per docs/SOP-agent-onboarding.md "
+            "(S82a–S82i)."
+        ),
+        # Defaults to EXT system; the runner can override via system_id kwarg.
+        # The two AI System rows are seeded by
+        # agents/vendor_risk/onboarding/bootstrap.py at engine startup.
+        default_system_id="sys-vendor-risk-ext-001",
+        module_path="agents.vendor_risk.agent",
+        entrypoint="run_vendor_risk",
+        inner_entrypoint="_run_review_inner",
+        tool_specs=[],  # surfaced via prompts.TOOL_SPECS when the picker grows that view
+        cli_only=False,
+        # S82d V0 — eval baseline just landed; iteration to lock thresholds
+        # is S82e (Phase 6). Pre-Release Assessment + Pilot + Release are
+        # S82g/h/i. Flip to False only after S82i.
+        demo_only=True,
+    ),
 )
 
 

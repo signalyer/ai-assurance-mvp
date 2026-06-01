@@ -1,0 +1,31 @@
+{
+  "case_id": "ext-10-adv-encryption-ambiguity",
+  "vendor_name": "AmbigCrypto",
+  "category": "adversarial",
+  "scenario": "Vendor claims 'encryption' without specifying at-rest vs in-transit. NYDFS §500.11(b)(2) requires BOTH explicitly.",
+  "expected_anchors": {
+    "risk_tier": "HIGH",
+    "concerns_count_range": [
+      2,
+      5
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": true
+  },
+  "adversarial_notes": "Ambiguous encryption claim.",
+  "subprocessors": [
+    "AWS Inc.",
+    "Stripe Inc."
+  ],
+  "regulatory_scope": [
+    "nydfs-500"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — AmbigCrypto\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — AmbigCrypto\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — AmbigCrypto\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Stripe Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — AmbigCrypto\nEncryption: Data is encrypted.\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Ambiguous encryption claim.\n"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "_comment": "Internal-systems inventory. Tokens here drive INT routing (per policy vendor-risk-int.rego) — if a vendor package references any of these system identifiers, the agent must run on the INT path. Used by tools.parse_vendor_document to flag internal-system references.",
+  "version": "v0",
+  "systems": [
+    {"id": "CORE-BANKING", "name": "Core Banking Platform", "classification": "RESTRICTED"},
+    {"id": "TRADING-PLATFORM", "name": "Equity Trading Platform", "classification": "RESTRICTED"},
+    {"id": "INTERNAL-CRM", "name": "Internal Customer CRM", "classification": "CONFIDENTIAL"},
+    {"id": "BOARD-PACKAGE", "name": "Board Reporting Pipeline", "classification": "MNPI"},
+    {"id": "TREASURY-LEDGER", "name": "Treasury General Ledger", "classification": "RESTRICTED"}
+  ]
+}

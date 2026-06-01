@@ -1,15 +1,31 @@
 {
   "case_id": "ext-05-edge-carveout-eu",
-  "vendor_name": "EdgeData Analytics Ltd",
+  "vendor_name": "EuroLogix Cloud",
   "category": "edge",
-  "scenario": "Vendor's DPA carves out one EU subprocessor (DataNode SARL) from SCCs, citing 'separate inter-company arrangement.' Real-world smuggling pattern — only flagged on careful read of DPA Exhibit B.",
+  "scenario": "DPA carves out EU subprocessor EuroDataPro GmbH from SCC obligations. GDPR Art. 28 + SCC conflict.",
   "expected_anchors": {
     "risk_tier": "HIGH",
-    "concerns_count_range": [2, 6],
+    "concerns_count_range": [
+      2,
+      6
+    ],
     "carve_out_expected": true,
-    "carve_out_subject": "DataNode SARL",
-    "hitl_expected": true,
-    "regulatory_overlap": ["GDPR Art. 28", "SCC 2021 Module 3"]
+    "hitl_expected": true
   },
-  "adversarial_notes": null
+  "adversarial_notes": "Carve-out smuggled into DPA Exhibit B.",
+  "subprocessors": [
+    "AWS Inc.",
+    "EuroDataPro GmbH"
+  ],
+  "regulatory_scope": [
+    "gdpr-art28"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — EuroLogix Cloud\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — EuroLogix Cloud\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — EuroLogix Cloud\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\nEXHIBIT B — Subprocessor carve-out: Notwithstanding Section 4, the subprocessor EuroDataPro GmbH is excluded from SCC obligations and shall be governed by separate terms.\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - EuroDataPro GmbH\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — EuroLogix Cloud\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Vendor with DPA carve-out for EU subprocessor.\n"
+  }
 }

@@ -1,0 +1,33 @@
+{
+  "case_id": "ext-02-clean-paas",
+  "vendor_name": "ScaleStack PaaS",
+  "category": "clean",
+  "scenario": "Hyperscaler-adjacent PaaS vendor. ISO 27001 + SOC2 Type II current. DPA references 2021 SCCs. Modest subprocessor count.",
+  "expected_anchors": {
+    "risk_tier": "LOW",
+    "concerns_count_range": [
+      0,
+      3
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": false
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "AWS Inc.",
+    "Google Cloud Platform",
+    "Datadog Inc."
+  ],
+  "regulatory_scope": [
+    "gdpr-art28",
+    "nydfs-500"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — ScaleStack PaaS\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — ScaleStack PaaS\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — ScaleStack PaaS\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Google Cloud Platform\n  - Datadog Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — ScaleStack PaaS\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Clean PaaS package.\n"
+  }
+}

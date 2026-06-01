@@ -1,0 +1,32 @@
+{
+  "case_id": "ext-07-edge-conflicting-dpa",
+  "vendor_name": "ConflictCorp",
+  "category": "edge",
+  "scenario": "DPA references SCC 2010 module. Parent MSA Section 12.4 references SCC 2021 module. Internal contract conflict.",
+  "expected_anchors": {
+    "risk_tier": "HIGH",
+    "concerns_count_range": [
+      2,
+      5
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": true
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "AWS Inc.",
+    "Datadog Inc."
+  ],
+  "regulatory_scope": [
+    "gdpr-art28"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — ConflictCorp\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — ConflictCorp\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — ConflictCorp\nGoverning SCC module: 2010 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\nNote: This DPA references SCC 2010 Module 2. The parent MSA (Section 12.4) references SCC 2021. Where these conflict the DPA controls.\n",
+    "msa": "Master Service Agreement — ConflictCorp\nSection 12.4: All cross-border transfers governed by EU SCC module 2021.\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Datadog Inc.\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — ConflictCorp\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n",
+    "package_summary": "Vendor package summary: Conflicting SCC references between DPA and MSA.\n"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "_comment": "Corpus manifest for vendor_risk agent. Each entry maps a stable doc_id to a path under this directory + a short title + relevant regulatory frameworks for filtering. Used by tools.search_tprm_corpus for retrieval scoring (token-overlap V0; rank-bm25 candidate for S82e). Citations emitted by the agent must come from this set.",
+  "version": "v0",
+  "docs": [
+    {"doc_id": "tprm-policy", "title": "Internal TPRM Policy v3.2", "path": "tprm-policy.md", "frameworks": []},
+    {"doc_id": "gdpr-art28", "title": "GDPR Article 28 — Processor Obligations", "path": "regulations/gdpr-art28.md", "frameworks": ["gdpr-art28"]},
+    {"doc_id": "dora", "title": "DORA — ICT Third-Party Risk", "path": "regulations/dora.md", "frameworks": ["dora"]},
+    {"doc_id": "nydfs-500", "title": "NYDFS Part 500 — Third-Party Service Providers (§500.11)", "path": "regulations/nydfs-500.md", "frameworks": ["nydfs-500"]},
+    {"doc_id": "ffiec-appendix-j", "title": "FFIEC Appendix J — Outsourced Tech Services", "path": "regulations/ffiec-appendix-j.md", "frameworks": ["ffiec-appendix-j"]},
+    {"doc_id": "glba", "title": "GLBA Safeguards Rule — Third-Party Oversight", "path": "regulations/glba.md", "frameworks": ["glba"]},
+    {"doc_id": "scc-2021", "title": "EU Standard Contractual Clauses (2021 module)", "path": "regulations/scc-2021.md", "frameworks": ["gdpr-art28"]},
+    {"doc_id": "soc2-trust-services", "title": "SOC2 Trust Services Criteria — Type I vs Type II", "path": "regulations/soc2-trust-services.md", "frameworks": []},
+    {"doc_id": "assess-2025q1-acmecorp", "title": "Prior Assessment — ACMECorp 2025Q1", "path": "assessments/2025q1-acmecorp.md", "frameworks": []},
+    {"doc_id": "assess-2024q4-bytehost", "title": "Prior Assessment — ByteHost CDN 2024Q4", "path": "assessments/2024q4-bytehost.md", "frameworks": []},
+    {"doc_id": "assess-2024q3-quantumlog", "title": "Prior Assessment — QuantumLog 2024Q3", "path": "assessments/2024q3-quantumlog.md", "frameworks": []},
+    {"doc_id": "tprm-rubric", "title": "TPRM Risk Tier Rubric (LOW/MEDIUM/HIGH/CRITICAL)", "path": "tprm-rubric.md", "frameworks": []},
+    {"doc_id": "carve-out-playbook", "title": "DPA Carve-Out Detection Playbook", "path": "carve-out-playbook.md", "frameworks": ["gdpr-art28"]}
+  ],
+  "subprocessor_db": "subprocessor-risk-db.json",
+  "internal_systems": "internal-systems-inventory.json"
+}

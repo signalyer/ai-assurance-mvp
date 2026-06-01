@@ -1,0 +1,33 @@
+{
+  "case_id": "int-03-mnpi-board-package",
+  "vendor_name": "BoardTelemetry Corp",
+  "category": "mnpi",
+  "scenario": "Vendor handles board-package telemetry. Material non-public info flow.",
+  "expected_anchors": {
+    "risk_tier": "HIGH",
+    "concerns_count_range": [
+      2,
+      5
+    ],
+    "carve_out_expected": false,
+    "hitl_expected": true
+  },
+  "adversarial_notes": null,
+  "subprocessors": [
+    "AWS Inc.",
+    "Microsoft Azure"
+  ],
+  "regulatory_scope": [
+    "gdpr-art28",
+    "nydfs-500",
+    "glba"
+  ],
+  "documents": {
+    "soc2": "SOC 2 Type II Report — BoardTelemetry Corp\nAudit period: 2024-01 to 2024-12\nTrust Services Criteria: Security, Availability, Confidentiality\nOpinion: Unqualified. No exceptions noted.\nAuditor: Independent CPA firm.\n",
+    "iso27001": "ISO/IEC 27001 Certificate — BoardTelemetry Corp\nValid through: 2027-06-01\nScope: Information security management for production services.\n",
+    "dpa": "Data Processing Agreement — BoardTelemetry Corp\nGoverning SCC module: 2021 (Module 2: Controller → Processor)\nSubject matter: provision of contracted services.\nSubprocessor approval: prior written approval required (Art. 28(2)).\n",
+    "subprocessor_list": "Subprocessor list:\n  - AWS Inc.\n  - Microsoft Azure\n",
+    "questionnaire": "Security Questionnaire (SIG Lite) — BoardTelemetry Corp\nEncryption: Encryption in transit (TLS 1.3) and at rest (AES-256).\nMFA: Required for all customer-facing access.\nBreach notification: 72 hours.\n\n\nIntegration: this vendor integrates with the internal BOARD-PACKAGE system.\n",
+    "package_summary": "Vendor package summary: Vendor handles board-package telemetry. Material non-public info flow.\n"
+  }
+}

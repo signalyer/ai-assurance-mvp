@@ -1,0 +1,17 @@
+{
+  "_comment": "Subprocessor risk database used by tools.lookup_subprocessor_risk. risk_score 0-100, with >50 = HIGH-tier driver. known_issues drives carve-out / contract-clause concerns. Last_assessed is a UTC date string.",
+  "version": "v0",
+  "vendors": {
+    "AWS Inc.": {"risk_score": 12, "region": "global", "last_assessed": "2025-03-01", "known_issues": []},
+    "Google Cloud Platform": {"risk_score": 14, "region": "global", "last_assessed": "2025-03-01", "known_issues": []},
+    "Microsoft Azure": {"risk_score": 13, "region": "global", "last_assessed": "2025-03-01", "known_issues": []},
+    "Cloudflare Inc.": {"risk_score": 18, "region": "global", "last_assessed": "2025-02-10", "known_issues": []},
+    "Fastly Inc.": {"risk_score": 20, "region": "global", "last_assessed": "2025-02-10", "known_issues": []},
+    "Stripe Inc.": {"risk_score": 22, "region": "US/EU", "last_assessed": "2025-01-15", "known_issues": []},
+    "SendGrid (Twilio)": {"risk_score": 28, "region": "US", "last_assessed": "2024-12-01", "known_issues": []},
+    "Datadog Inc.": {"risk_score": 25, "region": "US/EU", "last_assessed": "2025-01-20", "known_issues": []},
+    "EuroDataPro GmbH": {"risk_score": 62, "region": "EU", "last_assessed": "2024-10-05", "known_issues": ["Has been subject to DPA carve-outs in 3 of last 5 DPAs reviewed", "Pending Schrems-II TIA"]},
+    "NorthPole Analytics": {"risk_score": 78, "region": "non-EU", "last_assessed": "2024-09-12", "known_issues": ["Country lacks adequacy decision", "Past breach disclosed Q2 2024"]},
+    "RogueStore Ltd": {"risk_score": 88, "region": "unknown", "last_assessed": "2024-06-01", "known_issues": ["No SCC coverage", "No SOC2", "Past credential leak"]}
+  }
+}
