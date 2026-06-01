@@ -188,6 +188,18 @@ async def _lifespan(app: FastAPI):
         print(f"[startup] seed_agents: {len(seeded)} agents available")
     except Exception as exc:  # noqa: BLE001
         print(f"[startup] seed_agents failed (non-fatal): {exc}")
+
+    # S82a: vendor_risk SOP onboarding — ensure both AISystem rows exist via
+    # the canonical intake pipeline (NOT hand-written seed rows). See
+    # docs/sop-vendor-risk/00-intent.md + docs/SOP-agent-onboarding.md Phase 1.
+    # Idempotent; rows survive cold-start data wipes per
+    # [[deploy-zip-overwrites-runtime-data]].
+    try:
+        from agents.vendor_risk.onboarding.bootstrap import ensure_vendor_risk_systems
+        vr_results = await ensure_vendor_risk_systems()
+        print(f"[startup] vendor_risk bootstrap: {vr_results}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] vendor_risk bootstrap failed (non-fatal): {exc}")
     yield
     # No shutdown work today.
 

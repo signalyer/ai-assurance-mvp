@@ -200,6 +200,7 @@ _DOMAIN_REG_MAP: dict[str, list[RegulatoryExposure]] = {
     "customer service": [RegulatoryExposure.GLBA, RegulatoryExposure.CFPB, RegulatoryExposure.CCPA],
     "wealth":           [RegulatoryExposure.FFIEC, RegulatoryExposure.SOX],
     "treasury":         [RegulatoryExposure.SOX, RegulatoryExposure.FFIEC],
+    "vendor risk":      [RegulatoryExposure.SOX, RegulatoryExposure.GLBA, RegulatoryExposure.FFIEC, RegulatoryExposure.GDPR],
 }
 
 _USER_POP_TO_IMPACT: dict[str, CustomerImpact] = {
@@ -356,7 +357,11 @@ def _append_jsonl(path: Path, record: dict) -> None:
     response_model=IntakeSubmitOut,
     operation_id="intake_submit",
 )
-async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
+async def submit_intake(
+    payload: IntakePayload,
+    *,
+    system_id_override: str | None = None,
+) -> IntakeSubmitOut:
     """Persist the AI System, create initial assessment + release gate checks.
 
     Pipeline:
@@ -367,6 +372,13 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
       5. Generate one ReleaseGate per required control
       6. Persist all three to JSONL
       7. Return the new system id + redirect target
+
+    ``system_id_override`` is for programmatic bootstrap callers (e.g.
+    agents/vendor_risk/onboarding/bootstrap.py) that need deterministic
+    system IDs across cold starts so SOP audit references resolve. The
+    HTTP endpoint never sets it — bound via FastAPI to the request body
+    only, no query/header path. Keyword-only to make accidental positional
+    misuse impossible.
     """
     if not (payload.name and payload.business_owner and payload.technical_owner and payload.domain):
         raise HTTPException(
@@ -377,7 +389,7 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
     intake_dict = payload.model_dump()
     rc = classify_inherent_risk(intake_dict)
 
-    system_id = f"ai-sys-{uuid4().hex[:8]}"
+    system_id = system_id_override or f"ai-sys-{uuid4().hex[:8]}"
     system = _build_ai_system(payload, system_id=system_id, risk=rc.risk_level)
 
     required = get_required_controls(system)
@@ -484,8 +496,13 @@ async def submit_intake(payload: IntakePayload) -> IntakeSubmitOut:
     # + gates already shipped successfully; missing evidence becomes a
     # ticked-down completeness %, not a 500 or a draft status.
     try:
-        from datetime import datetime, timezone
-        from uuid import uuid4
+        # NOTE: datetime + timezone + uuid4 are imported at module level
+        # (lines 10, 13). Re-importing them inside this function makes
+        # Python treat the names as function-local for the WHOLE function
+        # body — which raises UnboundLocalError at line 397 because the
+        # local binding (this import) hasn't executed yet. Caught during
+        # S82a vendor_risk bootstrap calibration; fix verified via direct
+        # programmatic call to submit_intake().
         from domain.models import Evidence, EvidenceType
         from domain.repository import append_evidence
 
