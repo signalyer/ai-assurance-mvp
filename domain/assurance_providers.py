@@ -371,7 +371,50 @@ _LOCAL_VPC = AssuranceProvider(
 )
 
 
-PROVIDERS: list[AssuranceProvider] = [_OPENAI, _ANTHROPIC, _BEDROCK, _LOCAL_VPC]
+_LOCAL_SIMULATED = AssuranceProvider(
+    provider_id="local-simulated",
+    provider_name="Local Simulated (Internal Demo)",
+    provider_type=ProviderType.LOCAL.value,
+    status=ProviderStatus.CONNECTED.value,
+    roles=[
+        ProviderRole.LOCAL_SENSITIVE_WORKLOAD.value,
+        ProviderRole.PRODUCTION_RUNTIME.value,
+        ProviderRole.ANALYSIS_MODEL.value,
+    ],
+    # S79: routes the same use cases the real assurance models cover, so the
+    # dual-path showcase (External Anthropic vs Internal Simulated) exercises
+    # identical governance chain — only the upstream byte source differs.
+    allowed_use_cases=[
+        UseCase.SYSTEM_QA.value,
+        UseCase.FINDINGS_SUMMARIZATION.value,
+        UseCase.EVIDENCE_SUMMARIZATION.value,
+        UseCase.RELEASE_DECISION_NARRATIVE.value,
+        UseCase.EXECUTIVE_REPORT_GENERATION.value,
+        UseCase.POLICY_CONTROL_QA.value,
+        UseCase.HALLUCINATION_GRADING.value,
+        UseCase.GROUNDEDNESS_SCORING.value,
+        UseCase.PRODUCTION_INFERENCE.value,
+    ],
+    blocked_use_cases=[],
+    # Internal path: zero-egress, so safe for every data class including PCI.
+    allowed_data_classes=[c.value for c in DataClass],
+    blocked_data_classes=[],
+    default_model="local-sim-v1",
+    available_models=["local-sim-v1"],
+    trust_boundary="Internal (in-process simulation — zero egress)",
+    data_residency="customer process",
+    api_key_secret_ref="local://internal/simulated",
+    last_connection_test=_NOW,
+    monthly_cost_limit_usd=0,
+    rate_limit_per_min=0,
+    enabled=True,
+    requires_approval_for_confidential_data=False,
+    requires_approval_for_restricted_data=False,
+    created_at=_NOW, updated_at=_NOW,
+)
+
+
+PROVIDERS: list[AssuranceProvider] = [_OPENAI, _ANTHROPIC, _BEDROCK, _LOCAL_SIMULATED, _LOCAL_VPC]
 PROVIDERS_BY_ID: dict[str, AssuranceProvider] = {p.provider_id: p for p in PROVIDERS}
 
 
@@ -737,7 +780,10 @@ def have_real_credentials(provider: AssuranceProvider) -> bool:
         return bool(os.getenv("ANTHROPIC_API_KEY"))
     if provider.provider_type == ProviderType.BEDROCK.value:
         return bool(os.getenv("AWS_REGION")) and bool(os.getenv("AWS_ACCESS_KEY_ID"))
-    # Local/VPC: we don't simulate real calls
+    if provider.provider_type == ProviderType.LOCAL.value:
+        # S79: local-simulated is always "configured" — it has no upstream
+        # credentials by design. local-vpc remains gated on actual deployment.
+        return provider.provider_id == "local-simulated"
     return False
 
 
@@ -1220,6 +1266,58 @@ async def stream_bedrock_response(
     )
 
 
+async def stream_local_response(
+    provider: AssuranceProvider,
+    use_case: str,
+    sanitized: dict,
+):
+    """Async generator for the internal-path 'local-simulated' provider.
+
+    Wraps `simulate_response` and chunks the output as SSE deltas so the
+    dispatcher's downstream contract (delta-then-done) is identical to the
+    Anthropic and Bedrock streams. The governance chain — policy gate,
+    sanitize, audit row, T2 episode write — runs unchanged.
+
+    The point of this provider is to demonstrate destination-agnostic
+    enforcement: every byte going to this internal model is policed exactly
+    the same way as bytes going to an external SaaS provider. Zero egress,
+    zero cost, full audit trail.
+    """
+    import asyncio
+
+    full_text = simulate_response(use_case, provider, sanitized)
+    # Chunk on whitespace runs so the SSE pipe flushes visibly — single-yield
+    # would render as a non-streaming response in the drawer.
+    parts: list[str] = []
+    buf: list[str] = []
+    for ch in full_text:
+        buf.append(ch)
+        if ch in " \n\t" and len(buf) >= 8:
+            parts.append("".join(buf))
+            buf = []
+    if buf:
+        parts.append("".join(buf))
+
+    for chunk in parts:
+        yield ("delta", chunk)
+        # Yield control so SSE writer flushes between chunks.
+        await asyncio.sleep(0)
+
+    # Token estimate: rough char/4 heuristic, same as the simulated audit path.
+    token_estimate = max(120, len(full_text) // 4)
+    yield (
+        "done",
+        {
+            "input_tokens": 0,
+            "output_tokens": token_estimate,
+            "token_estimate": token_estimate,
+            "cost_estimate_usd": 0.0,
+            "model": provider.default_model,
+            "full_text": full_text,
+        },
+    )
+
+
 __all__ = [
     "ProviderType", "ProviderStatus", "ProviderRole", "DataClass", "UseCase",
     "AuditDecision",
@@ -1236,4 +1334,6 @@ __all__ = [
     "real_llm_enabled", "stream_anthropic_response",
     # S75 — Bedrock streaming adapter
     "stream_bedrock_response",
+    # S79 — internal-path simulated streaming for dual-path showcase
+    "stream_local_response",
 ]

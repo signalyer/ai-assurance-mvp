@@ -465,24 +465,54 @@ def _build_tool_dispatch(subscription_id: str) -> dict[str, Any]:
     }
 
 
+@signallayer.policy_gate(action="llm_call")
+@signallayer.scrub_pii(scope="azure-architect-plan")
+@signallayer.guardrails()
 async def _run_plan(
-    operator_request: str,
+    prompt: str,
     subscription_id: str,
     *,
     model: str = MODEL_FAST,
+    vault_id: str = "",
+    workload_id: str = os.environ.get("SL_WORKLOAD_ID", "azure-architect"),
 ) -> dict[str, Any]:
     """Drive one --plan run end-to-end.
 
+    S79: now runs under the canonical decorator chain
+    (@policy_gate → @scrub_pii → @guardrails) so the operator's request is
+    policy-gated, PII-scrubbed, and safety-checked at entry — closing the
+    tool-using-agent gap memorialized in [[ui-promise-audit-owed]]. The
+    `prompt` kwarg is the scrubbed text by the time the body runs; vault_id
+    is injected by @scrub_pii.
+
+    Caveat: tool_result blocks coming back from ARM API calls within the
+    5-turn loop are NOT re-scrubbed per turn. Per-turn protection of tool
+    args is S85 (Tier-3 health) scope; this session closes the entry gate.
+
     Returns a dict with: synthesis (str), turns (int), stop_reason (str),
-    run_id (str), tool_calls (list of summaries), cost_usd (float).
+    run_id (str), tool_calls (list of summaries), cost_usd (float),
+    episode_id (str), vault_id (str).
     """
     import uuid
     from anthropic import Anthropic
     import storage  # engine root must be on PYTHONPATH
 
+    # Body still reads operator_request for clarity; alias keeps the original
+    # message-build / synthesis-log lines unchanged.
+    operator_request = prompt
+
     _init_sdk()
     anthropic = Anthropic(api_key=_require_anthropic_key())
     run_id = f"plan-{uuid.uuid4().hex[:12]}"
+
+    # vault_id fallback mirrors call_llm: when SCRUBBER_ENABLED=false,
+    # @scrub_pii is a no-op and vault_id is empty. Synthesise one from the
+    # scrubbed prompt hash so trace/episode rows remain joinable.
+    if not vault_id:
+        vault_id = (
+            "azure-architect-plan_nopii_"
+            + hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
+        )
 
     dispatch = _build_tool_dispatch(subscription_id)
 
@@ -607,12 +637,63 @@ async def _run_plan(
         },
     })
 
+    # S79: persist the plan synthesis to Tier-2 episodic memory via the SDK,
+    # same pattern as call_llm. Outcome derived from terminal stop_reason:
+    # "end_turn" = model produced clean synthesis = success; turn_cap_reached
+    # = the agent exhausted its budget without finishing = failure; anything
+    # else (rare — pause_turn, max_tokens) = review.
+    if final_stop == "end_turn":
+        outcome = "success"
+    elif final_stop == "turn_cap_reached":
+        outcome = "failure"
+    else:
+        outcome = "review"
+
+    episode_id = ""
+    try:
+        from signallayer import Err, write_episode
+
+        result = write_episode(
+            workload_id=workload_id,
+            prompt=prompt,
+            response=final_text,
+            outcome=outcome,
+            metadata={
+                "agent": "azure-architect",
+                "surface": "plan",
+                "run_id": run_id,
+                "model": model,
+                "turns": turn + 1,
+                "stop_reason": final_stop,
+                "subscription_id": subscription_id,
+                "tool_calls": tool_call_summaries,
+                "vault_id": vault_id,
+            },
+        )
+        if isinstance(result, Err):
+            print(
+                f"[memory] write_episode SDK Err: status={result.status_code} "
+                f"{type(result.error).__name__}: {result.message}",
+                file=sys.stderr,
+            )
+        else:
+            episode_id = result.value
+            print(f"[memory] episode_id={episode_id} outcome={outcome}")
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[memory] write_episode FAILED: "
+            f"{type(exc).__module__}.{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+
     return {
         "run_id": run_id,
         "turns": turn + 1,
         "stop_reason": final_stop,
         "synthesis": final_text,
         "tool_calls": tool_call_summaries,
+        "vault_id": vault_id,
+        "episode_id": episode_id,
     }
 
 
@@ -727,7 +808,7 @@ if __name__ == "__main__":
         # Default Sonnet for --plan: cost compounds per turn (S60 lock).
         # --fast is a no-op here but harmless; --deep can force Opus.
         model = MODEL_DEEP if "--deep" in argv else MODEL_FAST
-        result = asyncio.run(_run_plan(request, subscription, model=model))
+        result = asyncio.run(_run_plan(prompt=request, subscription_id=subscription, model=model))
         print("\n" + "=" * 72)
         print(f"PLAN RUN {result['run_id']}  turns={result['turns']}  "
               f"stop={result['stop_reason']}  tools={len(result['tool_calls'])}")

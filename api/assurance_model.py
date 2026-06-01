@@ -33,7 +33,7 @@ from domain.assurance_providers import (
     have_real_credentials, simulate_response,
     list_audit, explain_provider_decision,
     real_llm_enabled, stream_anthropic_response,
-    stream_bedrock_response, ProviderType,
+    stream_bedrock_response, stream_local_response, ProviderType,
 )
 from domain.assurance_providers import _build_prompt  # S78: episodic memory write
 
@@ -509,11 +509,15 @@ async def _stream_live_assurance_response(
     """
     partial_text: list[str] = []
     final_usage: dict | None = None
-    # S75: pick the streaming generator by provider_type. Bedrock and Anthropic
-    # are the only two streaming-capable providers in the catalog today; future
-    # additions (Azure OpenAI, Foundry, etc.) extend this dispatch.
+    # S75/S79: pick the streaming generator by provider_type. All three
+    # generators share an identical yield contract so the audit + episode
+    # write below is provider-agnostic. Local-simulated is the internal-path
+    # demo provider for the S79 dual-path showcase — same governance chain,
+    # zero egress, zero cost.
     if decision.provider.provider_type == ProviderType.BEDROCK.value:
         stream_fn = stream_bedrock_response
+    elif decision.provider.provider_type == ProviderType.LOCAL.value:
+        stream_fn = stream_local_response
     else:
         stream_fn = stream_anthropic_response
     try:
