@@ -164,6 +164,16 @@ async def _lifespan(app: FastAPI):
     never die over demo data.
     """
     try:
+        # S77: Eager-import the bindings + subscribers modules BEFORE seeding so
+        # their module-load _init_schema() runs and creates the agent_bindings /
+        # agent_subscribers tables. seed_agents -> publish_version ->
+        # notify_subscribers_on_publish writes raw SQL touching agent_bindings
+        # without importing the bindings module itself; without this eager
+        # import the first cold-start hits psycopg2.errors.UndefinedTable.
+        # Both api-layer imports of these modules are lazy (inside functions),
+        # so dashboard.py is the only deterministic bootstrap point.
+        import domain.agent_bindings  # noqa: F401
+        import domain.agent_subscribers  # noqa: F401
         from domain.agents import seed_agents
         seeded = seed_agents()
         print(f"[startup] seed_agents: {len(seeded)} agents available")
