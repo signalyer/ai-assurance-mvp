@@ -198,10 +198,46 @@ async def stream_agent_run_with_chain_events(
         # policy sees operator_role='' and DENIES every run for any workload
         # that gates on role.
         operator_role = (user or {}).get("role", "")
+        policy_input: dict[str, Any] = {
+            "prompt": prompt,
+            "operator_role": operator_role,
+        }
+
+        # S82f-2 (ADR-004): inject persisted runtime-flag attestation for
+        # INT systems so the rego `required_true_flags` gate can evaluate.
+        # We read server-side state — the caller's request body cannot
+        # fabricate these. Absent / expired attestation surfaces as False
+        # values, producing the rego DENY path (workload_required_flag_not_set)
+        # which is the SOP-Phase-8 deny-on-expiry drill outcome.
+        #
+        # Scoped narrowly to vendor_risk INT system IDs to avoid changing
+        # the policy_input shape for any other workload. When a second
+        # system type adopts this pattern, broaden via AISystem.runtime_flags
+        # (already folded by domain.repository._fold) rather than a prefix
+        # match here.
+        if effective_system_id and effective_system_id.startswith("sys-vendor-risk-int-"):
+            try:
+                from storage import read_system_runtime_flags
+
+                flags = read_system_runtime_flags(effective_system_id)
+            except Exception as exc:  # noqa: BLE001
+                # Fail closed: if the overlay read fails for any reason
+                # (corrupt JSONL, unexpected schema), inject False values
+                # so the rego gate DENIES. Logged for operator visibility.
+                _log.warning(
+                    "runtime_flags read failed for system_id=%s: %s: %s",
+                    effective_system_id, type(exc).__name__, exc,
+                )
+                flags = None
+            policy_input["dlp_completed"] = bool(flags.dlp_completed) if flags else False
+            policy_input["network_egress_lock_engaged"] = (
+                bool(flags.network_egress_lock_engaged) if flags else False
+            )
+
         policy_result = policy_evaluate(
             workload_id=effective_system_id,
             action="llm_call",
-            input_data={"prompt": prompt, "operator_role": operator_role},
+            input_data=policy_input,
         )
         elapsed = _now_ms() - step_started
         decision_str = policy_result.decision.value if hasattr(policy_result.decision, "value") else str(policy_result.decision)
