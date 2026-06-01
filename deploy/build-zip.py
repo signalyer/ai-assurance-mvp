@@ -69,6 +69,15 @@ INCLUDE = [
     # any agents subdir are blocked by FORBID_FILES.
     "agents",
 ]
+
+# S82f-1c: the in-repo SDK package lives at sdk/signallayer/ but agent code
+# does `import signallayer` (top-level). Without this remap the engine
+# resolves at deploy time but the first vendor_risk run fails with
+# ModuleNotFoundError mid-chain (not at startup — agents are lazy-loaded).
+# Tuple form: (source-path-relative-to-repo, arcname-base-in-zip).
+INCLUDE_REMAP: list[tuple[str, str]] = [
+    ("sdk/signallayer", "signallayer"),
+]
 # Note: encryption.py (cryptography), run.py + ragas_evaluator.py (deepeval/ragas/garak)
 # intentionally NOT included — they pull heavy deps and aren't on the dashboard runtime path.
 # evaluator.py IS included; its deepeval import is now lazy.
@@ -133,6 +142,23 @@ def main() -> None:
                     if should_skip(rel):
                         continue
                     zf.write(abs_path, arcname=rel.as_posix())
+                    file_count += 1
+
+        # S82f-1c: remapped includes (source dir → renamed top-level dir in zip)
+        for src_rel, arc_base in INCLUDE_REMAP:
+            src = ROOT / src_rel
+            if not src.exists():
+                print(f"WARN: missing remap source (skipped): {src_rel}", file=sys.stderr)
+                continue
+            for dirpath, dirnames, filenames in os.walk(src):
+                dirnames[:] = [d for d in dirnames if d not in FORBID_DIRS]
+                for fname in filenames:
+                    abs_path = Path(dirpath) / fname
+                    rel = abs_path.relative_to(src)
+                    if should_skip(rel):
+                        continue
+                    arcname = (Path(arc_base) / rel).as_posix()
+                    zf.write(abs_path, arcname=arcname)
                     file_count += 1
 
         # Slim requirements -> requirements.txt in zip
