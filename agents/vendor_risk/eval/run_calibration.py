@@ -85,6 +85,39 @@ def _build_prompt(case: dict[str, Any]) -> str:
     )
 
 
+def _patch_int_runtime_flags(
+    *,
+    client: httpx.Client,
+    base_url: str,
+    system_id: str,
+    justification: str = "S82f-2 calibration",
+    timeout_s: float = 30.0,
+) -> dict[str, Any]:
+    """Attest dlp_completed + network_egress_lock_engaged on an INT system.
+
+    ADR-004 Option B: the INT calibration cannot fire without a server-side
+    attestation row — the rego `required_true_flags` gate DENIES every run.
+    This call lands the row (and the audit-chain `RUNTIME_FLAGS_ATTESTED`
+    event) before any INT fixture submits.
+
+    Role gate is `ciso` OR `tprm-analyst`; the calibration cookie's session
+    must carry one of those roles. Default TTL is the engine's
+    RUNTIME_FLAG_TTL_SECONDS (24h for calibration window).
+
+    Returns the parsed RuntimeFlagsOut payload (ai_system_id, runtime_flags,
+    ttl_seconds). Raises on non-2xx.
+    """
+    url = f"{base_url.rstrip('/')}/api/ai-systems/{system_id}/runtime-flags"
+    body = {
+        "dlp_completed": True,
+        "network_egress_lock_engaged": True,
+        "justification": justification,
+    }
+    resp = client.patch(url, json=body, timeout=timeout_s)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def _stream_run(
     *,
     client: httpx.Client,
@@ -251,6 +284,46 @@ def main() -> int:
 
     failures: list[str] = []
     with httpx.Client(cookies=jar) as client:
+        # ADR-004 §5 SOP Phase 8 drill (a): pre-flight attestation so INT
+        # fixtures clear the policy_gate. Skipped in dry-run; skipped when
+        # the case set has no INT fixtures. Idempotent — repeated PATCHes
+        # append history but the latest wins.
+        if not dry_run and any(s == "sys-vendor-risk-int-001" for _, s in cases):
+            try:
+                attested = _patch_int_runtime_flags(
+                    client=client,
+                    base_url=base_url,
+                    system_id="sys-vendor-risk-int-001",
+                    justification="S82f-2 calibration — drill (a)",
+                )
+                print(
+                    f"  PATCH'd runtime_flags for sys-vendor-risk-int-001: "
+                    f"attested_by={attested.get('runtime_flags', {}).get('attested_by')} "
+                    f"ttl_seconds={attested.get('ttl_seconds')}"
+                )
+                _append_transcript({
+                    "event": "runtime_flags_patched",
+                    "system_id": "sys-vendor-risk-int-001",
+                    "response": attested,
+                })
+            except httpx.HTTPStatusError as exc:
+                # Surface clearly and abort — a missing attestation means
+                # every INT fixture will DENY, which would corrupt the
+                # calibration log with workload_required_flag_not_set rows.
+                print(
+                    f"ERROR: runtime_flags PATCH failed with HTTP "
+                    f"{exc.response.status_code}: {exc.response.text}",
+                    file=sys.stderr,
+                )
+                return 2
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"ERROR: runtime_flags PATCH failed: "
+                    f"{type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+
         for case, system_id in cases:
             fid = case["id"]
             expected = case["expected_risk_tier"]

@@ -185,6 +185,11 @@ No phase below is single-role. The hand-offs are the SOP.
 - Eval suite runs on every deploy + on schedule. Score must hold above Phase 6 baseline.
 - Every chain event verified live: policy ALLOW/DENY behave; scrub redacts; guardrails fire; eval scores within thresholds; memory + audit rows joinable.
 - Failure-mode drills: kill switch engages; rate limits enforced; tool-loop turn cap; rego DENY short-circuits as designed.
+  - **Runtime-flag attestation drill (systems with rego `required_true_flags` — e.g. `sys-vendor-risk-int-001`):** three-step proof per ADR-004 §5.
+    1. (a) PATCH `/api/ai-systems/{id}/runtime-flags` with `dlp_completed=true, network_egress_lock_engaged=true` and a justification. Next agent run → `policy_gate: ALLOW`.
+    2. (b) Let TTL elapse (or PATCH a row with `expires_at` in the past). Next agent run → `policy_gate: DENY` with `policy_name=workload_required_flag_not_set`.
+    3. (c) PATCH again with valid flags + a fresh `expires_at`. Next agent run → `policy_gate: ALLOW` restored.
+    Record run_ids and outcomes for each step in the STAGED run log. Regression for this drill lives at `tests/test_runtime_flags_overlay.py::test_drill_*`.
 - Performance + cost baseline confirmed.
 - Shadow-traffic comparison: agent's recommendation vs human baseline (where available).
 
