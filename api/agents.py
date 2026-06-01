@@ -466,20 +466,40 @@ _DATA_DIR_AGENTS: Path = Path(os.environ.get("DATA_ROOT") or (Path(__file__).res
 _REPO_ROOT_AGENTS: Path = Path(__file__).resolve().parents[1]
 
 
-def _summarize_run(run: dict[str, Any]) -> dict[str, Any]:
+def _summarize_run(run: dict[str, Any], *, include_cases: bool = False) -> dict[str, Any]:
     """Reduce one suite-run record to its headline fields + per-system split.
 
     Source shape is per agents/<agent>/eval/run_eval.py; we re-aggregate the
     per-system pass counts here because the on-disk record only carries the
     overall pass_rate.
+
+    When include_cases=True we also return a `cases` array with one
+    compacted row per result (no metrics array — that's behind a per-case
+    drill, not the suite-level view).
     """
     by_system: dict[str, dict[str, int]] = {}
+    cases: list[dict[str, Any]] = []
     for case in run.get("results", []) or []:
         sys_key = case.get("system") or "unknown"
         bucket = by_system.setdefault(sys_key, {"total": 0, "passed": 0})
         bucket["total"] += 1
         if case.get("passed"):
             bucket["passed"] += 1
+        if include_cases:
+            cases.append({
+                "id": case.get("id"),
+                "label": case.get("label"),
+                "system": sys_key,
+                "category": case.get("category"),
+                "passed": bool(case.get("passed")),
+                "overall_score": case.get("overall_score"),
+                "failures": list(case.get("failures") or []),
+                "metric_failures": [
+                    {"name": m.get("name"), "score": m.get("score"), "details": m.get("details")}
+                    for m in (case.get("metrics") or [])
+                    if isinstance(m, dict) and not m.get("passed")
+                ],
+            })
     per_system = {
         sys_key: {
             **bucket,
@@ -487,7 +507,7 @@ def _summarize_run(run: dict[str, Any]) -> dict[str, Any]:
         }
         for sys_key, bucket in by_system.items()
     }
-    return {
+    out: dict[str, Any] = {
         "run_id": run.get("run_id"),
         "timestamp": run.get("timestamp"),
         "mode": run.get("mode"),
@@ -499,6 +519,9 @@ def _summarize_run(run: dict[str, Any]) -> dict[str, Any]:
         "datasets": run.get("datasets") or [],
         "per_system": per_system,
     }
+    if include_cases:
+        out["cases"] = cases
+    return out
 
 
 def _read_eval_runs_jsonl(agent_id: str) -> list[dict[str, Any]]:
@@ -553,6 +576,11 @@ def _read_baseline(agent_id: str) -> dict[str, Any] | None:
 async def get_agent_eval_summary(
     agent_id: str,
     history_limit: int = Query(20, ge=1, le=200, description="Most-recent N suite runs to return"),
+    include_cases: str = Query(
+        "none",
+        description="Include per-case results for 'baseline', 'latest', or 'both'. Default 'none'.",
+        pattern="^(none|baseline|latest|both)$",
+    ),
 ) -> dict[str, Any]:
     """Return the suite-level eval visibility payload for an agent.
 
@@ -591,11 +619,18 @@ async def get_agent_eval_summary(
 
     has_eval_suite = baseline_raw is not None or bool(runs_raw)
 
-    baseline = _summarize_run(baseline_raw) if baseline_raw else None
+    cases_in_baseline = include_cases in ("baseline", "both")
+    cases_in_latest = include_cases in ("latest", "both")
+
+    baseline = _summarize_run(baseline_raw, include_cases=cases_in_baseline) if baseline_raw else None
     history_all = [_summarize_run(r) for r in runs_raw]
     history_newest_first = list(reversed(history_all))
     history = history_newest_first[:history_limit]
-    latest_run = history_newest_first[0] if history_newest_first else None
+    latest_run = (
+        _summarize_run(runs_raw[-1], include_cases=cases_in_latest)
+        if cases_in_latest and runs_raw
+        else (history_newest_first[0] if history_newest_first else None)
+    )
 
     runs_passed = sum(1 for r in history_all if r.get("status") == "PASS")
     pass_rates = [r["pass_rate"] for r in history_all if isinstance(r.get("pass_rate"), (int, float))]

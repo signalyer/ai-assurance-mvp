@@ -14,6 +14,7 @@ import { AdversarialPage } from './pages/adversarial/AdversarialPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { AgentRunnerPage } from './pages/agent-runner/AgentRunnerPage';
 import { AgentRunsPage } from './pages/agent-runs/AgentRunsPage';
+import { AgentRunDetailPage } from './pages/agent-runs/AgentRunDetailPage';
 import { LoginPage } from './pages/login/LoginPage';
 import { AiSummaryDrawer } from './shared/components/AiSummaryDrawer';
 
@@ -36,6 +37,7 @@ export function App() {
         <Route path="/agent-library" component={AgentLibraryPage} />
         <Route path="/agent-runner" component={AgentRunnerPage} />
         <Route path="/agent-runs" component={AgentRunsPage} />
+        <Route path="/agent-runs/:run_id" component={AgentRunDetailPage} />
         <Route path="/memory" component={MemoryPage} />
         <Route path="/sdk" component={SdkQuickstartPage} />
         <Route path="/rtf" component={RtfRequestPage} />

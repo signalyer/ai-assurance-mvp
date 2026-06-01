@@ -1,5 +1,6 @@
 import { signal, computed } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
+import { Link } from 'wouter-preact';
 import { apiGet } from '../../shared/api/client';
 
 // S82f-2-extended item 4: history surface for past agent runs.
@@ -161,7 +162,9 @@ export function AgentRunsPage() {
                 <td>{r.user || '—'}</td>
                 <td style={{ color: outcomeColor(r.outcome), fontWeight: 600 }}>{r.outcome}</td>
                 <td>{fmtElapsed(r.total_elapsed_ms)}</td>
-                <td class="font-mono" style={{ fontSize: 10 }}>{r.run_id}</td>
+                <td class="font-mono" style={{ fontSize: 10 }}>
+                  <Link href={`/agent-runs/${encodeURIComponent(r.run_id)}`}>{r.run_id}</Link>
+                </td>
                 <td class="font-mono" style={{ fontSize: 10 }}>{r.audit_id || '—'}</td>
                 <td style={{ display: 'flex', gap: 6 }}>
                   {r.langfuse_url && (

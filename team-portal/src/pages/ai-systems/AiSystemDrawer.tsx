@@ -21,6 +21,21 @@ const editStatus = signal<EditStatus | null>(null);
 const evidenceRows = signal<EvidenceRow[]>([]);
 const evidenceError = signal<string | null>(null);
 
+// S82f-2-extended W3: runtime-flag attestation block (ADR-004 Option B).
+// Sourced from GET /api/v1/ai-systems/{id}/effective which folds the
+// system_runtime_flags.jsonl overlay onto the AISystem entity. Drives the
+// vendor_risk INT gate; the panel is hidden when the system has no flags
+// (default for every system except sys-vendor-risk-int-001 today).
+interface RuntimeFlagsView {
+  dlp_completed: boolean;
+  network_egress_lock_engaged: boolean;
+  attested_by: string;
+  attested_at: string;
+  expires_at: string;
+  justification: string;
+}
+const runtimeFlags = signal<RuntimeFlagsView | null>(null);
+
 // Edit modal calls back here on successful save so the drawer + status banner
 // reflect the new state without a page reload. S67: also refreshes evidence
 // list — operator may have added rows in the modal's Evidence section.
@@ -62,13 +77,18 @@ async function loadEvidence(id: string): Promise<void> {
   }
 }
 
+interface EffectiveSystem { runtime_flags?: RuntimeFlagsView | null; [k: string]: unknown; }
+interface EffectiveStateResp { ai_system: EffectiveSystem; [k: string]: unknown; }
+
 async function loadDetail(id: string): Promise<void> {
   drawerError.value = null;
   currentSystem.value = null;
   editStatus.value = null;
-  const [detail, info] = await Promise.all([
+  runtimeFlags.value = null;
+  const [detail, info, effective] = await Promise.all([
     apiGet<AiSystemDetail>(`/grc/ai-systems/${encodeURIComponent(id)}`),
     apiGet<{ status: EditStatus }>(`/ai-systems/${encodeURIComponent(id)}/edit-info`),
+    apiGet<EffectiveStateResp>(`/ai-systems/${encodeURIComponent(id)}/effective`),
   ]);
   if (detail.ok) {
     currentSystem.value = detail.data;
@@ -77,6 +97,10 @@ async function loadDetail(id: string): Promise<void> {
   }
   if (info.ok) editStatus.value = info.data.status;
   // edit-info is best-effort enrichment; silent on failure (banner is optional).
+  if (effective.ok) {
+    const flags = effective.data.ai_system?.runtime_flags ?? null;
+    runtimeFlags.value = flags;
+  }
 }
 
 export function AiSystemDrawer() {
@@ -148,6 +172,8 @@ function DrawerContent({ system: s }: { system: AiSystemDetail }) {
           <dt>Trust Boundary</dt><dd>{s.trust_boundaries}</dd>
         </dl>
       </div>
+
+      <RuntimeFlagsPanel />
 
       <div class="drawer-section">
         <div class="drawer-section-title">Data Classes Handled</div>
@@ -601,6 +627,70 @@ function EvidenceSection({ systemId }: { systemId: string }) {
           + {overflow} more — open Edit System → Evidence to see all.
         </div>
       )}
+    </div>
+  );
+}
+
+// S82f-2-extended W3: ADR-004 Option B runtime-flag attestation panel.
+// Only renders when the AI system has an attestation row in the overlay
+// (sys-vendor-risk-int-001 is the only one today). Quietly hides on
+// systems that never opted in — avoids a "Runtime Flags: none" line on
+// every drawer.
+function RuntimeFlagsPanel() {
+  const f = runtimeFlags.value;
+  if (!f) return null;
+
+  const now = Date.now();
+  const expiresMs = Date.parse(f.expires_at);
+  const expired = !Number.isFinite(expiresMs) ? false : expiresMs < now;
+  const remainingMin = !Number.isFinite(expiresMs)
+    ? null
+    : Math.max(0, Math.round((expiresMs - now) / 60000));
+  const both = f.dlp_completed && f.network_egress_lock_engaged;
+  const headlineColor = expired
+    ? 'var(--critical)'
+    : both
+      ? 'var(--pass)'
+      : 'var(--medium)';
+  const headlineLabel = expired
+    ? 'EXPIRED — INT gate denies until re-attested'
+    : both
+      ? 'ACTIVE — both flags asserted'
+      : 'PARTIAL — at least one flag is false';
+
+  return (
+    <div class="drawer-section">
+      <div class="drawer-section-title">
+        Runtime-Flag Attestation
+        <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-tertiary)' }}>
+          ADR-004 Option B
+        </span>
+      </div>
+      <div style={{ color: headlineColor, fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+        {headlineLabel}
+      </div>
+      <dl class="def-list">
+        <dt>dlp_completed</dt>
+        <dd style={{ color: f.dlp_completed ? 'var(--pass)' : 'var(--critical)', fontWeight: 600 }}>
+          {String(f.dlp_completed)}
+        </dd>
+        <dt>network_egress_lock_engaged</dt>
+        <dd style={{ color: f.network_egress_lock_engaged ? 'var(--pass)' : 'var(--critical)', fontWeight: 600 }}>
+          {String(f.network_egress_lock_engaged)}
+        </dd>
+        <dt>Attested by</dt><dd class="font-mono">{f.attested_by}</dd>
+        <dt>Attested at</dt><dd>{new Date(f.attested_at).toLocaleString()}</dd>
+        <dt>Expires at</dt>
+        <dd>
+          {new Date(f.expires_at).toLocaleString()}
+          {remainingMin != null && !expired && (
+            <span style={{ marginLeft: 6, color: 'var(--text-secondary)', fontSize: 11 }}>
+              ({remainingMin} min remaining)
+            </span>
+          )}
+        </dd>
+        <dt>Justification</dt><dd style={{ fontStyle: 'italic' }}>{f.justification}</dd>
+      </dl>
     </div>
   );
 }

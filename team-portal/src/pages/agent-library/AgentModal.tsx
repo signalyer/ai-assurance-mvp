@@ -8,6 +8,17 @@ type Tab = 'overview' | 'versions' | 'subscribers' | 'eval' | 'publish';
 // S82f-2-extended item 10 (E1): eval visibility. Shape mirrors
 // GET /api/agents/{id}/eval-summary in api/agents.py.
 interface EvalPerSystem { total: number; passed: number; pass_rate: number; }
+interface EvalMetricFailure { name?: string; score?: number; details?: string; }
+interface EvalCaseSummary {
+  id: string | null;
+  label: string | null;
+  system: string;
+  category: string | null;
+  passed: boolean;
+  overall_score: number | null;
+  failures: string[];
+  metric_failures: EvalMetricFailure[];
+}
 interface EvalRunSummary {
   run_id: string | null;
   timestamp: string | null;
@@ -19,6 +30,7 @@ interface EvalRunSummary {
   pass_rate: number | null;
   datasets: string[];
   per_system: Record<string, EvalPerSystem>;
+  cases?: EvalCaseSummary[];
 }
 interface EvalSummary {
   agent_id: string;
@@ -47,10 +59,13 @@ export function openAgent(id: string): void {
   evalError.value = null;
 }
 
-async function loadEvalSummary(id: string): Promise<void> {
+async function loadEvalSummary(id: string, includeCases: 'none' | 'baseline' | 'latest' | 'both' = 'baseline'): Promise<void> {
   evalLoading.value = true;
   evalError.value = null;
-  const r = await apiGet<EvalSummary>(`/agents/${encodeURIComponent(id)}/eval-summary`);
+  const r = await apiGet<EvalSummary>(
+    `/agents/${encodeURIComponent(id)}/eval-summary`,
+    { include_cases: includeCases },
+  );
   evalLoading.value = false;
   if (r.ok) evalSummary.value = r.data;
   else evalError.value = r.detail;
@@ -147,7 +162,7 @@ export function AgentModal() {
                 onClick={() => {
                   activeTab.value = t;
                   if (t === 'eval' && a && evalSummary.value === null && !evalLoading.value) {
-                    void loadEvalSummary(a.id);
+                    void loadEvalSummary(a.id, 'baseline');
                   }
                 }}
               >
@@ -308,6 +323,14 @@ function EvalTab() {
         {sum.trend.runs_passed}/{sum.trend.runs_total} runs PASS · mean pass
         rate {fmtPct(sum.trend.pass_rate_mean)}
       </div>
+      {baseline?.cases && baseline.cases.length > 0 && (
+        <section style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+            Baseline cases ({baseline.cases.length})
+          </div>
+          <CasesTable cases={baseline.cases} />
+        </section>
+      )}
       {sum.history.length > 0 && (
         <>
           <div style={{ marginTop: 16, fontWeight: 600, fontSize: 13 }}>
@@ -392,6 +415,53 @@ function RunCard({ title, run }: { title: string; run: EvalRunSummary | null }) 
 
 function fmtPct(x: number): string {
   return `${(x * 100).toFixed(1)}%`;
+}
+
+function CasesTable({ cases }: { cases: EvalCaseSummary[] }) {
+  return (
+    <table class="version-table">
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>System</th>
+          <th>Category</th>
+          <th>Passed</th>
+          <th>Score</th>
+          <th>Failures</th>
+        </tr>
+      </thead>
+      <tbody>
+        {cases.map((c) => (
+          <tr key={c.id ?? c.label ?? ''}>
+            <td>
+              <div class="font-mono" style={{ fontSize: 11 }}>{c.id ?? '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.label ?? ''}</div>
+            </td>
+            <td class="font-mono" style={{ fontSize: 11 }}>{c.system}</td>
+            <td>{c.category ?? '—'}</td>
+            <td style={{ color: c.passed ? 'var(--pass)' : 'var(--critical)', fontWeight: 600 }}>
+              {c.passed ? 'PASS' : 'FAIL'}
+            </td>
+            <td>{typeof c.overall_score === 'number' ? c.overall_score.toFixed(2) : '—'}</td>
+            <td>
+              {c.metric_failures.length === 0 ? (
+                <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
+                  {c.metric_failures.map((m, i) => (
+                    <li key={i}>
+                      <code>{m.name ?? '?'}</code>
+                      {m.details ? `: ${m.details}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 // Publish New Version form (#18). POST /agents/{id}/publish.
