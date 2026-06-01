@@ -522,6 +522,18 @@
             "title": "Evidence",
             "type": "array"
           },
+          "evidence_count": {
+            "default": 0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Types",
+            "type": "array"
+          },
           "findings": {
             "description": "Findings linked to this system (FindingDetailOut shape; loosely typed for V1 compat).",
             "items": {
@@ -678,6 +690,18 @@
           "domain": {
             "title": "Domain",
             "type": "string"
+          },
+          "evidence_count": {
+            "default": 0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "evidence_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Types",
+            "type": "array"
           },
           "human_oversight": {
             "title": "Human Oversight",
@@ -1123,136 +1147,6 @@
           }
         },
         "title": "AskRequest",
-        "type": "object"
-      },
-      "AskResponseOut": {
-        "additionalProperties": false,
-        "description": "Response from any /ask|/summarize-*|/explain-*|/draft-* endpoint.\n\nThese endpoints are LLM-triggering -- response carries GovernanceMetadata\nfor downstream CISO Console correlation (trace_id linkage to App Insights).",
-        "properties": {
-          "audit_event_id": {
-            "title": "Audit Event Id",
-            "type": "string"
-          },
-          "cost_estimate_usd": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Estimate Usd"
-          },
-          "governance": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GovernanceMetadata"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "policy_decision": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PolicyDecisionOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider"
-          },
-          "provider_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider Id"
-          },
-          "response": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Response"
-          },
-          "sanitized_redactions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Sanitized Redactions",
-            "type": "array"
-          },
-          "status": {
-            "description": "blocked | simulated | live",
-            "title": "Status",
-            "type": "string"
-          },
-          "streaming_complete": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Streaming Complete"
-          },
-          "token_estimate": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Token Estimate"
-          },
-          "use_case": {
-            "title": "Use Case",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "use_case",
-          "audit_event_id"
-        ],
-        "title": "AskResponseOut",
         "type": "object"
       },
       "AssessmentReportResponse": {
@@ -3615,6 +3509,80 @@
           "response_preview"
         ],
         "title": "EpisodeItem",
+        "type": "object"
+      },
+      "EpisodeWriteRequest": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/sdk/episodes``.\n\nMirrors ``domain.agent_memory.write_episode`` parameters 1:1. ``metadata``\nis a free-form dict per the underlying schema; ``vault_id`` / ``trace_id``\n/ ``eval_scores`` / ``guardrail_result`` are hot-extracted into dedicated\ncolumns by ``_write_episode_impl`` \u2014 the rest stays in the metadata JSONB.",
+        "properties": {
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "outcome": {
+            "description": "One of: success | failure | review",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "prompt": {
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "response": {
+            "minLength": 1,
+            "title": "Response",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          },
+          "workload_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Workload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workload_id",
+          "prompt",
+          "response",
+          "outcome"
+        ],
+        "title": "EpisodeWriteRequest",
+        "type": "object"
+      },
+      "EpisodeWriteResponse": {
+        "additionalProperties": false,
+        "description": "Body of a successful ``POST /api/sdk/episodes``.",
+        "properties": {
+          "episode_id": {
+            "title": "Episode Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id"
+        ],
+        "title": "EpisodeWriteResponse",
         "type": "object"
       },
       "EpisodesResponse": {
@@ -7869,13 +7837,6 @@
         "title": "PoliciesOut",
         "type": "object"
       },
-      "PolicyDecisionOut": {
-        "additionalProperties": true,
-        "description": "Loose typed wrapper for explain_provider_decision() output.\n\nThe underlying dispatch returns different shapes depending on which branch\nfires (blocked / re-check blocked / allowed). Keep extra='allow' for now;\ntighten when downstream Phase 1.5 plumbs the values cleanly.",
-        "properties": {},
-        "title": "PolicyDecisionOut",
-        "type": "object"
-      },
       "PolicyOut": {
         "additionalProperties": false,
         "description": "A governance policy / control requirement.",
@@ -8488,6 +8449,122 @@
           "results"
         ],
         "title": "RecallResponse",
+        "type": "object"
+      },
+      "RecentEvalMetric": {
+        "description": "Per-metric record as stored in data/evals.jsonl.\n\nskipped is the canonical signal for \"metric not applicable\" (no context /\nno ground truth). passed=false on a skipped row is a legacy V1 scoreboard\nartefact \u2014 consumers should check skipped first.",
+        "properties": {
+          "details": {
+            "default": "",
+            "title": "Details",
+            "type": "string"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "skipped": {
+            "default": false,
+            "title": "Skipped",
+            "type": "boolean"
+          }
+        },
+        "title": "RecentEvalMetric",
+        "type": "object"
+      },
+      "RecentEvalRow": {
+        "description": "One eval row as written by evaluator._append_eval_jsonl().",
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RecentEvalMetric"
+            },
+            "title": "Results",
+            "type": "object"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "workload_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload Id"
+          }
+        },
+        "required": [
+          "trace_id",
+          "timestamp"
+        ],
+        "title": "RecentEvalRow",
+        "type": "object"
+      },
+      "RecentEvalsResponse": {
+        "description": "Envelope for GET /api/evals/recent.",
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RecentEvalRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "default": "data/evals.jsonl",
+            "description": "Hard-coded so the UI can label the panel correctly when seed/overlay rows exist elsewhere.",
+            "title": "Source",
+            "type": "string"
+          },
+          "total": {
+            "description": "Number of rows returned (after filter + limit).",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows",
+          "total"
+        ],
+        "title": "RecentEvalsResponse",
         "type": "object"
       },
       "RefreshedEvalOut": {
@@ -12666,7 +12743,7 @@
     },
     "/api/assurance-model/ask": {
       "post": {
-        "description": "Generic 'Ask about this AI system' -- bound to SYSTEM_QA use case.",
+        "description": "Generic 'Ask about this AI system' -- bound to SYSTEM_QA use case.\n\nS72: streams real Anthropic deltas when REAL_LLM_ENABLED + creds present\n(same SSE contract as /explain-release).",
         "operationId": "assurance_ask",
         "requestBody": {
           "content": {
@@ -12682,9 +12759,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponseOut"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -12708,6 +12783,7 @@
     },
     "/api/assurance-model/draft-report": {
       "post": {
+        "description": "S72: streaming SSE \u2014 see /explain-release for the response shape.",
         "operationId": "assurance_draft_report",
         "requestBody": {
           "content": {
@@ -12723,9 +12799,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponseOut"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -12789,6 +12863,7 @@
     },
     "/api/assurance-model/summarize-evidence": {
       "post": {
+        "description": "S72: streaming SSE \u2014 see /explain-release for the response shape.",
         "operationId": "assurance_summarize_evidence",
         "requestBody": {
           "content": {
@@ -12804,9 +12879,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponseOut"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -12830,6 +12903,7 @@
     },
     "/api/assurance-model/summarize-finding": {
       "post": {
+        "description": "S72: streaming SSE \u2014 see /explain-release for the response shape.",
         "operationId": "assurance_summarize_finding",
         "requestBody": {
           "content": {
@@ -12845,9 +12919,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AskResponseOut"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -14057,6 +14129,70 @@
         "summary": "Update Domain",
         "tags": [
           "domains"
+        ]
+      }
+    },
+    "/api/evals/recent": {
+      "get": {
+        "description": "Return the most recent real eval rows from data/evals.jsonl.\n\nSource of truth is the JSONL file written inline by evaluate_response().\nNo seed/overlay fallback \u2014 empty list when no real runs have happened.\nThat's deliberate: the team-portal Evals \"Recent live runs\" panel must\nNOT lie about provenance.",
+        "operationId": "evals_recent_get",
+        "parameters": [
+          {
+            "description": "Filter to one workload (matches evaluator's workload_id field).",
+            "in": "query",
+            "name": "workload_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one workload (matches evaluator's workload_id field).",
+              "title": "Workload Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentEvalsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evals Recent",
+        "tags": [
+          "evaluate"
         ]
       }
     },
@@ -18801,6 +18937,48 @@
         "summary": "Status",
         "tags": [
           "sdk-keys"
+        ]
+      }
+    },
+    "/api/sdk/episodes": {
+      "post": {
+        "description": "Persist one scrubbed episode on behalf of an SDK caller.\n\nReturns 201 + episode_id on success, 400 on validation/vault errors,\n500 on DB failure. Auth is enforced upstream by HMACAuthMiddleware.",
+        "operationId": "sdk_episodes_write",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpisodeWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sdk Write Episode",
+        "tags": [
+          "sdk-episodes"
         ]
       }
     },
