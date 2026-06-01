@@ -191,10 +191,17 @@ async def stream_agent_run_with_chain_events(
     try:
         from domain.policy_engine import evaluate as policy_evaluate, Decision
 
+        # S82f-1c: propagate operator_role so workload rego policies that
+        # use `required_operator_roles` (e.g. vendor-risk-{ext,int}.rego) can
+        # evaluate. The role lives on the user dict resolved from the signed
+        # session cookie in api.agent_runner._resolve_user. Without this the
+        # policy sees operator_role='' and DENIES every run for any workload
+        # that gates on role.
+        operator_role = (user or {}).get("role", "")
         policy_result = policy_evaluate(
             workload_id=effective_system_id,
             action="llm_call",
-            input_data={"prompt": prompt},
+            input_data={"prompt": prompt, "operator_role": operator_role},
         )
         elapsed = _now_ms() - step_started
         decision_str = policy_result.decision.value if hasattr(policy_result.decision, "value") else str(policy_result.decision)
