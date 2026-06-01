@@ -66,6 +66,20 @@ Engine sha: `f53fefb`. SPA bundle: `index-BLwvrRIV.js`. Tree clean.
    on the CLI. Drop a swa-cli.config.json in team-portal/ to make
    `swa deploy ./dist --env production` work bare.
 
+10. **vendor_risk eval invisible in the SPA Evals page.** Two
+    incompatible eval schemas in the codebase: `data/evals.jsonl`
+    (per-LLM-call rows, what `/api/evals/recent` reads) vs
+    `data/vendor_risk_eval_runs.jsonl` (suite-level aggregates, what
+    `run_eval.py` writes). Same class of gap as runtime-vs-domain agent
+    registry. **Recommended fix: E1** — new
+    `GET /api/agents/{id}/eval-summary` endpoint reading
+    `vendor_risk_eval_runs.jsonl` + `baseline.json`, returning
+    `{baseline, last_run, pass_rate, per_case_results}`. Render in an
+    "Eval" tab on the Agent Library detail modal. Schema-honest. ~0.5
+    session. Alternatives: E2 (schema bridge — write per-case rows to
+    `evals.jsonl` with workload_id, conflates shapes) or E3 (static
+    markdown render of iteration-log + baseline + calibration log).
+
 ## Key files
 
 - `docs/sop-vendor-risk/DEMO-PROMPTS.md` — 8 copy-paste demo prompts
