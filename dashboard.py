@@ -200,6 +200,20 @@ async def _lifespan(app: FastAPI):
         print(f"[startup] vendor_risk bootstrap: {vr_results}")
     except Exception as exc:  # noqa: BLE001
         print(f"[startup] vendor_risk bootstrap failed (non-fatal): {exc}")
+
+    # S82f: SOP Phase 7 — vendor_risk catalog row + SDK keys + DESIGN→STAGED.
+    # Order matters: this runs AFTER ensure_vendor_risk_systems because the
+    # catalog binding + status promotion both depend on the AISystem rows
+    # existing. Synthetic actor "system:bootstrap" is documented in
+    # domain.ai_system_edit.transition_runtime_status.
+    try:
+        from agents.vendor_risk.onboarding.sdk_provisioning import (
+            ensure_vendor_risk_provisioning,
+        )
+        prov_results = await ensure_vendor_risk_provisioning()
+        print(f"[startup] vendor_risk provisioning: {prov_results}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] vendor_risk provisioning failed (non-fatal): {exc}")
     yield
     # No shutdown work today.
 

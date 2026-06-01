@@ -431,14 +431,28 @@ async def stream_agent_run_with_chain_events(
     # store and the SPA can deep-link to it. Langfuse + AppInsights URLs are
     # nullable per LBD-3 in the plan — S83 fills them.
     audit_id = "aud-" + hashlib.sha256(run_id.encode()).hexdigest()[:12]
+    # S82f-1: telemetry deep-links. operation_id derives from the current
+    # OTel trace context (works today). Langfuse URL stays None until S83
+    # wires the real Langfuse trace_id through the chain — the builder is
+    # in place so that's a one-line fix at the call site, not a new module.
+    from domain.telemetry_links import (
+        appinsights_operation_id_from_context,
+        build_appinsights_url,
+        build_langfuse_url,
+    )
+    operation_id = appinsights_operation_id_from_context()
+    appinsights_url = build_appinsights_url(operation_id)
+    langfuse_trace_id = ""  # S83 — wire real Langfuse trace_id
+    langfuse_url = build_langfuse_url(langfuse_trace_id)
     yield {
         "event": "audit",
         "run_id": run_id,
         "audit_id": audit_id,
         "decision": "LIVE" if provider_id == "anthropic" else "SIMULATED",
-        "trace_id": "",  # S82 wires real Langfuse trace_id
-        "langfuse_url": None,  # S83
-        "appinsights_url": None,  # S83
+        "trace_id": langfuse_trace_id,
+        "operation_id": operation_id,
+        "langfuse_url": langfuse_url,
+        "appinsights_url": appinsights_url,
         "elapsed_ms": 0,
     }
 

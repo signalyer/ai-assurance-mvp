@@ -488,6 +488,149 @@ def decide(
 
 # ---------- Status for a system --------------------------------------------
 
+# ---------- Runtime-status lifecycle (governed transitions) ----------------
+#
+# `runtime_status` is in LOCKED_FIELDS — it cannot be mutated via the soft /
+# material edit flow above. The intent is that runtime_status moves through
+# a small, governed lattice (DESIGN → STAGED → PILOT → PRODUCTION → DECOMMISSIONED)
+# and every transition is a first-class audit event, never a free write.
+#
+# Storage: data/ai_system_lifecycle.jsonl (append-only, mirrors the revisions
+# store). repository.get_ai_system / list_ai_systems replay this log on read
+# to overlay the latest runtime_status onto the base AISystem.
+#
+# The synthetic actor "system:bootstrap" is a documented first-class value
+# (NOT a back door). Future auditors can grep for "system:*" to find every
+# transition the platform made on its own behalf.
+
+LIFECYCLE_FILE = DATA_DIR / "ai_system_lifecycle.jsonl"
+
+# Allowed transitions matrix. Adding STAGED→PILOT or PILOT→PRODUCTION later
+# means appending tuples here — no API change required.
+ALLOWED_RUNTIME_TRANSITIONS: frozenset[tuple[str, str]] = frozenset({
+    ("DESIGN", "STAGED"),
+    ("DESIGN", "DEV"),
+    ("DEV", "STAGED"),
+    ("STAGED", "PILOT"),
+    ("PILOT", "PRODUCTION"),
+    ("PRODUCTION", "DECOMMISSIONED"),
+    ("PILOT", "DECOMMISSIONED"),
+    ("STAGED", "DECOMMISSIONED"),
+})
+
+
+def _append_lifecycle(rec: dict) -> None:
+    with LIFECYCLE_FILE.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+
+
+def lifecycle_events_for_system(ai_system_id: str) -> list[dict]:
+    """All lifecycle events for a system, oldest first."""
+    if not LIFECYCLE_FILE.exists():
+        return []
+    out: list[dict] = []
+    with LIFECYCLE_FILE.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("ai_system_id") == ai_system_id:
+                out.append(rec)
+    return out
+
+
+def current_runtime_status(ai_system_id: str, base_status: str) -> str:
+    """Replay lifecycle events for this system and return the latest status.
+
+    base_status is the runtime_status read from ai_systems.jsonl (or the seed
+    AISystem). If no lifecycle events exist, base_status is returned unchanged.
+    """
+    latest = base_status
+    for ev in lifecycle_events_for_system(ai_system_id):
+        if ev.get("event_type") == "RUNTIME_STATUS_CHANGED":
+            to_status = ev.get("to_status")
+            if isinstance(to_status, str):
+                latest = to_status
+    return latest
+
+
+def transition_runtime_status(
+    *,
+    ai_system_id: str,
+    base_status: str,
+    to_status: str,
+    actor: str,
+    reason: str,
+) -> tuple[Optional[dict], list[str]]:
+    """Append a governed RUNTIME_STATUS_CHANGED event.
+
+    Args:
+        ai_system_id: Target system id.
+        base_status:  runtime_status from the base AISystem record.
+        to_status:    Destination runtime status (must form an allowed pair
+                      with the current effective status).
+        actor:        User id, or "system:bootstrap" / "system:<name>" for
+                      platform-initiated transitions.
+        reason:       Free-text rationale recorded in the audit event.
+
+    Returns:
+        (event_record, errors). event_record is None on validation failure.
+    """
+    errors: list[str] = []
+    if not ai_system_id:
+        errors.append("ai_system_id is required")
+    if not isinstance(to_status, str) or not to_status:
+        errors.append("to_status is required")
+    if not isinstance(actor, str) or not actor.strip():
+        errors.append("actor is required")
+    if not isinstance(reason, str) or not reason.strip():
+        errors.append("reason is required")
+    if errors:
+        return None, errors
+
+    from_status = current_runtime_status(ai_system_id, base_status)
+    if from_status == to_status:
+        return None, [f"no-op: already {to_status}"]
+    if (from_status, to_status) not in ALLOWED_RUNTIME_TRANSITIONS:
+        return None, [f"transition {from_status}->{to_status} is not allowed"]
+
+    event = {
+        "event_id": f"lc-{uuid.uuid4().hex[:12]}",
+        "ai_system_id": ai_system_id,
+        "event_type": "RUNTIME_STATUS_CHANGED",
+        "from_status": from_status,
+        "to_status": to_status,
+        "actor": actor.strip(),
+        "reason": reason.strip(),
+        "occurred_at": _iso_now(),
+    }
+    _append_lifecycle(event)
+    return event, []
+
+
+def promote_to_staged(
+    *,
+    ai_system_id: str,
+    base_status: str,
+    actor: str,
+    reason: str,
+) -> tuple[Optional[dict], list[str]]:
+    """Convenience wrapper: transition the system to STAGED.
+
+    Thin shim around `transition_runtime_status` for the common Phase-7
+    bootstrap path. The general function is preferred for new code that
+    might target other destinations.
+    """
+    return transition_runtime_status(
+        ai_system_id=ai_system_id,
+        base_status=base_status,
+        to_status="STAGED",
+        actor=actor,
+        reason=reason,
+    )
+
+
 def status_for_system(ai_system_id: str) -> dict:
     """Compute high-level edit status for a system.
 

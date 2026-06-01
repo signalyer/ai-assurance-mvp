@@ -390,6 +390,11 @@
             "title": "Default System Id",
             "type": "string"
           },
+          "demo_only": {
+            "default": false,
+            "title": "Demo Only",
+            "type": "boolean"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -16039,8 +16044,26 @@
     },
     "/api/grc/intake/submit": {
       "post": {
-        "description": "Persist the AI System, create initial assessment + release gate checks.\n\nPipeline:\n  1. Classify inherent risk\n  2. Materialize AISystem\n  3. Resolve required controls (P0/P1)\n  4. Create initial PRE_RELEASE Assessment\n  5. Generate one ReleaseGate per required control\n  6. Persist all three to JSONL\n  7. Return the new system id + redirect target",
+        "description": "Persist the AI System, create initial assessment + release gate checks.\n\nPipeline:\n  1. Classify inherent risk\n  2. Materialize AISystem\n  3. Resolve required controls (P0/P1)\n  4. Create initial PRE_RELEASE Assessment\n  5. Generate one ReleaseGate per required control\n  6. Persist all three to JSONL\n  7. Return the new system id + redirect target\n\n``system_id_override`` is for programmatic bootstrap callers (e.g.\nagents/vendor_risk/onboarding/bootstrap.py) that need deterministic\nsystem IDs across cold starts so SOP audit references resolve. The\nHTTP endpoint never sets it \u2014 bound via FastAPI to the request body\nonly, no query/header path. Keyword-only to make accidental positional\nmisuse impossible.",
         "operationId": "intake_submit",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "system_id_override",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "System Id Override"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from domain.models import (
     AISystem, Assessment, ReleaseGate, Finding, Evidence,
-    EvalResult, RuntimeEvent, FindingStatus,
+    EvalResult, RuntimeEvent, FindingStatus, RuntimeStatus,
 )
 from domain import seed
 
@@ -37,19 +37,43 @@ def _read_jsonl(path: Path) -> list[dict]:
     return out
 
 
+def _fold_runtime_status(sys: AISystem) -> AISystem:
+    """Overlay governed runtime_status transitions onto the base AISystem.
+
+    `runtime_status` is in LOCKED_FIELDS of the edit flow — the only legal
+    mutator is `domain.ai_system_edit.transition_runtime_status`, which
+    appends RUNTIME_STATUS_CHANGED events to ai_system_lifecycle.jsonl.
+    This helper replays that log so callers see the current effective
+    status without mutating ai_systems.jsonl (which is intake-only).
+    """
+    # Lazy import to avoid circular dependency at module load.
+    from domain.ai_system_edit import current_runtime_status
+    effective_str = current_runtime_status(sys.id, sys.runtime_status.value)
+    if effective_str == sys.runtime_status.value:
+        return sys
+    try:
+        effective = RuntimeStatus(effective_str)
+    except ValueError:
+        # Defensive: unknown status string in the lifecycle log → keep base.
+        # Logged at debug because this is recoverable; the operator should
+        # see the malformed event in the lifecycle file directly.
+        return sys
+    return sys.model_copy(update={"runtime_status": effective})
+
+
 def list_ai_systems() -> list[AISystem]:
-    """All AI systems — seed plus intake-created."""
+    """All AI systems — seed plus intake-created, with runtime_status folded."""
     intake = [AISystem.model_validate(r) for r in _read_jsonl(SYSTEMS_FILE)]
-    return list(seed.AI_SYSTEMS) + intake
+    return [_fold_runtime_status(s) for s in (list(seed.AI_SYSTEMS) + intake)]
 
 
 def get_ai_system(system_id: str) -> AISystem | None:
     for s in seed.AI_SYSTEMS:
         if s.id == system_id:
-            return s
+            return _fold_runtime_status(s)
     for r in _read_jsonl(SYSTEMS_FILE):
         if r.get("id") == system_id:
-            return AISystem.model_validate(r)
+            return _fold_runtime_status(AISystem.model_validate(r))
     return None
 
 

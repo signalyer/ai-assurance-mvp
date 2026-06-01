@@ -94,6 +94,84 @@ TURN_CAP: int = 6
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 
+# --- Network-egress assertion (defense-in-depth for the INT system) ---------
+#
+# The INT vendor_risk system (sys-vendor-risk-int-001) is contractually
+# "internal-only — no network egress" (see intake_payload_int.json). This
+# context manager is the runtime tripwire: any outbound socket.connect() to
+# a non-loopback address raises PermissionError. It is NOT a sandbox — a
+# determined caller can monkey-patch around it — but it catches accidental
+# egress (a tool importing `requests`, a misconfigured provider, a test
+# fixture pulling from S3) the way assert statements catch logic bugs.
+#
+# Threading caveat: this patches `socket.socket.connect` at the class level,
+# which means CONCURRENT runs across different event-loop tasks will share
+# the patched state. Safe for the current dispatcher (one chain at a time
+# per FastAPI request worker); unsafe if the runner ever fans out parallel
+# chains. Move to threading.local or a per-loop wrapper before that change.
+#
+# S82f-1 lands the primitive only. Wiring it into the INT execution path
+# (which today still calls Anthropic — a contradiction with "no egress")
+# is S82f-2 work alongside the local-provider swap. See
+# docs/sop-vendor-risk/00-intent.md.
+import contextlib
+import socket as _socket_mod
+from typing import Iterator
+
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({
+    "127.0.0.1", "localhost", "::1", "0.0.0.0",
+})
+
+
+def _is_loopback(address: Any) -> bool:
+    """Best-effort loopback check on a socket address tuple."""
+    if not isinstance(address, tuple) or not address:
+        return False
+    host = address[0]
+    if not isinstance(host, str):
+        return False
+    if host in _LOOPBACK_HOSTS:
+        return True
+    # IPv4 loopback range 127.0.0.0/8
+    if host.startswith("127."):
+        return True
+    return False
+
+
+@contextlib.contextmanager
+def assert_no_egress() -> Iterator[list[str]]:
+    """Block non-loopback socket.connect() calls for the duration of the block.
+
+    Yields a list that accumulates blocked address strings — empty on a
+    clean run. Raises PermissionError immediately on the first attempted
+    egress so the offending call site surfaces in the stack trace.
+
+    Usage::
+
+        with assert_no_egress() as blocked:
+            run_internal_only_inference(...)
+        assert not blocked  # belt-and-suspenders; the raise already fired
+    """
+    original_connect = _socket_mod.socket.connect
+    blocked: list[str] = []
+
+    def _guarded_connect(self: _socket_mod.socket, address: Any, *a: Any, **kw: Any) -> Any:
+        if _is_loopback(address):
+            return original_connect(self, address, *a, **kw)
+        blocked.append(repr(address))
+        raise PermissionError(
+            f"vendor_risk INT: outbound network egress blocked to {address!r}. "
+            "The internal-only system contract forbids non-loopback connections; "
+            "see agents/vendor_risk/agent.py::assert_no_egress."
+        )
+
+    _socket_mod.socket.connect = _guarded_connect  # type: ignore[method-assign]
+    try:
+        yield blocked
+    finally:
+        _socket_mod.socket.connect = original_connect  # type: ignore[method-assign]
+
+
 def _init_sdk() -> None:
     """Initialise SignalLayer SDK. Used by decorated surfaces only."""
     required = ("SL_API_KEY", "SL_KEY_ID", "SL_API_BASE_URL")
