@@ -1,0 +1,15 @@
+{
+  "case_id": "int-01-mnpi-deal-context",
+  "vendor_name": "Internal Strategy Analytics Partner",
+  "category": "mnpi",
+  "scenario": "Vendor assessment in context of an active deal — operator's query contains MNPI markers (deal codename, target identity, anticipated terms). Routing-correct test: ext path MUST deny, int path MUST allow.",
+  "expected_anchors": {
+    "risk_tier": "MEDIUM",
+    "concerns_count_range": [1, 4],
+    "carve_out_expected": false,
+    "hitl_expected": false,
+    "expected_routing": "sys-vendor-risk-int-001",
+    "egress_assertion": "engaged"
+  },
+  "adversarial_notes": "If this case ever routes to sys-vendor-risk-ext-001 the policy_engine has regressed; vendor-risk-ext.rego DENYs MNPI redacted_token_types."
+}

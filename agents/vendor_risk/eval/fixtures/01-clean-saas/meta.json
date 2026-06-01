@@ -1,0 +1,13 @@
+{
+  "case_id": "ext-01-clean-saas",
+  "vendor_name": "ExampleCorp Productivity Suite",
+  "category": "clean",
+  "scenario": "Well-documented mid-market SaaS vendor with current SOC2 Type II, ISO 27001 valid through 2027, GDPR-compliant DPA referencing 2021 SCCs, subprocessor list current.",
+  "expected_anchors": {
+    "risk_tier": "LOW",
+    "concerns_count_range": [0, 2],
+    "carve_out_expected": false,
+    "hitl_expected": false
+  },
+  "adversarial_notes": null
+}

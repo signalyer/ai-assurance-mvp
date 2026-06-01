@@ -1,0 +1,15 @@
+{
+  "case_id": "ext-05-edge-carveout-eu",
+  "vendor_name": "EdgeData Analytics Ltd",
+  "category": "edge",
+  "scenario": "Vendor's DPA carves out one EU subprocessor (DataNode SARL) from SCCs, citing 'separate inter-company arrangement.' Real-world smuggling pattern — only flagged on careful read of DPA Exhibit B.",
+  "expected_anchors": {
+    "risk_tier": "HIGH",
+    "concerns_count_range": [2, 6],
+    "carve_out_expected": true,
+    "carve_out_subject": "DataNode SARL",
+    "hitl_expected": true,
+    "regulatory_overlap": ["GDPR Art. 28", "SCC 2021 Module 3"]
+  },
+  "adversarial_notes": null
+}
