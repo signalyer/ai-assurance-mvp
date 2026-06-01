@@ -119,6 +119,78 @@ expecting 0600; S82f-1b verification found the actual mode was 0777.
 See [[appservice-home-permissions]] and the deploy-side mirror
 [[appservice-deploy-python]].
 
+### 2026-06-01 — Deferred-execution imports are still deploy dependencies
+A module imported only inside lazy-loaded code (e.g. an agent the registry
+loads on demand) is still a deploy-time dependency. The fact that no
+eager import touches it means the failure surfaces on first invocation,
+not at startup — `/api/health` will report `status=ready` while the
+chain detonates with `ModuleNotFoundError` on the first real call.
+
+S82f-1c: `sdk/signallayer/` was never in `deploy/build-zip.py::INCLUDE`.
+`agents/vendor_risk/agent.py` does `import signallayer` at module scope
+but the agent is lazy-loaded by `agents._registry.load_agent_inner`, so
+the missing import only fired when the first calibration run executed.
+
+This is the **deferred-execution variant** of the 2026-06-01 eager-import
+rule. Any import touched by ANY agent or lazily-loaded domain module
+must be in `INCLUDE` (or `INCLUDE_REMAP` if the source path differs from
+the import name). The calibration / first-invocation pass IS the
+integration test for this.
+
+### 2026-06-01 — Operator role must thread from session cookie to policy_engine
+`domain/agent_runner.py::stream_agent_run_with_chain_events` had the user
+dict from `middleware.auth._read_cookie` but the `policy_evaluate` call
+only passed `{prompt}`. Any rego policy gating on `required_operator_roles`
+saw `operator_role=''` and DENIED every call.
+
+S82f-1c: every vendor_risk run via agent-runner returned
+`policy_gate: DENY workload_operator_role_not_allowed` until the
+dispatcher was patched to forward `operator_role` from the user dict.
+
+Rule: any new field on the session cookie that a policy could use MUST
+be added to `policy_evaluate(input_data=...)` at the same time. Grep
+`policy_evaluate(` and verify every call site forwards every
+auth-derived field a policy might test. Policy-side mirror of
+[[signed-token-refresh-must-preserve-every-payload-field]].
+
+### 2026-06-01 — Persistence paths must resolve via DATA_ROOT
+Any new JSONL store added under `data/` MUST resolve its path through
+the canonical pattern from `domain/audit_chain.py`:
+
+```python
+_DATA_DIR: Path = Path(os.environ.get("DATA_ROOT") or
+                       (Path(__file__).resolve().parents[1] / "data"))
+```
+
+Bare `Path("data") / "x.jsonl"` resolves against the engine's cwd. On
+App Service the writable data dir is `/home/data/` (via `DATA_ROOT`),
+NOT the cwd. The bare-Path version silently writes to (or fails to
+write to) some path nobody reads. If wrapped in best-effort try/except
+(as persistence-side code often is) the failure surfaces as
+"feature works locally, returns empty in prod" with no error in logs.
+
+S82f-1c: `/api/agent-runs` returned `count:0` for hours of calibration
+runs until commit `c19d455` aligned the path resolution.
+
+Rule: grep `Path("data")` before any commit that adds persistence.
+Should be zero hits outside canonical `_DATA_DIR` declarations.
+
+### 2026-06-01 — INT vendor_risk policy gate already enforces no-egress
+S82f-1b handoff predicted "INT runs WILL make outbound Anthropic calls
+— `assert_no_egress()` exists but isn't wired into the execution path."
+S82f-1c calibration found the OPPOSITE: all 8 INT runs DENIED at
+`policy_gate` on `workload_required_flag_not_set` (rule requires
+`dlp_completed` + `network_egress_lock_engaged`), so no LLM call fired.
+
+The rego gate enforces the INT-no-egress contract at the policy
+boundary even without the runtime `assert_no_egress()` wired on the
+execution path. The runtime assertion remains valuable as
+defense-in-depth, but it's not the primary control.
+
+Rule: when documenting a "this isn't wired yet" caveat, audit whether
+another control already covers the same invariant. The defense-in-depth
+layer might already exist.
+
 ## Workflow + token bands
 Operating rules (workflow classification, token bands, review/stop/cost
 control) live in global `~/.claude/CLAUDE.md` under SESSION MANAGEMENT.
