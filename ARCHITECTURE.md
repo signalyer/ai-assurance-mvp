@@ -225,6 +225,27 @@ Live tips after S72: engine commit `c05a566` deployed to `app-aigovern-dev`; tea
 
 **Test status at end of S74:** All 3 touched test files green — 61 passed, 1 skipped (POSIX-only), 0 failed. Full prior suite was 350/2 failed; both prior failures (`test_agents_unit::test_08`, `test_session10_hardening::test_rtf_index_sidecar_used`) now resolved. Full-suite re-run truncates summary due to `[[pytest-py314-capture-teardown]]`; dots-only output confirms green.
 
+**S74b — Pre-AWS carryover bundle (Bedrock blocked on AWS subscription provisioning; squeezing in everything that doesn't need it):**
+- **datetime.utcnow() sweep** — 61 occurrences across 24 files mechanically replaced with `datetime.now(timezone.utc)`. Wire format preserved via `.isoformat().replace("+00:00", "Z")` so JSONL consumers expecting trailing `Z` don't break. Eliminated 64 of 66 `DeprecationWarning` in the test suite; remaining 2 are unrelated (FastAPI `@app.on_event` + FastAPI-internal). Python 3.15 will REMOVE `datetime.utcnow()` — this is forward-looking.
+- **FastAPI lifespan migration** — `dashboard.py:380` `@app.on_event("startup")` → `@asynccontextmanager` lifespan function passed to `FastAPI(lifespan=...)`. Behavior preserved (same seed_agents call, same swallowed-failure semantics). Kills the last meaningful `DeprecationWarning`; full suite now reports **0 warnings**.
+- **Anthropic-pin audit (S75 prep)** — authoritative grep across both SPAs: **9 pins across 5 files** (not 8 as S73 plan estimated; AiSystemDrawer has 5 because the original S69 `FailedGateRow.onExplain` pin was inlined into the drawer in a later session). Authoritative file:line list lives in `docs/plans/SESSION-75-bedrock-streaming-when-aws-ready.md`. S75 deletes all 9 after the Bedrock adapter is proven live.
+- **UI-promise audit (overdue per `[[ui-promise-audit-owed]]`)** — full sweep of both SPAs for action verbs with no/wrong server binding. Result: **1 HIGH finding** (`ciso-console/src/pages/reports/ReportsPage.tsx:79`: `triggerDownload` used `credentials: 'same-origin'` on cross-subdomain fetch; F-019 shape) + clean elsewhere. All other operator verbs are correctly wired to existing endpoints via shared `apiClient`. The existing rule `[[raw-fetch-drifts-from-shared-client]]` would have caught this at write time if applied; that's a process win, not a new rule.
+- **ReportsPage cookie fix** — `same-origin` → `include` on `triggerDownload`. CISO Console at `ciso.aigovern.sandboxhub.co` and engine at apex; without `include` the session cookie silently drops cross-origin and download 401s in prod. Single-line fix; bundle deployed.
+- **PortfolioPage evidence prefetch** — engine `AiSystemSummaryOut` gains `evidence_count: int` + `evidence_types: list[str]` (both default 0/[]); `list_ai_systems` enriches every row by calling `domain.repository.evidence_for(system_id)` per row (O(systems × file-size); flagged for revisit if portfolio scales >25). SPA `openDraftReport` now builds a real `evidence_summary` string ("N evidence records on file; types: A, B, C") matching team-portal AiSystemDrawer's grounding shape, replacing the S73 placeholder. Closes the S73 "degraded grounding" caveat for CISO Console Draft Report.
+
+**S74b deploy ledger:**
+- Engine: 3 pushes to `main` triggered `.github/workflows/deploy.yml` — `c071286` (S74 carryover) + `9161107` (lifespan) + `a9b0122` (evidence prefetch). All deploys green (exit 0); both contract-tests runs green.
+- ciso-console SPA: 2 manual `swa deploy` cycles — `index-DsSxQhUZ.js` (S74 dead-var fix) then `index-Bw_jV-dl.js` (ReportsPage cookie fix + PortfolioPage prefetch). Live bundle-hash + HTTP 200 verified on `gov.aigovern.sandboxhub.co`.
+- team-portal SPA: unchanged this session.
+
+**Open issues at end of S74b:**
+- **AWS subscription provisioning** — gating S75 Primary. User has confirmed they're working on it. Once IAM keys + Bedrock model access for `anthropic.claude-3-5-sonnet-20241022-v2:0` are ready, S75 starts.
+- Anthropic-pin still in place on all 9 streaming buttons. Drops in S75 after Bedrock adapter proves live via `/explain-release`.
+- dev Postgres admin password rotation deferred — needs user to provide a password. ~15 min S75 prep step (or bundle with the AWS key set call).
+- 2 remaining `DeprecationWarning` in test suite are FastAPI-internal — not actionable until next FastAPI upgrade.
+
+**Test status at end of S74b:** 354 passed / 0 failed / 8 skipped / **0 deprecation warnings** (down from 66 entering S74).
+
 **/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
 
 ## Files — Built (2026-05-21, Session 05)
