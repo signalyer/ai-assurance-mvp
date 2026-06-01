@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runs"])
 
-_RUNS_FILE: Path = Path("data") / "agent_runs.jsonl"
+_DATA_DIR: Path = Path(os.environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
+_RUNS_FILE: Path = _DATA_DIR / "agent_runs.jsonl"
 
 # Mirror api.agent_runner._RUNNER_ROLES — read viewer is operator-facing,
 # same auth scope as the runner itself.

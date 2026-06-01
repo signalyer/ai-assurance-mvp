@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -51,7 +52,9 @@ from middleware.auth import require_role, _read_cookie
 # S82f-1c: persist a per-run summary record on chain.done so the new
 # /api/agent-runs/{run_id} read endpoint has a backing store. JSONL append
 # only, via storage helper per [[storage-only-jsonl-pattern]].
-_AGENT_RUNS_FILE: Path = Path("data") / "agent_runs.jsonl"
+_DATA_DIR: Path = Path(os.environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+_AGENT_RUNS_FILE: Path = _DATA_DIR / "agent_runs.jsonl"
 
 
 def _persist_run_record(events: list[dict[str, Any]]) -> None:
