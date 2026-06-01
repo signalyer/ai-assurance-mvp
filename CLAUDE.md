@@ -58,6 +58,27 @@ but agents/ was never in the include list. See [[appservice-deploy-python]]
 failure mode #1 and [[lazy-imports-skip-module-load-bootstrap]] — this
 rule is the deploy-side mirror of the latter.
 
+### 2026-06-01 — Agent default_system_id must be backed by an AI system row
+When a new agent is registered in `agents/_registry.py` with a
+`default_system_id`, that id must also exist as an `AISystem` entry in
+`domain/seed.py::AI_SYSTEMS` (or be persisted via the intake/submit flow).
+Otherwise the agent runs cleanly + the audit chain writes correctly +
+the AI Systems page silently does not list it — audit join keys point at
+nothing, governance surfaces lose coverage, and the operator can't see
+the system the agent supposedly governs.
+
+Calibration for any new agent MUST include: open team-portal AI Systems
+page, confirm the new `default_system_id` is visible. This is the
+required UI binding check per [[ui-promise-audit-owed]] (F-018/F-022/F-023
+class — plan described a thing, no surface binding).
+
+Cheapest fix: add a seed row in `domain/seed.py::AI_SYSTEMS`. That file
+is the auto-loaded source of truth (5 → 7 systems as of S81 carryover);
+`domain/seed_systems.py::seed_test_systems()` is a DIFFERENT mechanism
+that is never invoked from `dashboard.py` lifespan today — don't add new
+systems there. S80 closed without this; S81 backfill added finadvice and
+azure-architect.
+
 ## Workflow + token bands
 Operating rules (workflow classification, token bands, review/stop/cost
 control) live in global `~/.claude/CLAUDE.md` under SESSION MANAGEMENT.
