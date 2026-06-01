@@ -102,7 +102,6 @@ def _stream_run(
     """
     url = f"{base_url.rstrip('/')}/api/agent-runner/run"
     headers = {
-        "Cookie": cookie,
         "Accept": "text/event-stream",
         "Content-Type": "application/json",
     }
@@ -140,15 +139,14 @@ def _extract_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
     start = _find("chain.start")
     done = _find("chain.done")
     audit = _find("audit")
-    llm_done = _find("llm.done")
-    # The structured response (risk_tier, concerns) lives in the agent's
-    # final return — surfaces here only if llm.done carries it, otherwise
-    # the operator opens /api/agent-runs/{run_id} for the full picture.
-    actual_tier = (
-        llm_done.get("risk_tier")
-        or done.get("risk_tier")
-        or ""
-    )
+    # The agent streams its structured JSON response as llm.delta text chunks;
+    # no event carries risk_tier as a parsed field. Concatenate the deltas and
+    # regex it out. Resilient to partial / malformed JSON (still gets the tier
+    # if the field is present anywhere in the response).
+    import re
+    body = "".join(e.get("text", "") for e in events if e.get("event") == "llm.delta")
+    m = re.search(r'"risk_tier"\s*:\s*"([A-Z]+)"', body)
+    actual_tier = m.group(1) if m else ""
     return {
         "run_id": start.get("run_id") or done.get("run_id", ""),
         "system_id": start.get("system_id", ""),
@@ -199,6 +197,8 @@ def main() -> int:
     parser.add_argument("--only", choices=["ext", "int"], help="Run only one dataset")
     parser.add_argument("--case", help="Run a single fixture by id")
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="Calibration log path")
+    parser.add_argument("--skip-completed", action="store_true",
+                        help="Skip fixtures whose row in the log is no longer _pending_")
     args = parser.parse_args()
 
     base_url = os.environ.get("AIGOVERN_BASE_URL")
@@ -226,11 +226,31 @@ def main() -> int:
             print(f"ERROR: no case matching id={args.case}", file=sys.stderr)
             return 2
 
+    if args.skip_completed:
+        log_text = log_path.read_text(encoding="utf-8")
+        before = len(cases)
+        cases = [(c, s) for c, s in cases
+                 if any(c["id"] in line and "_pending_" in line
+                        for line in log_text.splitlines())]
+        print(f"  skip-completed: {before - len(cases)} fixtures already done; "
+              f"{len(cases)} remaining")
+
     print(f"[{datetime.now(tz=timezone.utc).isoformat()}] calibration start "
           f"cases={len(cases)} base_url={base_url} dry_run={dry_run}")
 
+    # Seed the cookie jar from AIGOVERN_COOKIE so sliding-TTL refresh
+    # (Set-Cookie on every response) is honored across the run. The env value
+    # may be either a bare token or a "name=value" pair.
+    jar: dict[str, str] = {}
+    if cookie:
+        if "=" in cookie:
+            name, _, value = cookie.partition("=")
+            jar[name.strip()] = value.strip()
+        else:
+            jar["aigovern_session"] = cookie.strip()
+
     failures: list[str] = []
-    with httpx.Client() as client:
+    with httpx.Client(cookies=jar) as client:
         for case, system_id in cases:
             fid = case["id"]
             expected = case["expected_risk_tier"]
