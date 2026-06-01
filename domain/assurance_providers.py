@@ -319,16 +319,19 @@ _BEDROCK = AssuranceProvider(
         DataClass.SYNTHETIC_DATA.value,
     ],
     blocked_data_classes=[DataClass.PCI.value],   # PCI still restricted on Bedrock without dedicated tenancy
-    default_model="anthropic.claude-3-5-sonnet-v2 (via Bedrock)",
+    # S75: switched from EOL Sonnet 3.5 v2 to current Sonnet 4.6. Bedrock 4.x
+    # models are only invocable via an inference profile (cross-region routing),
+    # not direct foundation-model ARN. The "us." prefix selects the US-region
+    # inference profile bundling us-east-1 + us-east-2 + us-west-2 capacity.
+    default_model="us.anthropic.claude-sonnet-4-6",
     available_models=[
-        "anthropic.claude-3-5-sonnet-v2 (via Bedrock)",
-        "anthropic.claude-3-haiku (via Bedrock)",
-        "amazon.titan-text-premier-v1",
-        "meta.llama3-70b-instruct",
+        "us.anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-opus-4-7",
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     ],
     trust_boundary="AWS / GovCloud / approved enterprise boundary",
     data_residency="us-east-1 (regulated tenant)",
-    api_key_secret_ref="aws-iam://role/AI-Assurance-Bedrock-Runtime",
+    api_key_secret_ref="aws-env://AWS_ACCESS_KEY_ID",
     last_connection_test=_NOW,
     monthly_cost_limit_usd=4000,
     rate_limit_per_min=240,
@@ -1112,6 +1115,111 @@ async def stream_anthropic_response(
     )
 
 
+# Bedrock pricing per Sonnet 4.6 — same per-token rates as Anthropic direct
+# ($3 input / $15 output per M tokens). Cross-region inference profile usage
+# is included in these rates; no separate routing fee. Confirm at
+# https://aws.amazon.com/bedrock/pricing/ if rates drift.
+_BEDROCK_COST_PER_INPUT_TOKEN_USD = 3.0 / 1_000_000
+_BEDROCK_COST_PER_OUTPUT_TOKEN_USD = 15.0 / 1_000_000
+
+
+async def stream_bedrock_response(
+    provider: AssuranceProvider,
+    use_case: str,
+    sanitized: dict,
+):
+    """Async generator yielding streaming tokens from AWS Bedrock.
+
+    Mirrors the contract of `stream_anthropic_response` exactly:
+      yield ("delta", text)          — incremental text chunks
+      yield ("done", {usage info})   — terminal event with token + cost numbers
+
+    The {usage info} dict has the same keys as the Anthropic variant:
+    input_tokens, output_tokens, token_estimate, cost_estimate_usd, model,
+    full_text. Dispatcher in `api/assurance_model.py` is provider-agnostic
+    over the yielded shape.
+
+    Uses Bedrock's `converse_stream` API. The 4.x Claude families on Bedrock
+    are served via inference profiles (cross-region routing) — provider's
+    `default_model` must be the profile ID (e.g. `us.anthropic.claude-sonnet-4-6`)
+    not the bare foundation-model ARN, or the call returns ValidationException.
+
+    boto3 is lazy-imported here per [[appservice-deploy-python]] — top-level
+    import would slow App Service cold start by ~2s. boto3 reads
+    `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` from env
+    automatically; we never construct an explicit Session.
+    """
+    import asyncio
+    import boto3  # lazy: heavy SDK
+
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    client = boto3.client("bedrock-runtime", region_name=region)
+
+    system_prompt, user_prompt = _build_prompt(use_case, sanitized)
+    max_tokens = _MAX_TOKENS_BY_USE_CASE.get(use_case, 2500)
+    model = provider.default_model
+
+    # converse_stream is synchronous; iterate in a worker thread + push chunks
+    # over a queue so the async caller never blocks the event loop. Same
+    # threading shape used by aiobotocore internally.
+    def _iter_sync() -> "list":
+        return client.converse_stream(
+            modelId=model,
+            system=[{"text": system_prompt}] if system_prompt else None,
+            messages=[{"role": "user", "content": [{"text": user_prompt}]}],
+            inferenceConfig={"maxTokens": max_tokens},
+        )
+
+    # Strip system kwarg when empty — Bedrock rejects None for system.
+    converse_kwargs: dict[str, Any] = {
+        "modelId": model,
+        "messages": [{"role": "user", "content": [{"text": user_prompt}]}],
+        "inferenceConfig": {"maxTokens": max_tokens},
+    }
+    if system_prompt:
+        converse_kwargs["system"] = [{"text": system_prompt}]
+
+    response = await asyncio.to_thread(client.converse_stream, **converse_kwargs)
+
+    full_text_parts: list[str] = []
+    input_tokens = 0
+    output_tokens = 0
+    stream = response["stream"]
+
+    # The boto3 EventStream iterator is sync. Yield control between chunks
+    # via asyncio.sleep(0) so the SSE writer can flush each delta to the
+    # client without batching them.
+    for event in stream:
+        if "contentBlockDelta" in event:
+            delta = event["contentBlockDelta"].get("delta", {})
+            text = delta.get("text", "")
+            if text:
+                full_text_parts.append(text)
+                yield ("delta", text)
+                await asyncio.sleep(0)
+        elif "metadata" in event:
+            usage = event["metadata"].get("usage", {}) or {}
+            input_tokens = int(usage.get("inputTokens", 0) or 0)
+            output_tokens = int(usage.get("outputTokens", 0) or 0)
+
+    cost = round(
+        input_tokens * _BEDROCK_COST_PER_INPUT_TOKEN_USD
+        + output_tokens * _BEDROCK_COST_PER_OUTPUT_TOKEN_USD,
+        5,
+    )
+    yield (
+        "done",
+        {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "token_estimate": input_tokens + output_tokens,
+            "cost_estimate_usd": cost,
+            "model": model,
+            "full_text": "".join(full_text_parts),
+        },
+    )
+
+
 __all__ = [
     "ProviderType", "ProviderStatus", "ProviderRole", "DataClass", "UseCase",
     "AuditDecision",
@@ -1126,4 +1234,6 @@ __all__ = [
     "RoutingDecision",
     # S69 — real LLM streaming
     "real_llm_enabled", "stream_anthropic_response",
+    # S75 — Bedrock streaming adapter
+    "stream_bedrock_response",
 ]

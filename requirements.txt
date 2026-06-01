@@ -1,6 +1,8 @@
 # Core LLM APIs
 anthropic>=0.40.0
 openai>=1.0.0
+# S75: AWS Bedrock streaming adapter — see requirements-deploy.txt for rationale.
+boto3>=1.35.0
 
 # Tracing & Observability
 langfuse>=4.0.0

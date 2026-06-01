@@ -33,6 +33,7 @@ from domain.assurance_providers import (
     have_real_credentials, simulate_response,
     list_audit, explain_provider_decision,
     real_llm_enabled, stream_anthropic_response,
+    stream_bedrock_response, ProviderType,
 )
 
 _log = logging.getLogger(__name__)
@@ -492,18 +493,30 @@ async def _stream_live_assurance_response(
     sanitized: dict,
     request: Request,
 ):
-    """Yield SSE events for a live Anthropic streaming call.
+    """Yield SSE events for a live streaming LLM call (provider-agnostic).
+
+    Dispatches to Bedrock vs Anthropic based on the upstream routing
+    decision's provider_type. The generators share an identical yield
+    contract (("delta", text) | ("done", usage_dict)) so the audit /
+    response shape below is provider-agnostic.
 
     Handles three terminal states:
       - completed normally -> emit final 'done' with status='live', LIVE audit
       - client disconnect (CancelledError) -> LIVE audit, streaming_complete=False
-      - Anthropic / network exception -> emit 'done' with status='blocked' framing
+      - provider / network exception -> emit 'done' with status='blocked' framing
         and BLOCKED audit (so the drawer surfaces a clean error instead of hanging)
     """
     partial_text: list[str] = []
     final_usage: dict | None = None
+    # S75: pick the streaming generator by provider_type. Bedrock and Anthropic
+    # are the only two streaming-capable providers in the catalog today; future
+    # additions (Azure OpenAI, Foundry, etc.) extend this dispatch.
+    if decision.provider.provider_type == ProviderType.BEDROCK.value:
+        stream_fn = stream_bedrock_response
+    else:
+        stream_fn = stream_anthropic_response
     try:
-        async for kind, value in stream_anthropic_response(
+        async for kind, value in stream_fn(
             provider=decision.provider,
             use_case=req.use_case,
             sanitized=sanitized,
@@ -520,7 +533,7 @@ async def _stream_live_assurance_response(
             ai_system_id=req.ai_system_id, data_classes=req.data_classes,
             decision=AuditDecision.LIVE, user=req.user,
             reason=(
-                f"Live Anthropic streaming call completed via {decision.provider.provider_name}; "
+                f"Live streaming call completed via {decision.provider.provider_name}; "
                 f"token_estimate={final_usage['token_estimate']}, "
                 f"cost_estimate_usd={final_usage['cost_estimate_usd']}."
             ),
@@ -556,7 +569,7 @@ async def _stream_live_assurance_response(
             ai_system_id=req.ai_system_id, data_classes=req.data_classes,
             decision=AuditDecision.LIVE, user=req.user,
             reason=(
-                "Live Anthropic streaming call cancelled by client mid-stream; "
+                "Live streaming call cancelled by client mid-stream; "
                 f"partial chars={len(snippet)}."
             ),
             model=decision.provider.default_model,

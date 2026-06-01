@@ -18,6 +18,11 @@ sse-starlette>=2.1.0
 # LLM clients (used by api/assurance_model.py)
 anthropic>=0.40.0
 openai>=1.0.0
+# S75: AWS Bedrock streaming adapter — boto3 lazy-imported inside
+# domain.assurance_providers.stream_bedrock_response (per
+# [[appservice-deploy-python]] heavy SDKs stay out of top-level imports).
+# Must live in BOTH requirements files per [[requirements-deploy-drift]].
+boto3>=1.35.0
 
 # Auth (login gate)
 bcrypt>=4.1.0
