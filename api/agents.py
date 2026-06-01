@@ -6,15 +6,19 @@ Endpoints:
     GET  /api/agents/{agent_id}              get agent + versions + subscribers
     POST /api/agents/{agent_id}/publish      publish new version
     GET  /api/agents/{agent_id}/subscribers  list subscribers with binding state
+    GET  /api/agents/{agent_id}/eval-summary suite-level eval visibility (S82f-2-extended item 10)
 
 All domain calls are sync (Postgres); dispatched via asyncio.to_thread.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 from datetime import datetime, timezone
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -442,3 +446,178 @@ async def list_agent_subscribers(agent_id: str) -> list[dict[str, object]]:
         elapsed_ms,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /api/agents/{agent_id}/eval-summary  (S82f-2-extended item 10 — E1)
+# ---------------------------------------------------------------------------
+#
+# Surfaces the suite-level eval signal that already exists on disk but had no
+# UI binding (sibling of [[ui-promise-audit-owed]]). Reads:
+#   - agents/<agent_id>/eval/baseline.json    → locked baseline run
+#   - data/<agent_id>_eval_runs.jsonl         → every suite run since baseline
+# via the canonical DATA_ROOT pattern (2026-06-01 rule).
+#
+# Agents without an eval suite (finadvice, azure-architect today — both
+# demo_only) return has_eval_suite=False so the SPA can render an honest
+# "no eval suite — demo-only" affordance rather than blanking.
+
+_DATA_DIR_AGENTS: Path = Path(os.environ.get("DATA_ROOT") or (Path(__file__).resolve().parents[1] / "data"))
+_REPO_ROOT_AGENTS: Path = Path(__file__).resolve().parents[1]
+
+
+def _summarize_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Reduce one suite-run record to its headline fields + per-system split.
+
+    Source shape is per agents/<agent>/eval/run_eval.py; we re-aggregate the
+    per-system pass counts here because the on-disk record only carries the
+    overall pass_rate.
+    """
+    by_system: dict[str, dict[str, int]] = {}
+    for case in run.get("results", []) or []:
+        sys_key = case.get("system") or "unknown"
+        bucket = by_system.setdefault(sys_key, {"total": 0, "passed": 0})
+        bucket["total"] += 1
+        if case.get("passed"):
+            bucket["passed"] += 1
+    per_system = {
+        sys_key: {
+            **bucket,
+            "pass_rate": round(bucket["passed"] / bucket["total"], 4) if bucket["total"] else 0.0,
+        }
+        for sys_key, bucket in by_system.items()
+    }
+    return {
+        "run_id": run.get("run_id"),
+        "timestamp": run.get("timestamp"),
+        "mode": run.get("mode"),
+        "status": run.get("status"),
+        "cases_total": run.get("cases_total"),
+        "cases_passed": run.get("cases_passed"),
+        "cases_null": run.get("cases_null"),
+        "pass_rate": run.get("pass_rate"),
+        "datasets": run.get("datasets") or [],
+        "per_system": per_system,
+    }
+
+
+def _read_eval_runs_jsonl(agent_id: str) -> list[dict[str, Any]]:
+    """Return every suite-run record for `agent_id`, oldest-first.
+
+    Reads `data/<agent_id>_eval_runs.jsonl` via DATA_ROOT (2026-06-01 rule).
+    Returns [] when the file is absent.
+    """
+    safe_id = agent_id.replace("/", "_").replace("..", "_")
+    path = _DATA_DIR_AGENTS / f"{safe_id}_eval_runs.jsonl"
+    if not path.exists():
+        return []
+    try:
+        from storage import _read_jsonl
+        return _read_jsonl(path)
+    except ImportError:
+        rows: list[dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        return rows
+
+
+def _read_baseline(agent_id: str) -> dict[str, Any] | None:
+    """Return the locked baseline run for `agent_id`, or None if absent.
+
+    Repo-relative path — baseline.json is checked in alongside the agent,
+    not a runtime artifact, so it does NOT go through DATA_ROOT.
+    """
+    safe_id = agent_id.replace("/", "_").replace("..", "_")
+    path = _REPO_ROOT_AGENTS / "agents" / safe_id / "eval" / "baseline.json"
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("agents.eval_summary: baseline read failed agent_id=%s err=%s", agent_id, exc)
+        return None
+
+
+@router.get(
+    "/api/agents/{agent_id}/eval-summary",
+    operation_id="agents_eval_summary",
+)
+async def get_agent_eval_summary(
+    agent_id: str,
+    history_limit: int = Query(20, ge=1, le=200, description="Most-recent N suite runs to return"),
+) -> dict[str, Any]:
+    """Return the suite-level eval visibility payload for an agent.
+
+    Response shape:
+        {
+          "agent_id": "vendor_risk",
+          "has_eval_suite": true | false,
+          "baseline": {summary} | null,
+          "latest_run": {summary} | null,
+          "history": [{summary}, ...],   // newest-first, capped at history_limit
+          "trend": {
+              "runs_total": int,
+              "runs_passed": int,        // status == "PASS"
+              "pass_rate_mean": float    // mean of pass_rate across history
+          }
+        }
+
+    Agents without an eval suite (`baseline.json` absent AND no run history)
+    return `has_eval_suite: false` and null fields. 404 only when the agent
+    itself is not in the domain registry.
+    """
+    start = datetime.now(tz=timezone.utc)
+    logger.info("agents.eval_summary.enter agent_id=%s", agent_id)
+
+    # Verify the agent exists in the domain registry. Honest 404 if not.
+    a_mod = _agents()
+    agent = await asyncio.to_thread(a_mod.get_agent, agent_id=agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Agent '{agent_id}' not found", "code": "NOT_FOUND"},
+        )
+
+    baseline_raw = await asyncio.to_thread(_read_baseline, agent_id)
+    runs_raw = await asyncio.to_thread(_read_eval_runs_jsonl, agent_id)
+
+    has_eval_suite = baseline_raw is not None or bool(runs_raw)
+
+    baseline = _summarize_run(baseline_raw) if baseline_raw else None
+    history_all = [_summarize_run(r) for r in runs_raw]
+    history_newest_first = list(reversed(history_all))
+    history = history_newest_first[:history_limit]
+    latest_run = history_newest_first[0] if history_newest_first else None
+
+    runs_passed = sum(1 for r in history_all if r.get("status") == "PASS")
+    pass_rates = [r["pass_rate"] for r in history_all if isinstance(r.get("pass_rate"), (int, float))]
+    pass_rate_mean = round(sum(pass_rates) / len(pass_rates), 4) if pass_rates else 0.0
+
+    elapsed_ms = (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+    logger.info(
+        "agents.eval_summary.exit agent_id=%s has_suite=%s history=%d elapsed_ms=%.1f",
+        agent_id,
+        has_eval_suite,
+        len(history),
+        elapsed_ms,
+    )
+    return {
+        "agent_id": agent_id,
+        "has_eval_suite": has_eval_suite,
+        "baseline": baseline,
+        "latest_run": latest_run,
+        "history": history,
+        "trend": {
+            "runs_total": len(history_all),
+            "runs_passed": runs_passed,
+            "pass_rate_mean": pass_rate_mean,
+        },
+    }

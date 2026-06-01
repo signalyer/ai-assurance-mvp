@@ -843,6 +843,60 @@ _SEED_AGENTS: list[dict] = [
             "ADR-004 Option B (sticky PATCH runtime-flag attestation)."
         ),
     },
+    # S82f-2-extended (2026-06-01): finalize the runtime→domain backfill
+    # promised at the end of 197a6ec. finadvice + azure-architect were the
+    # two agents that commit deferred. AI_SYSTEMS rows already exist in
+    # domain/seed.py (sys-demo-finadvice-001, sys-demo-azurearch-001).
+    # Both are demo_only in agents/_registry.py — surfaced here for Agent
+    # Library catalog visibility, NOT as a production governance claim.
+    {
+        "agent_id": "finadvice",
+        "name": "Financial Advisor Risk Reviewer",
+        "description": (
+            "Reviews a client's portfolio against their stated risk "
+            "profile and recommends rebalancing actions. Uses deterministic "
+            "mock data (portfolios, market snapshot, risk profiles) so "
+            "demo runs are reproducible without live financial APIs. "
+            "DEMO ONLY — Phase 4 eval suite + Phase 9 pre-release "
+            "assessment per docs/SOP-agent-onboarding.md not executed."
+        ),
+        "team": "wealth",
+        "owner_type": AgentOwnerType.CUSTOM,
+        "inherent_risk": RiskLevel.MEDIUM,
+        "framework_refs": [
+            "NIST_AI_RMF:GOVERN-1.1",
+            "NIST_AI_RMF:MEASURE-2.7",
+            "OWASP_LLM_TOP10:LLM02",
+        ],
+        "semver": "1.0.0",
+        "changelog": (
+            "Initial release — S80 demo. PII tokenisation on all four "
+            "client fields (client_name, account_number, tax_id, dob) "
+            "before any model call."
+        ),
+    },
+    {
+        "agent_id": "azure-architect",
+        "name": "Azure Architect (CLI-only)",
+        "description": (
+            "Plans Azure deployments via ARM read-only tools and produces "
+            "ADR-style architecture briefs. CLI-invokable only — the "
+            "directory name contains a hyphen and is not a valid Python "
+            "module path, so the Agent Runner cannot dispatch it. Listed "
+            "in the catalog for transparency. DEMO ONLY."
+        ),
+        "team": "platform",
+        "owner_type": AgentOwnerType.REUSABLE,
+        "inherent_risk": RiskLevel.LOW,
+        "framework_refs": [
+            "NIST_AI_RMF:GOVERN-1.2",
+        ],
+        "semver": "1.0.0",
+        "changelog": (
+            "Initial release — CLI-only PoC. No SOP phases executed beyond "
+            "registry surface."
+        ),
+    },
 ]
 
 

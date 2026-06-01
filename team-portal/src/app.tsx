@@ -13,6 +13,7 @@ import { RagCorpusPage } from './pages/rag/RagCorpusPage';
 import { AdversarialPage } from './pages/adversarial/AdversarialPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { AgentRunnerPage } from './pages/agent-runner/AgentRunnerPage';
+import { AgentRunsPage } from './pages/agent-runs/AgentRunsPage';
 import { LoginPage } from './pages/login/LoginPage';
 import { AiSummaryDrawer } from './shared/components/AiSummaryDrawer';
 
@@ -34,6 +35,7 @@ export function App() {
         <Route path="/evals" component={EvalsPage} />
         <Route path="/agent-library" component={AgentLibraryPage} />
         <Route path="/agent-runner" component={AgentRunnerPage} />
+        <Route path="/agent-runs" component={AgentRunsPage} />
         <Route path="/memory" component={MemoryPage} />
         <Route path="/sdk" component={SdkQuickstartPage} />
         <Route path="/rtf" component={RtfRequestPage} />

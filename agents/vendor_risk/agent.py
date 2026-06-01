@@ -489,6 +489,16 @@ async def _execute_run(
         "output_tokens": total_output_tokens,
         "latency_ms": latency_ms,
     }
+    # S82f-2-extended item 2: surface the dispatcher-observable fields at the
+    # top level too. domain/agent_runner.py reads agent_result.get("stop_reason")
+    # / model / token counts / turns at the TOP level (not via _meta) when it
+    # builds the llm.done event and computes outcome (success/failure/review).
+    # Without these the outcome always falls into the "review" else-branch.
+    output.setdefault("stop_reason", final_stop)
+    output.setdefault("model", model)
+    output.setdefault("input_tokens", total_input_tokens)
+    output.setdefault("output_tokens", total_output_tokens)
+    output.setdefault("turns", turn + 1)
     return output
 
 

@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/evals', label: 'Evals' },
   { path: '/agent-library', label: 'Agent Library' },
   { path: '/agent-runner', label: 'Agent Runner', badge: 'NEW', badgeClass: 'sidebar-nav-badge-new' },
+  { path: '/agent-runs', label: 'Agent Runs' },
   { path: '/memory', label: 'Memory' },
   { path: '/sdk', label: 'SDK Quickstart' },
   { path: '/rtf', label: 'Right-to-Forget' },
