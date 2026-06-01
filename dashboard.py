@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import io
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # Force UTF-8 output on Windows
@@ -148,6 +149,30 @@ def print_startup_status() -> bool:
     return all_required
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """App lifecycle hook — replaces deprecated @app.on_event("startup").
+
+    Day-12 finding: smoke-test scenario #3 expects >= 6 agents but prod's
+    agent table is empty (Postgres isn't configured on App Service, so
+    domain.agents.create_agent() falls back to in-memory only — which means
+    agents disappear on every container restart). Seeding here matches that
+    lifecycle: every cold start re-seeds the demo data.
+
+    Idempotent: seed_agents uses ON CONFLICT DO NOTHING when Postgres is
+    available; safe to call repeatedly. Failure is swallowed — startup must
+    never die over demo data.
+    """
+    try:
+        from domain.agents import seed_agents
+        seeded = seed_agents()
+        print(f"[startup] seed_agents: {len(seeded)} agents available")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] seed_agents failed (non-fatal): {exc}")
+    yield
+    # No shutdown work today.
+
+
 app = FastAPI(
     title="AI Assurance Platform",
     version=__version__,
@@ -160,6 +185,7 @@ app = FastAPI(
         {"url": "https://api.aigovern.sandboxhub.co", "description": "Production engine"},
         {"url": "http://localhost:9007", "description": "Local dev"},
     ],
+    lifespan=_lifespan,
 )
 
 # Global exception handlers -- typed 500 ServerErrorDetail with trace_id correlation.
@@ -375,28 +401,6 @@ app.include_router(policies_rego_router)
 app.include_router(eval_suites_router)
 if _HAS_METRICS and _metrics_router is not None:
     app.include_router(_metrics_router)
-
-
-@app.on_event("startup")
-async def _seed_agents_on_startup() -> None:
-    """Seed 6 demo agents at startup (in-memory or Postgres, idempotent).
-
-    Day-12 finding: smoke-test scenario #3 expects >= 6 agents but prod's
-    agent table is empty (Postgres isn't configured on App Service, so
-    domain.agents.create_agent() falls back to in-memory only — which
-    means agents disappear on every container restart). Wiring seed_agents
-    here matches that lifecycle: every cold start re-seeds the demo data.
-
-    Idempotent: seed_agents uses ON CONFLICT DO NOTHING when Postgres is
-    available; safe to call repeatedly. Failure is swallowed (we never
-    want startup to die over demo data).
-    """
-    try:
-        from domain.agents import seed_agents
-        seeded = seed_agents()
-        print(f"[startup] seed_agents: {len(seeded)} agents available")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[startup] seed_agents failed (non-fatal): {exc}")
 
 
 def _read_build_sha() -> str:
