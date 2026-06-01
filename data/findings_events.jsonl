@@ -1,7 +1,0 @@
-{"id": "EV-8BF39043", "finding_id": "FIND-2026-0138", "ts": "2026-05-19T05:48:19.157981Z", "actor": "demo-walkthrough", "event_type": "CLOSE", "data": {}, "note": "Prompt-injection bypass closed \u2014 verified by EV-DEMO-RVR."}
-{"id": "EV-B24A8B7B", "finding_id": "F-1003", "ts": "2026-05-19T05:48:19.158630Z", "actor": "demo-walkthrough", "event_type": "MARK_REMEDIATED", "data": {}, "note": "Authz moved out of model loop; rate limits applied."}
-{"id": "EV-FC95C9D0", "finding_id": "F-1004", "ts": "2026-05-19T05:48:19.158933Z", "actor": "demo-walkthrough", "event_type": "MARK_REMEDIATED", "data": {}, "note": "Corpus re-ingested with DLP gate; manifest pinned."}
-{"id": "EV-59A8D820", "finding_id": "FIND-2026-0142", "ts": "2026-05-24T02:16:05.643817Z", "actor": "test-actor", "event_type": "COMMENT", "data": {}, "note": "sample"}
-{"id": "EV-79F85556", "finding_id": "FIND-2026-0142", "ts": "2026-05-24T02:18:36.425590Z", "actor": "test", "event_type": "COMMENT", "data": {}, "note": "create timeline entry"}
-{"id": "EV-C323AEE0", "finding_id": "FIND-2026-0142", "ts": "2026-05-24T02:19:01.875616Z", "actor": "test", "event_type": "COMMENT", "data": {}, "note": "smoke"}
-{"id": "EV-225FBFC1", "finding_id": "FIND-2026-0142", "ts": "2026-05-24T02:19:48.831157Z", "actor": "test", "event_type": "COMMENT", "data": {}, "note": "smoke"}
