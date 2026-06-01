@@ -116,9 +116,18 @@ def resolve_workload_policy(workload_id: str) -> tuple[str | None, dict[str, obj
     Returns `(rego_filename, data)` or `(None, {})` when no workload-specific
     rego applies. Prefix-based to match the rego file's own `is_*` matcher
     convention (see `azure-architect.rego::is_azure_architect`).
+
+    vendor_risk uses system_id as the workload_id (per S82b Phase 2 design
+    review §4) so the two deployments of the same agent get different
+    governance overlays. The prefix split here mirrors the rego files'
+    `is_vendor_risk_{ext,int}` matchers.
     """
     if workload_id.startswith("azure-architect"):
         return ("azure-architect.rego", load_workload_policy("azure-architect.rego"))
+    if workload_id.startswith("sys-vendor-risk-ext-"):
+        return ("vendor-risk-ext.rego", load_workload_policy("vendor-risk-ext.rego"))
+    if workload_id.startswith("sys-vendor-risk-int-"):
+        return ("vendor-risk-int.rego", load_workload_policy("vendor-risk-int.rego"))
     return (None, {})
 
 

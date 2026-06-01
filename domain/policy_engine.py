@@ -350,6 +350,180 @@ def _check_workload_specific(workload_id: str, action: str, input_data: dict) ->
                     },
                 )
 
+        # Rule 5 (vendor_risk-int): denied URL substrings in tool args.
+        # If the rego declares `denied_url_substrings`, scan the tool args
+        # for any of them. Catches external-URL leakage on the on-prem path.
+        denied_url_substrings = data.get("denied_url_substrings") or []
+        if denied_url_substrings:
+            tool_args_text = str(input_data.get("tool_args_text", "") or input_data.get("tool_args", ""))
+            tool_args_text_lc = tool_args_text.lower()
+            for substring in denied_url_substrings:
+                if substring.lower() in tool_args_text_lc:
+                    return PolicyResult(
+                        decision=Decision.DENY,
+                        category=PolicyCategory.TEAM,
+                        policy_name="workload_denied_url_in_tool_args",
+                        reason=(
+                            f"Tool '{tool_name}' args contain denied URL substring "
+                            f"'{substring}'; this workload must not reach outside the "
+                            f"isolation boundary per {rego_filename}"
+                        ),
+                        metadata={
+                            "workload_id": workload_id,
+                            "rego": rego_filename,
+                            "tool": tool_name,
+                            "matched_substring": substring,
+                            "severity": "CRITICAL",
+                        },
+                    )
+
+    # Rules that apply to agent_run / llm_call: data-class denial, role
+    # allowlist, prompt cap, injection threshold, required flags, call budget.
+    # These fire on agent_run (the outer policy_gate) and re-fire on llm_call
+    # when the agent body re-enters the gate per the canonical decorator chain.
+    if action in ("agent_run", "llm_call"):
+        # Rule 3 (ext): denied_token_types — DENY if any redacted token type
+        # the scrubber surfaced intersects the denylist.
+        denied_token_types = data.get("denied_token_types")
+        if isinstance(denied_token_types, set) and denied_token_types:
+            redacted = input_data.get("redacted_token_types") or []
+            intersect = denied_token_types.intersection(set(redacted))
+            if intersect:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_denied_token_type",
+                    reason=(
+                        f"Scrubber surfaced denied token type(s) "
+                        f"{sorted(intersect)}; workload {workload_id} routes "
+                        f"these to its internal-only sibling per {rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "denied_token_types": sorted(intersect),
+                        "severity": "CRITICAL",
+                    },
+                )
+
+        # Rule 4: required_operator_roles — DENY if operator_role not in set.
+        required_operator_roles = data.get("required_operator_roles")
+        if isinstance(required_operator_roles, set) and required_operator_roles:
+            operator_role = input_data.get("operator_role", "")
+            if operator_role not in required_operator_roles:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_operator_role_not_allowed",
+                    reason=(
+                        f"Operator role '{operator_role}' not in allowlist "
+                        f"{sorted(required_operator_roles)} for workload "
+                        f"{workload_id} per {rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "operator_role": operator_role,
+                        "allowed_roles": sorted(required_operator_roles),
+                        "severity": "HIGH",
+                    },
+                )
+
+        # Rule 5: max_prompt_tokens cost guard.
+        max_prompt_tokens = data.get("max_prompt_tokens")
+        if isinstance(max_prompt_tokens, int):
+            ptc = input_data.get("prompt_token_count")
+            if isinstance(ptc, int) and ptc > max_prompt_tokens:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_prompt_token_cap_exceeded",
+                    reason=(
+                        f"Prompt token count {ptc} exceeds cap "
+                        f"{max_prompt_tokens} for workload {workload_id} "
+                        f"per {rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "observed": ptc,
+                        "limit": max_prompt_tokens,
+                        "severity": "MEDIUM",
+                    },
+                )
+
+        # Rule 6 (ext): max_injection_score_pct — guardrails produce a 0-100
+        # integer score; the rego cap is the data-shaped expression of the
+        # threshold.
+        max_injection = data.get("max_injection_score_pct")
+        if isinstance(max_injection, int):
+            score = input_data.get("prompt_injection_score_pct")
+            if isinstance(score, int) and score > max_injection:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_injection_score_exceeded",
+                    reason=(
+                        f"Prompt injection score {score} exceeds threshold "
+                        f"{max_injection} for workload {workload_id} per "
+                        f"{rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "observed": score,
+                        "threshold": max_injection,
+                        "severity": "CRITICAL",
+                    },
+                )
+
+        # Rule 4 (int): required_true_flags — DENY if any flag in the set
+        # is not present-and-true in input_data. Used to assert
+        # network_egress_lock_engaged + dlp_completed before the LLM step.
+        required_true_flags = data.get("required_true_flags")
+        if isinstance(required_true_flags, set) and required_true_flags:
+            missing = [f for f in required_true_flags if not bool(input_data.get(f))]
+            if missing:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_required_flag_not_set",
+                    reason=(
+                        f"Required runtime flag(s) {sorted(missing)} not "
+                        f"set/true for workload {workload_id} per "
+                        f"{rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "missing_flags": sorted(missing),
+                        "severity": "CRITICAL",
+                    },
+                )
+
+        # Rule 7: max_llm_calls_per_run — runaway-loop guard.
+        max_calls = data.get("max_llm_calls_per_run")
+        if isinstance(max_calls, int):
+            observed = input_data.get("run_call_count")
+            if isinstance(observed, int) and observed > max_calls:
+                return PolicyResult(
+                    decision=Decision.DENY,
+                    category=PolicyCategory.TEAM,
+                    policy_name="workload_llm_call_budget_exceeded",
+                    reason=(
+                        f"Run exceeded {max_calls} LLM calls (observed "
+                        f"{observed}) — likely a loop; workload "
+                        f"{workload_id} per {rego_filename}"
+                    ),
+                    metadata={
+                        "workload_id": workload_id,
+                        "rego": rego_filename,
+                        "limit": max_calls,
+                        "observed": observed,
+                        "severity": "HIGH",
+                    },
+                )
+
     return PolicyResult(
         decision=Decision.ALLOW,
         category=PolicyCategory.TEAM,
