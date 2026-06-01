@@ -57,6 +57,17 @@ INCLUDE = [
     # in append mode, so a fresh App Service container handles the empty
     # state gracefully. Demo seed data lives in domain/seed.py (Python),
     # not data/*.jsonl. — see POC-RETROSPECTIVE.md F-009.
+    #
+    # S80: agents/ holds the Agent Runner registry + per-agent modules
+    # (currently agents/_registry.py + agents/finadvice/). dashboard.py
+    # eager-imports agents._registry at startup per
+    # [[lazy-imports-skip-module-load-bootstrap]] — omitting it from the
+    # zip produces a container ModuleNotFoundError with no obvious symptom
+    # in /api/health (S80 close root cause). agents/finadvice/mocks/*.json
+    # ARE included on purpose: deterministic code-shaped fixtures, not
+    # runtime data (different from data/*.jsonl above). .env files inside
+    # any agents subdir are blocked by FORBID_FILES.
+    "agents",
 ]
 # Note: encryption.py (cryptography), run.py + ragas_evaluator.py (deepeval/ragas/garak)
 # intentionally NOT included — they pull heavy deps and aren't on the dashboard runtime path.
