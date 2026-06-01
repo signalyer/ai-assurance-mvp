@@ -1,0 +1,14 @@
+{
+  "name": "Vendor Risk (TPRM)",
+  "industry": "financial_services",
+  "compliance": ["SOC 2 Type II", "ISO 27001", "GDPR Art. 28", "DPA"],
+  "description": "Third-party vendor risk assessment for TPRM onboarding. Parses vendor-disclosed documents (SOC 2, ISO 27001, DPA, subprocessor list, security questionnaire), retrieves grounding from the TPRM policy + regulatory corpus, and produces a structured risk tier with concerns, conflicts, mitigations, and citations. Two AI systems: ext (cloud LLM) + int (internal-policy-controlled, no network egress per ADR-004).",
+  "version": "1.0",
+  "regulatory_context": [
+    "GDPR Article 28 — processor obligations and Standard Contractual Clauses",
+    "ISO 27001:2022 Annex A — information security controls inheritance",
+    "SOC 2 Type II — operating-effectiveness coverage period and carve-outs",
+    "MNPI handling — material non-public information disclosure constraints (INT runs)"
+  ],
+  "test_cases": []
+}

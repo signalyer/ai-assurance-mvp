@@ -214,18 +214,29 @@ function OverviewTab({ agent: a }: { agent: AgentDetail }) {
   const lastPub = a.last_published_at
     ? new Date(a.last_published_at).toLocaleString()
     : '—';
+  // Convention (matches domain/agent_runner.py:496 + agents/*/agent.py):
+  // the agent's workload_id for episodic memory is the agent_id slug.
+  // Deep-link to /memory / /agent-runs filtered to this agent.
+  const memHref = `/memory?workload_id=${encodeURIComponent(a.id)}`;
+  const runsHref = `/agent-runs?agent_id=${encodeURIComponent(a.id)}`;
   return (
-    <dl class="def-list">
-      <dt>ID</dt><dd class="font-mono">{a.id}</dd>
-      <dt>Description</dt><dd>{a.description ?? '—'}</dd>
-      <dt>Team</dt><dd>{a.team ?? '—'}</dd>
-      <dt>Owner Type</dt><dd>{a.owner_type ?? '—'}</dd>
-      <dt>Inherent Risk</dt><dd>{a.inherent_risk ?? '—'}</dd>
-      <dt>Latest Version</dt><dd class="font-mono">{a.latest_semver ?? a.latest_version ?? '—'}</dd>
-      <dt>Subscribers</dt><dd>{(a.subscribers ?? []).length}</dd>
-      <dt>Last Published</dt><dd>{lastPub}</dd>
-      <dt>Status</dt><dd>{a.status ?? '—'}</dd>
-    </dl>
+    <>
+      <dl class="def-list">
+        <dt>ID</dt><dd class="font-mono">{a.id}</dd>
+        <dt>Description</dt><dd>{a.description ?? '—'}</dd>
+        <dt>Team</dt><dd>{a.team ?? '—'}</dd>
+        <dt>Owner Type</dt><dd>{a.owner_type ?? '—'}</dd>
+        <dt>Inherent Risk</dt><dd>{a.inherent_risk ?? '—'}</dd>
+        <dt>Latest Version</dt><dd class="font-mono">{a.latest_semver ?? a.latest_version ?? '—'}</dd>
+        <dt>Subscribers</dt><dd>{(a.subscribers ?? []).length}</dd>
+        <dt>Last Published</dt><dd>{lastPub}</dd>
+        <dt>Status</dt><dd>{a.status ?? '—'}</dd>
+      </dl>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <a class="btn btn-sm btn-secondary" href={memHref}>View episodic memory →</a>
+        <a class="btn btn-sm btn-secondary" href={runsHref}>View past runs →</a>
+      </div>
+    </>
   );
 }
 

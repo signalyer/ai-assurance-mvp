@@ -140,6 +140,20 @@ export function MemoryPage() {
   useEffect(() => {
     void loadDomains();
     void loadStats();
+    // S82f-2-extended: deep-link `?workload_id=<id>` auto-selects the
+    // workload and loads episodes. Lets Agent Library / Agent Runner /
+    // /agent-runs link straight at the relevant memory slice without the
+    // operator hunting in the dropdown.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const wid = params.get('workload_id');
+      if (wid) {
+        workloadId.value = wid;
+        void loadEpisodes();
+      }
+    } catch {
+      // window unavailable — silent.
+    }
     const t = window.setInterval(() => { void loadStats(); }, 30_000);
     return () => window.clearInterval(t);
   }, []);
