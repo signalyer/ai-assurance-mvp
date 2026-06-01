@@ -3,7 +3,44 @@ import { useEffect } from 'preact/hooks';
 import { apiGet, apiPost } from '../../shared/api/client';
 import type { AgentDetail, AgentVersion, AgentSubscriber } from './types';
 
-type Tab = 'overview' | 'versions' | 'subscribers' | 'eval' | 'publish';
+type Tab = 'overview' | 'versions' | 'subscribers' | 'eval' | 'corpus' | 'publish';
+
+// S82f-2-extended W6: agent-local RAG corpus (distinct from the global
+// Azure AI Search index exposed on /rag). Shape mirrors
+// GET /api/agents/{id}/corpus + /corpus/{doc_id}.
+interface CorpusDoc {
+  doc_id: string | null;
+  title: string | null;
+  path: string;
+  frameworks: string[];
+  size_bytes: number | null;
+  exists: boolean;
+}
+interface CorpusList {
+  agent_id: string;
+  has_corpus: boolean;
+  version: string | null;
+  doc_count: number;
+  docs: CorpusDoc[];
+  extras: { subprocessor_db: string | null; internal_systems: string | null };
+}
+interface CorpusDocContent {
+  agent_id: string;
+  doc_id: string;
+  title: string | null;
+  path: string;
+  frameworks: string[];
+  content: string;
+  truncated: boolean;
+  byte_limit: number;
+}
+const corpusList = signal<CorpusList | null>(null);
+const corpusLoading = signal<boolean>(false);
+const corpusError = signal<string | null>(null);
+const openCorpusDocId = signal<string | null>(null);
+const openCorpusDoc = signal<CorpusDocContent | null>(null);
+const openCorpusDocLoading = signal<boolean>(false);
+const openCorpusDocError = signal<string | null>(null);
 
 // S82f-2-extended item 10 (E1): eval visibility. Shape mirrors
 // GET /api/agents/{id}/eval-summary in api/agents.py.
@@ -63,6 +100,33 @@ export function openAgent(id: string): void {
   activeTab.value = 'overview';
   evalSummary.value = null;
   evalError.value = null;
+  corpusList.value = null;
+  corpusError.value = null;
+  openCorpusDocId.value = null;
+  openCorpusDoc.value = null;
+  openCorpusDocError.value = null;
+}
+
+async function loadCorpus(id: string): Promise<void> {
+  corpusLoading.value = true;
+  corpusError.value = null;
+  const r = await apiGet<CorpusList>(`/agents/${encodeURIComponent(id)}/corpus`);
+  corpusLoading.value = false;
+  if (r.ok) corpusList.value = r.data;
+  else corpusError.value = r.detail;
+}
+
+async function loadCorpusDoc(agentId: string, docId: string): Promise<void> {
+  openCorpusDocLoading.value = true;
+  openCorpusDocError.value = null;
+  openCorpusDoc.value = null;
+  openCorpusDocId.value = docId;
+  const r = await apiGet<CorpusDocContent>(
+    `/agents/${encodeURIComponent(agentId)}/corpus/${encodeURIComponent(docId)}`,
+  );
+  openCorpusDocLoading.value = false;
+  if (r.ok) openCorpusDoc.value = r.data;
+  else openCorpusDocError.value = r.detail;
 }
 
 async function loadEvalSummary(id: string, includeCases: 'none' | 'baseline' | 'latest' | 'both' = 'baseline'): Promise<void> {
@@ -161,7 +225,7 @@ export function AgentModal() {
         </div>
         <div class="modal-body">
           <div class="modal-tabs">
-            {(['overview', 'versions', 'subscribers', 'eval', 'publish'] as Tab[]).map((t) => (
+            {(['overview', 'versions', 'subscribers', 'eval', 'corpus', 'publish'] as Tab[]).map((t) => (
               <div
                 key={t}
                 class={`modal-tab ${tab === t ? 'active' : ''}`}
@@ -170,12 +234,16 @@ export function AgentModal() {
                   if (t === 'eval' && a && evalSummary.value === null && !evalLoading.value) {
                     void loadEvalSummary(a.id, 'baseline');
                   }
+                  if (t === 'corpus' && a && corpusList.value === null && !corpusLoading.value) {
+                    void loadCorpus(a.id);
+                  }
                 }}
               >
                 {t === 'overview' ? 'Overview'
                   : t === 'versions' ? 'Version History'
                   : t === 'subscribers' ? 'Subscribers'
                   : t === 'eval' ? 'Eval'
+                  : t === 'corpus' ? 'Corpus'
                   : 'Publish New Version'}
               </div>
             ))}
@@ -186,6 +254,7 @@ export function AgentModal() {
           {a && tab === 'versions' && <VersionsTab versions={a.versions ?? []} />}
           {a && tab === 'subscribers' && <SubscribersTab subscribers={a.subscribers ?? []} />}
           {a && tab === 'eval' && <EvalTab />}
+          {a && tab === 'corpus' && <CorpusTab agentId={a.id} />}
           {a && tab === 'publish' && <PublishTab agentId={a.id} />}
         </div>
         <div class="modal-footer">
@@ -568,6 +637,128 @@ function CaseDetail({ c }: { c: EvalCaseSummary }) {
       </table>
     </div>
   );
+}
+
+// Corpus tab (S82f-2-extended W6). Surfaces agent-local RAG docs from
+// GET /api/agents/{id}/corpus. Distinct from /rag (Azure AI Search global
+// index) — vendor_risk's tools.py searches THIS corpus directly, so the
+// citations the agent emits trace back to these doc_ids.
+function CorpusTab({ agentId }: { agentId: string }) {
+  const list = corpusList.value;
+  if (corpusLoading.value && !list) return <div class="loading">Loading corpus…</div>;
+  if (corpusError.value) return <div class="error-banner">Failed to load corpus: {corpusError.value}</div>;
+  if (!list) return null;
+  if (!list.has_corpus) {
+    return (
+      <div class="empty-state">
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>No agent-local corpus</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          This agent has no <code>agents/{list.agent_id}/corpus/manifest.json</code>.
+          Agents that ground against the global Azure AI Search index appear
+          under <code>/rag</code> instead.
+        </div>
+      </div>
+    );
+  }
+  const openId = openCorpusDocId.value;
+  const openDoc = openCorpusDoc.value;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+      <div>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
+          {list.doc_count} docs · manifest {list.version ?? '?'}
+        </div>
+        <table class="version-table" style={{ fontSize: 12 }}>
+          <thead>
+            <tr><th>Doc</th><th style={{ width: 70 }}>Size</th></tr>
+          </thead>
+          <tbody>
+            {list.docs.map((d) => {
+              const isOpen = d.doc_id === openId;
+              return (
+                <tr
+                  key={d.doc_id ?? d.path}
+                  style={{
+                    cursor: d.exists ? 'pointer' : 'not-allowed',
+                    background: isOpen ? 'var(--bg-secondary, rgba(255,255,255,0.04))' : undefined,
+                  }}
+                  onClick={() => {
+                    if (d.exists && d.doc_id) void loadCorpusDoc(agentId, d.doc_id);
+                  }}
+                >
+                  <td>
+                    <div class="font-mono" style={{ fontSize: 11 }}>{d.doc_id ?? '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      {d.title ?? d.path}
+                    </div>
+                    {d.frameworks.length > 0 && (
+                      <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {d.frameworks.map((f) => (
+                          <span key={f} class="badge badge-info" style={{ fontSize: 10 }}>{f}</span>
+                        ))}
+                      </div>
+                    )}
+                    {!d.exists && (
+                      <div style={{ fontSize: 10, color: 'var(--critical)' }}>missing on disk</div>
+                    )}
+                  </td>
+                  <td>{typeof d.size_bytes === 'number' ? fmtBytesShort(d.size_bytes) : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {(list.extras.subprocessor_db || list.extras.internal_systems) && (
+          <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
+            <strong>Side files:</strong>
+            {list.extras.subprocessor_db && <> · <code>{list.extras.subprocessor_db}</code></>}
+            {list.extras.internal_systems && <> · <code>{list.extras.internal_systems}</code></>}
+          </div>
+        )}
+      </div>
+      <div>
+        {!openId && (
+          <div class="empty-state" style={{ fontSize: 12 }}>
+            Click a doc to view its content.
+          </div>
+        )}
+        {openId && openCorpusDocLoading.value && <div class="loading">Loading…</div>}
+        {openId && openCorpusDocError.value && (
+          <div class="error-banner">Failed: {openCorpusDocError.value}</div>
+        )}
+        {openId && openDoc && (
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{openDoc.title ?? openDoc.doc_id}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }} class="font-mono">
+              agents/{agentId}/corpus/{openDoc.path}
+              {openDoc.truncated && (
+                <span style={{ marginLeft: 6, color: 'var(--medium)' }}>
+                  (truncated at {openDoc.byte_limit} bytes)
+                </span>
+              )}
+            </div>
+            <pre style={{
+              background: 'var(--bg-secondary, rgba(255,255,255,0.04))',
+              padding: 12,
+              borderRadius: 6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: 12,
+              maxHeight: 480,
+              overflow: 'auto',
+              margin: 0,
+            }}>{openDoc.content}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtBytesShort(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // Publish New Version form (#18). POST /agents/{id}/publish.

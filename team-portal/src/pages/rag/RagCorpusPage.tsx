@@ -213,6 +213,22 @@ export function RagCorpusPage() {
         </div>
       </div>
 
+      <div style={{
+        marginBottom: '0.75rem',
+        padding: '0.5rem 0.75rem',
+        background: 'var(--bg-secondary, rgba(255,255,255,0.04))',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+      }}>
+        <strong>This page manages the global Azure AI Search corpus.</strong>{' '}
+        Some agents ship with their own local corpus (e.g. <code>vendor_risk</code>{' '}
+        — TPRM policy, GDPR Art.28, DORA, NYDFS-500, SCC 2021, prior assessments,
+        carve-out playbook). Open <a href="/agent-library?open=vendor_risk">Agent
+        Library → vendor_risk → Corpus</a> to browse those docs.
+      </div>
+
       {!statsLoading.value && s && !enabled && (
         <div class="error-banner" style={{ marginBottom: '0.75rem' }}>
           <strong>RAG backend disabled.</strong> Index and search will return safe empties.

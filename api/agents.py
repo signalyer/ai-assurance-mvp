@@ -663,3 +663,210 @@ async def get_agent_eval_summary(
             "pass_rate_mean": pass_rate_mean,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/agents/{agent_id}/corpus            (S82f-2-extended W6)
+# GET /api/agents/{agent_id}/corpus/{doc_id}
+# ---------------------------------------------------------------------------
+#
+# Surfaces agent-local RAG corpora — distinct from the global Azure AI Search
+# index exposed by /api/rag/*. vendor_risk has its own corpus at
+# agents/vendor_risk/corpus/ (TPRM policy, GDPR Art.28, DORA, NYDFS-500, SCC
+# 2021, prior assessments, carve-out playbook). The agent's tools.py
+# search_tprm_corpus reads this directory directly; without these endpoints
+# the operator has to ssh / cat to see what the agent grounded against.
+
+
+def _safe_doc_id(doc_id: str) -> str:
+    """Strip path traversal / separators from a manifest doc_id lookup."""
+    return doc_id.replace("/", "_").replace("\\", "_").replace("..", "_")
+
+
+def _agent_corpus_dir(agent_id: str) -> Path:
+    safe = _safe_doc_id(agent_id)
+    return _REPO_ROOT_AGENTS / "agents" / safe / "corpus"
+
+
+def _read_corpus_manifest(agent_id: str) -> dict[str, Any] | None:
+    path = _agent_corpus_dir(agent_id) / "manifest.json"
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("agents.corpus: manifest read failed agent_id=%s err=%s", agent_id, exc)
+        return None
+
+
+def _resolve_corpus_doc(agent_id: str, doc_id: str) -> tuple[dict[str, Any], Path] | None:
+    """Resolve a manifest doc_id to its on-disk path, sandboxed to the corpus.
+
+    Returns (manifest_entry, absolute_path) when the doc_id is in the
+    manifest AND the resolved path is inside the corpus directory. Returns
+    None on miss / sandbox violation — never raises so callers can map to 404.
+    """
+    manifest = _read_corpus_manifest(agent_id)
+    if not manifest:
+        return None
+    safe_doc = _safe_doc_id(doc_id)
+    for entry in manifest.get("docs", []) or []:
+        if entry.get("doc_id") != safe_doc:
+            continue
+        rel = entry.get("path") or ""
+        if not rel or ".." in rel:
+            return None
+        corpus_dir = _agent_corpus_dir(agent_id).resolve()
+        candidate = (corpus_dir / rel).resolve()
+        try:
+            candidate.relative_to(corpus_dir)
+        except ValueError:
+            # Path escaped the corpus root.
+            return None
+        if not candidate.exists() or not candidate.is_file():
+            return None
+        return entry, candidate
+    return None
+
+
+@router.get(
+    "/api/agents/{agent_id}/corpus",
+    operation_id="agents_corpus_list",
+)
+async def list_agent_corpus(agent_id: str) -> dict[str, Any]:
+    """Return the manifest of an agent's local RAG corpus.
+
+    Response shape:
+        {
+          "agent_id": "vendor_risk",
+          "has_corpus": true | false,
+          "version": "v0",
+          "doc_count": 13,
+          "docs": [
+            {"doc_id": ..., "title": ..., "path": ..., "frameworks": [...], "size_bytes": int, "exists": bool},
+            ...
+          ],
+          "extras": { "subprocessor_db": str|null, "internal_systems": str|null }
+        }
+
+    404 only when the agent itself is not in the domain registry; agents
+    without a corpus directory return `has_corpus: false` so the SPA can
+    render an honest empty state.
+    """
+    start = datetime.now(tz=timezone.utc)
+    logger.info("agents.corpus.list.enter agent_id=%s", agent_id)
+
+    a_mod = _agents()
+    agent = await asyncio.to_thread(a_mod.get_agent, agent_id=agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Agent '{agent_id}' not found", "code": "NOT_FOUND"},
+        )
+
+    manifest = await asyncio.to_thread(_read_corpus_manifest, agent_id)
+    corpus_dir = _agent_corpus_dir(agent_id)
+
+    if manifest is None:
+        return {
+            "agent_id": agent_id,
+            "has_corpus": False,
+            "version": None,
+            "doc_count": 0,
+            "docs": [],
+            "extras": {"subprocessor_db": None, "internal_systems": None},
+        }
+
+    docs_out: list[dict[str, Any]] = []
+    for entry in manifest.get("docs", []) or []:
+        rel = entry.get("path") or ""
+        size = None
+        exists = False
+        if rel:
+            candidate = corpus_dir / rel
+            if candidate.exists() and candidate.is_file():
+                exists = True
+                try:
+                    size = candidate.stat().st_size
+                except OSError:
+                    size = None
+        docs_out.append({
+            "doc_id": entry.get("doc_id"),
+            "title": entry.get("title"),
+            "path": rel,
+            "frameworks": list(entry.get("frameworks") or []),
+            "size_bytes": size,
+            "exists": exists,
+        })
+
+    elapsed_ms = (datetime.now(tz=timezone.utc) - start).total_seconds() * 1000
+    logger.info(
+        "agents.corpus.list.exit agent_id=%s docs=%d elapsed_ms=%.1f",
+        agent_id, len(docs_out), elapsed_ms,
+    )
+    return {
+        "agent_id": agent_id,
+        "has_corpus": True,
+        "version": manifest.get("version"),
+        "doc_count": len(docs_out),
+        "docs": docs_out,
+        "extras": {
+            "subprocessor_db": manifest.get("subprocessor_db"),
+            "internal_systems": manifest.get("internal_systems"),
+        },
+    }
+
+
+@router.get(
+    "/api/agents/{agent_id}/corpus/{doc_id}",
+    operation_id="agents_corpus_doc_get",
+)
+async def get_agent_corpus_doc(
+    agent_id: str,
+    doc_id: str,
+    max_bytes: int = Query(200_000, ge=1, le=1_000_000, description="Cap on returned content size"),
+) -> dict[str, Any]:
+    """Return one corpus document's content (markdown / JSON / text).
+
+    Sandbox: doc_id must appear in the manifest, and the resolved on-disk
+    path must stay inside `agents/<agent_id>/corpus/`. Arbitrary path
+    arguments are rejected with 404.
+    """
+    a_mod = _agents()
+    agent = await asyncio.to_thread(a_mod.get_agent, agent_id=agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Agent '{agent_id}' not found", "code": "NOT_FOUND"},
+        )
+
+    resolved = await asyncio.to_thread(_resolve_corpus_doc, agent_id, doc_id)
+    if resolved is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"Doc '{doc_id}' not in corpus for agent '{agent_id}'", "code": "NOT_FOUND"},
+        )
+
+    entry, path = resolved
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            content = fh.read(max_bytes + 1)
+    except OSError as exc:
+        logger.error("agents.corpus.doc read failed agent_id=%s doc_id=%s err=%s", agent_id, doc_id, exc)
+        raise HTTPException(status_code=500, detail={"error": "Failed to read corpus doc", "code": "READ_FAILED"})
+
+    truncated = len(content) > max_bytes
+    if truncated:
+        content = content[:max_bytes]
+
+    return {
+        "agent_id": agent_id,
+        "doc_id": entry.get("doc_id"),
+        "title": entry.get("title"),
+        "path": entry.get("path"),
+        "frameworks": list(entry.get("frameworks") or []),
+        "content": content,
+        "truncated": truncated,
+        "byte_limit": max_bytes,
+    }
