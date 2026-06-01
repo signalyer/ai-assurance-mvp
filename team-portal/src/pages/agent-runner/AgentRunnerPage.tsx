@@ -27,6 +27,13 @@ const llmText = signal<string>('');
 const running = signal<boolean>(false);
 const connectionBanner = signal<string | null>(null);
 const finalOutcome = signal<string | null>(null);
+// True once we've received chain.done or chain.error from the engine.
+// fetchEventSource fires `onerror` even on a clean server EOF after the
+// terminal SSE event — without this guard the SPA shows "Connection lost"
+// on a run that actually completed. See client.ts:159-164 + the S82f-2
+// vendor_risk demo path where 50s runs were reaching Done but the banner
+// still fired.
+const terminalEventSeen = signal<boolean>(false);
 
 const canRun = computed(() =>
   !running.value &&
@@ -58,6 +65,7 @@ function resetForRun(): void {
   llmText.value = '';
   connectionBanner.value = null;
   finalOutcome.value = null;
+  terminalEventSeen.value = false;
 }
 
 function patchStep(name: StepName, patch: Partial<StepState>): void {
@@ -155,6 +163,7 @@ function applyEvent(evt: ChainEvent): void {
       markActiveNext('audit');
       return;
     case 'chain.done':
+      terminalEventSeen.value = true;
       totalElapsedMs.value = evt.total_elapsed_ms;
       finalOutcome.value = evt.outcome;
       patchStep('done', {
@@ -169,6 +178,7 @@ function applyEvent(evt: ChainEvent): void {
       });
       return;
     case 'chain.error':
+      terminalEventSeen.value = true;
       steps.value = steps.value.map((s) =>
         s.status === 'active' ? { ...s, status: 'error', detail: `${evt.error_type}: ${evt.message}` } : s,
       );
@@ -193,6 +203,12 @@ async function onRun(): Promise<void> {
       {
         onEvent: (evt) => applyEvent(evt),
         onError: (err) => {
+          // Suppress the banner when the chain already reached its terminal
+          // event — fetchEventSource fires onerror on the engine's normal
+          // stream close (treated as "unexpected EOF") even though the run
+          // completed successfully. Real errors before chain.done/chain.error
+          // still surface the banner.
+          if (terminalEventSeen.value) return;
           const msg = err instanceof Error ? err.message : String(err);
           connectionBanner.value = `Connection lost — start a new run. (${msg})`;
         },
