@@ -246,6 +246,29 @@ Live tips after S72: engine commit `c05a566` deployed to `app-aigovern-dev`; tea
 
 **Test status at end of S74b:** 354 passed / 0 failed / 8 skipped / **0 deprecation warnings** (down from 66 entering S74).
 
+**S75 — Bedrock streaming adapter shipped end-to-end (the work that's been deferred since S69):**
+- AWS subscription provisioned by user. IAM user `signallayer-bedrock-runtime` created with inline policy scoped to `arn:aws:bedrock:*::foundation-model/anthropic.claude-*` + inference-profile ARN + marketplace subscribe (one-time for first-invoke subscription, can be revoked post-bootstrap). Credentials set on `app-aigovern-dev` via `az webapp config appsettings set` for `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION=us-east-1`.
+- `domain/assurance_providers.py::stream_bedrock_response()` — async generator mirroring `stream_anthropic_response` shape exactly: yields `("delta", text) | ("done", usage_dict)`. Uses Bedrock `converse_stream` API. boto3 lazy-imported per `[[appservice-deploy-python]]` (top-level would slow App Service cold start ~2s). Sync EventStream iterated via `asyncio.to_thread` for the initial call, then chunk-yield with `asyncio.sleep(0)` between deltas so the SSE writer flushes each chunk without batching. `_BEDROCK_COST_PER_INPUT/OUTPUT_TOKEN_USD` constants ($3/M input, $15/M output — same per-token as Anthropic direct; no separate cross-region routing fee).
+- Bedrock provider entry refreshed: `default_model` was `'anthropic.claude-3-5-sonnet-v2 (via Bedrock)'` (EOL'd by AWS) → `'us.anthropic.claude-sonnet-4-6'` (current; the `us.` prefix selects the US cross-region inference profile bundling us-east-1 + us-east-2 + us-west-2 capacity). `available_models` list updated to current 4.x catalog (Sonnet 4.6, Opus 4.7, Haiku 4.5). `api_key_secret_ref` changed from the original `'aws-iam://role/...'` IAM-role design to the reality `'aws-env://AWS_ACCESS_KEY_ID'` (App Service can't transit cross-cloud IAM roles).
+- `api/assurance_model.py::_stream_live_assurance_response` now provider-agnostic. Dispatches on `decision.provider.provider_type == ProviderType.BEDROCK.value` to pick `stream_bedrock_response` vs `stream_anthropic_response`. Yield contract identical so audit/response code is unchanged.
+- `requirements.txt` + `requirements-deploy.txt` both gained `boto3>=1.35.0` per `[[requirements-deploy-drift]]`.
+- All 9 SPA Anthropic-prod pins removed (5 team-portal AiSystemDrawer, 1 ciso-console FindingsInboxPage, 1 EvidencePage, 2 PortfolioPage). Routing engine now picks Bedrock first for restricted data classes per the existing `select_assurance_provider` sort key in `domain/assurance_providers.py:562`.
+- Live verification chain (post-deploy):
+  * Local adapter probe: `us.anthropic.claude-sonnet-4-6` returned 19 deltas / 185 in / 42 out / $0.00119 from IAM user `signallayer-bedrock-runtime`.
+  * Engine SHA `71bd48e` (then `fec54e1`) on `/api/health`.
+  * Provider catalog loads cleanly post-deploy (no import-time crash from boto3).
+  * Live bundles: team-portal `index-lJdBG_wQ.js`, ciso-console `index-DU584gZD.js`. String-grep against both live origins shows zero `anthropic-prod` hits per `[[two-origins-spa-vs-engine]]`.
+- Button-click smoke deferred to user per `[[smoke-scripts-must-run-live]]`.
+
+**S75 unblocked-and-discovered hazards (worth knowing for next session):**
+- **Bedrock 4.x models require an inference profile**, not a bare foundation-model ARN. Calling `converse()` with `modelId='anthropic.claude-sonnet-4-6'` returns `ValidationException: Invocation of model ID ... with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.` The `us.` / `eu.` / `apac.` prefix selects the region-pool profile. IAM resource ARNs must include `arn:aws:bedrock:*:*:inference-profile/*` alongside the `foundation-model/*` ARN.
+- **Anthropic models on Bedrock are AWS-Marketplace-subscribed on first invoke**, not pre-approved on the (now-retired) Model Access page. The IAM user invoking first must hold `aws-marketplace:ViewSubscriptions` + `aws-marketplace:Subscribe` to trigger the one-time subscription. Subsequent invocations from any principal work without marketplace perms.
+- **Anthropic use-case form** is still required on first invoke — surfaced as `ResourceNotFoundException: Model use case details have not been submitted for this account. Fill out the Anthropic use case details form...` The form is now reached via Bedrock console → Model catalog → Claude X → Submit use case (since the dedicated Model Access page was retired).
+- **First-invocation grace**: there's a brief window (≈1-2 invocations) before the use-case-form gate fires. A non-streaming `converse` succeeded once before the form gate triggered on `converse_stream`. Useful diagnostic — if a first call works and the second fails, that's the grace expiring, not a code regression.
+- **bedrock:Converse / bedrock:ConverseStream are NOT valid IAM actions.** The Converse API surface authorizes against `bedrock:InvokeModel` / `bedrock:InvokeModelWithResponseStream`. AWS's policy editor flags them as unknown actions.
+
+**Test status at end of S75:** 354 passed / 0 failed / 8 skipped. No regressions. boto3 added to both requirements files; engine deploy from `71bd48e` and `fec54e1` both green.
+
 **/verify rego positive test rotated** from `list_resource_groups` to `get_resource_metadata` (S63) — proves the *current* allowlist surface, not just the original. Future tool additions should continue rotating to the newest entry.
 
 ## Files — Built (2026-05-21, Session 05)
