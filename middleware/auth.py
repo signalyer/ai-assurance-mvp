@@ -46,13 +46,25 @@ PUBLIC_PREFIXES = (
     "/auth/oidc/",  # Entra OIDC login + callback (Session 49, ADR-002)
 )
 
-ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER")
+ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER", "TPRM_ANALYST")
 # OPERATOR added in Session 11 for the Demo Control panel. Provision
 # DEMO_USER_OPERATOR_HASH to permit `demo-operator` logins in prod.
 #
 # ENGINEER added in Session 43 for V2-PORTAL-SPLIT acceptance A6 (engineer →
 # Team Workspace landing). Provision DEMO_USER_ENGINEER_HASH alongside the
 # other DEMO_USER_<ROLE>_HASH settings.
+#
+# TPRM_ANALYST added in S82f-2 (ADR-004 Path A). Resolves a pre-existing
+# rego/auth mismatch where `policies/vendor-risk-int.rego:69-72` named
+# `required_operator_roles := {"tprm-analyst", "ciso"}` but no `tprm-analyst`
+# entry existed here, so every INT call could only satisfy the role gate via
+# `ciso`. Path A keeps the two-line-of-defense separation (second-line risk
+# vs third-line audit) instead of collapsing onto AUDIT. The cookie role
+# string is `tprm-analyst` (hyphen, lowercase) — auth derives it from the
+# username via `user.replace("demo-", "", 1).lower()`, so the demo username
+# must be `demo-tprm-analyst` and the env hash is DEMO_USER_TPRM_ANALYST_HASH.
+# Pair with a seed/PATCH-time grant in `policies/vendor-risk-int.rego` (no
+# rego change required; the role string already matches).
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +86,9 @@ ROLES = ("CRO", "CISO", "AUDIT", "MRM", "AIGOV", "OPERATOR", "ENGINEER")
 # Session 25) keeps the SSO seamless across the two subdomains.
 
 _PORTAL_ROLES = frozenset({"engineer", "operator", "aigov"})
-_GOV_ROLES = frozenset({"ciso", "audit", "mrm", "cro"})
+# tprm-analyst is second-line risk function — lands in CISO Console
+# alongside ciso/audit/mrm/cro per ADR-004 Path A.
+_GOV_ROLES = frozenset({"ciso", "audit", "mrm", "cro", "tprm-analyst"})
 
 
 def _portal_url() -> str:

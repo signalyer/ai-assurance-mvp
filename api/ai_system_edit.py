@@ -16,16 +16,40 @@ Edit submission validation failures stay 400 with structured detail.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain import ai_system_edit as ase
 from domain import repository as repo
+from domain.models import RuntimeFlags
+from middleware.auth import require_role
 
 from api._models import ConflictDetail
+
+
+# ADR-004 §8 Q3: default TTL for calibration is 24h. Production tuning
+# (4-8h per §8 Q3) is deferred to Phase 9 and configured via env override.
+_DEFAULT_RUNTIME_FLAG_TTL_SECONDS = 86400
+
+
+def _runtime_flag_ttl_seconds() -> int:
+    """Resolve TTL window for a runtime-flag attestation.
+
+    Reads ``RUNTIME_FLAG_TTL_SECONDS`` at call time so the deploy can
+    tighten the window without a code change. Falls back to 24h.
+    """
+    raw = os.getenv("RUNTIME_FLAG_TTL_SECONDS", "").strip()
+    if not raw:
+        return _DEFAULT_RUNTIME_FLAG_TTL_SECONDS
+    try:
+        v = int(raw)
+        return v if v > 0 else _DEFAULT_RUNTIME_FLAG_TTL_SECONDS
+    except ValueError:
+        return _DEFAULT_RUNTIME_FLAG_TTL_SECONDS
 
 
 router = APIRouter(prefix="/api/ai-systems", tags=["ai-system-edit"])
@@ -85,6 +109,29 @@ class DecidePayload(BaseModel):
     decision: str       # APPROVE | REJECT | OVERRIDE
     note: str = ""
     role: Optional[str] = None  # optional override; otherwise derived from session user
+
+
+class RuntimeFlagsPatchPayload(BaseModel):
+    """Operator-supplied attestation block.
+
+    Server computes ``attested_by`` (from session cookie), ``attested_at``
+    (now), and ``expires_at`` (now + RUNTIME_FLAG_TTL_SECONDS). The caller
+    cannot set those — that is the entire safety story of ADR-004 Option B.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    dlp_completed: bool
+    network_egress_lock_engaged: bool
+    justification: str = Field(..., min_length=1)
+
+
+class RuntimeFlagsOut(BaseModel):
+    """Response envelope for the PATCH endpoint."""
+    model_config = ConfigDict(extra="forbid")
+
+    ai_system_id: str
+    runtime_flags: RuntimeFlags
+    ttl_seconds: int
 
 
 # ---------- response models ------------------------------------------------
@@ -345,4 +392,85 @@ async def decide_revision(
     return DecideRevisionOut(
         revision=RevisionOut(**updated),
         status=EditStatusOut(**ase.status_for_system(updated["ai_system_id"])),
+    )
+
+
+# ---------- runtime-flag attestation (ADR-004) -----------------------------
+
+@router.patch(
+    "/{system_id}/runtime-flags",
+    response_model=RuntimeFlagsOut,
+    operation_id="ai_systems_runtime_flags_patch",
+)
+async def patch_runtime_flags(
+    system_id: str,
+    payload: RuntimeFlagsPatchPayload,
+    request: Request,
+    _role: None = Depends(require_role("ciso", "tprm-analyst")),
+) -> RuntimeFlagsOut:
+    """Attest the runtime safety flags for an AI system (ADR-004 Option B).
+
+    The two boolean flags are runtime safety controls consumed by the
+    ``vendor-risk-int`` rego policy. They are NOT defaultable and NOT
+    inferrable: an operator with the ``ciso`` or ``tprm-analyst`` role
+    must explicitly attest. The dispatcher reads the persisted attestation
+    server-side at chain time and injects the values into the policy
+    engine's ``input_data`` — a fabricated request body cannot bypass this.
+
+    TTL semantics: the attestation expires after ``RUNTIME_FLAG_TTL_SECONDS``
+    (default 24h). After expiry the dispatcher reads None and the next
+    INT run DENIES at ``policy_gate`` until re-attested. This is the
+    SOP-Phase-8 deny-on-expiry drill.
+
+    Two persistence writes happen on success:
+      1. Append to ``data/system_runtime_flags.jsonl`` (the overlay the
+         repository fold reads).
+      2. Append a chained ``RUNTIME_FLAGS_ATTESTED`` event via the audit
+         chain (independent of any agent run).
+
+    If the audit-chain write fails, the endpoint returns 500 and the
+    attestation is NOT considered persisted (the overlay row exists but
+    the read path will replay it on retry — idempotent enough for
+    operator workflow).
+
+    Returns the persisted attestation block and the TTL window applied.
+    """
+    if _base_dict(system_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown AI system: {system_id}")
+
+    attested_by = _current_user(request)
+    if attested_by == "system":
+        # _current_user returns "system" when no session cookie / SESSION_SECRET
+        # is present. In production with AUTH_ENABLED=true the role gate above
+        # would have already 401'd; this is a defense-in-depth check for the
+        # dev path where AUTH_ENABLED=false bypasses require_role.
+        raise HTTPException(
+            status_code=401,
+            detail="runtime_flags attestation requires an authenticated session",
+        )
+
+    now = datetime.now(timezone.utc)
+    ttl = _runtime_flag_ttl_seconds()
+    flags = RuntimeFlags(
+        dlp_completed=payload.dlp_completed,
+        network_egress_lock_engaged=payload.network_egress_lock_engaged,
+        attested_by=attested_by,
+        attested_at=now,
+        justification=payload.justification,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+
+    try:
+        from storage import patch_system_runtime_flags
+        patch_system_runtime_flags(system_id, flags)
+    except RuntimeError as exc:
+        # Audit-chain write failed. Surface as 500 — the operator should
+        # retry rather than have the platform silently accept an
+        # attestation without an audit row.
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return RuntimeFlagsOut(
+        ai_system_id=system_id,
+        runtime_flags=flags,
+        ttl_seconds=ttl,
     )
