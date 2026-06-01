@@ -360,6 +360,66 @@ class AgentTool(BaseModel):
     rate_limit_per_min: Optional[int] = None
 
 
+class RuntimeFlags(BaseModel):
+    """Per-AISystem runtime safety attestation block.
+
+    Persisted as an overlay row in ``data/system_runtime_flags.jsonl``
+    (see `storage.read_system_runtime_flags` / `patch_system_runtime_flags`)
+    and folded onto :class:`AISystem` at read time by
+    `domain.repository._fold_runtime_flags`.
+
+    The two boolean flags are runtime safety controls consumed by the
+    `vendor-risk-int` rego policy at `policies/vendor-risk-int.rego:82`
+    (``required_true_flags``). The dispatcher in
+    `domain.agent_runner.stream_agent_run_with_chain_events` reads the
+    persisted row before calling `policy_engine.evaluate` and injects the
+    flag values into ``input_data`` so the rego gate can evaluate. A
+    fabricated request body cannot bypass this — the dispatcher reads
+    server-side state, not the caller's payload.
+
+    TTL semantics: when ``expires_at`` is in the past, the read helper
+    returns None and the dispatcher injects falsy values, producing the
+    ADR-004 §5 deny-on-expiry drill outcome. Default TTL is sourced from
+    ``RUNTIME_FLAG_TTL_SECONDS`` env (24h default for calibration,
+    Phase-9 will tighten to 4-8h per ADR §8 Q3).
+
+    See ADR-004 — vendor_risk INT runtime-flag flow.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    dlp_completed: bool = Field(
+        ...,
+        description="True if the DLP pipeline confirmed no unmasked sensitive "
+                    "tokens will reach the LLM for this AI system.",
+    )
+    network_egress_lock_engaged: bool = Field(
+        ...,
+        description="True if the network isolation contract is provably "
+                    "enforced at the host level for this AI system.",
+    )
+    attested_by: str = Field(
+        ...,
+        description="Username of the operator who attested (e.g. 'demo-ciso'). "
+                    "Sourced from the session cookie at PATCH time — never the request body.",
+    )
+    attested_at: datetime = Field(
+        ...,
+        description="UTC timestamp the attestation was recorded.",
+    )
+    justification: str = Field(
+        ...,
+        min_length=1,
+        description="Free-text reason the attestation is being made. "
+                    "Audit-chain artifact; not parsed by the policy engine.",
+    )
+    expires_at: datetime = Field(
+        ...,
+        description="UTC timestamp after which the attestation is treated as "
+                    "absent and the policy gate DENIES. Driven by "
+                    "RUNTIME_FLAG_TTL_SECONDS env (default 86400s = 24h).",
+    )
+
+
 class Applicability(BaseModel):
     """Predicate that determines whether a Control applies to a given AISystem.
 
@@ -417,6 +477,13 @@ class AISystem(BaseModel):
     data_source: Literal["seed", "real"] = Field(
         default="seed",
         description="Data provenance: 'seed' = demo/portfolio fixture; 'real' = live customer system. V1/V2 toggle filters on this. (Named data_source to avoid collision with Evidence.source which already means 'tool that produced the evidence'.)",
+    )
+    runtime_flags: Optional[RuntimeFlags] = Field(
+        default=None,
+        description="Server-side runtime safety attestation block, folded from "
+                    "data/system_runtime_flags.jsonl at read time. None when no "
+                    "valid (non-expired) attestation exists. Consumed by the "
+                    "vendor_risk INT policy gate. See ADR-004.",
     )
     created_at: datetime
     updated_at: datetime
@@ -640,7 +707,7 @@ __all__ = [
     # Agent enums
     "AgentOwnerType", "AgentStatus",
     # Sub-models
-    "FrameworkMapping", "RAGSource", "AgentTool", "Applicability",
+    "FrameworkMapping", "RAGSource", "AgentTool", "Applicability", "RuntimeFlags",
     # Entities
     "AISystem", "Framework", "Control", "Assessment", "EvalResult",
     "Finding", "ReleaseGate", "Evidence", "RemediationItem", "RuntimeEvent",

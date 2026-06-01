@@ -61,19 +61,49 @@ def _fold_runtime_status(sys: AISystem) -> AISystem:
     return sys.model_copy(update={"runtime_status": effective})
 
 
+def _fold_runtime_flags(sys: AISystem) -> AISystem:
+    """Overlay the latest non-expired RuntimeFlags onto an AISystem.
+
+    Mirrors :func:`_fold_runtime_status` — `runtime_flags` is server-side
+    state mutated by `PATCH /api/ai-systems/{id}/runtime-flags` and stored
+    in the ``system_runtime_flags.jsonl`` overlay (NOT ``ai_systems.jsonl``,
+    which is intake-only). Folded at read time so consumers see the
+    effective attestation state without the route layer having to query
+    storage explicitly.
+
+    Returns the original AISystem unchanged when no valid (non-expired)
+    attestation row exists for ``sys.id``.
+
+    See ADR-004 — vendor_risk INT runtime-flag flow.
+    """
+    # Lazy import to keep the storage module out of repository's startup
+    # graph (and to avoid any future cycle with domain.models).
+    from storage import read_system_runtime_flags
+
+    flags = read_system_runtime_flags(sys.id)
+    if flags is None:
+        return sys
+    return sys.model_copy(update={"runtime_flags": flags})
+
+
+def _fold(sys: AISystem) -> AISystem:
+    """Compose all read-time overlays in order: runtime_status, then runtime_flags."""
+    return _fold_runtime_flags(_fold_runtime_status(sys))
+
+
 def list_ai_systems() -> list[AISystem]:
-    """All AI systems — seed plus intake-created, with runtime_status folded."""
+    """All AI systems — seed plus intake-created, with overlays folded."""
     intake = [AISystem.model_validate(r) for r in _read_jsonl(SYSTEMS_FILE)]
-    return [_fold_runtime_status(s) for s in (list(seed.AI_SYSTEMS) + intake)]
+    return [_fold(s) for s in (list(seed.AI_SYSTEMS) + intake)]
 
 
 def get_ai_system(system_id: str) -> AISystem | None:
     for s in seed.AI_SYSTEMS:
         if s.id == system_id:
-            return _fold_runtime_status(s)
+            return _fold(s)
     for r in _read_jsonl(SYSTEMS_FILE):
         if r.get("id") == system_id:
-            return _fold_runtime_status(AISystem.model_validate(r))
+            return _fold(AISystem.model_validate(r))
     return None
 
 
