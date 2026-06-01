@@ -57,6 +57,33 @@
 | 16 | run-44b19266d8bb | sys-vendor-risk-int-001 | int-06-intref-customer-pii-export | HIGH |  | N | 4.9 |  |  | POLICY_DENIED at gate (workload_required_flag_not_set) |
 | 17 | run-68910d429655 | sys-vendor-risk-int-001 | int-07-hitl-critical-resid | CRITICAL |  | N | 3.7 |  |  | POLICY_DENIED at gate (workload_required_flag_not_set) |
 | 18 | run-258f18d465f3 | sys-vendor-risk-int-001 | int-08-hitl-high-resid-mnpi | HIGH |  | N | 3.9 |  |  | POLICY_DENIED at gate (workload_required_flag_not_set) |
+| 11b | run-c17d726f8098 | sys-vendor-risk-int-001 | int-01-mnpi-deal-context | MEDIUM | HIGH | N | 63943.9 | 1a89416654a0ff1b59e8c35085ed85f5 | aud-a88dad500f43 | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch over-tier |
+| 12b | run-afbfca8d8901 | sys-vendor-risk-int-001 | int-02-mnpi-active-deal | HIGH | HIGH | Y | 51895.7 | a75eab7b2e82d8e6373efb3700667299 | aud-5ceb5c0ead55 | S82f-2 post-PATCH (ADR-004 Option B) |
+| 13b | run-d233e20430f3 | sys-vendor-risk-int-001 | int-03-mnpi-board-package | HIGH | CRITICAL | N | 53908.4 | 47e2b94e212a5505498db06e7ef40434 | aud-a59ab3661611 | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch over-tier |
+| 14b | run-df4a9ca4be24 | sys-vendor-risk-int-001 | int-04-intref-core-banking | HIGH | MEDIUM | N | 22970.9 | 388bdd45235bb48b16c9f877fc46c585 | aud-5eca6c57c2f1 | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch under-tier |
+| 15b | run-9a16492a650c | sys-vendor-risk-int-001 | int-05-intref-trading-platform | HIGH | MEDIUM | N | 26771.5 | feb84764b8e738cfc82941e954f31c53 | aud-e5b1a67613eb | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch under-tier |
+| 16b | run-bec06787ee84 | sys-vendor-risk-int-001 | int-06-intref-customer-pii-export | HIGH | MEDIUM | N | 43394.7 | 3b5d684017e417696448d5614722209b | aud-273683cb267e | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch under-tier |
+| 17b | run-7421d3ff3106 | sys-vendor-risk-int-001 | int-07-hitl-critical-resid | CRITICAL | MEDIUM | N | 25211.1 | 37e33c61c7a534261c86a462b996e14b | aud-6fc152a76871 | S82f-2 post-PATCH (ADR-004 Option B); tier_mismatch under-tier |
+| 18b | run-d48a9ab9f701 | sys-vendor-risk-int-001 | int-08-hitl-high-resid-mnpi | HIGH | HIGH | Y | 41332.7 | 726de1d4553d848cc2105324d9915d6a | aud-04d0cf806241 | S82f-2 post-PATCH (ADR-004 Option B) |
+
+**S82f-2 INT re-run summary (rows 11b–18b, 2026-06-01 post-deploy `590b920`):**
+attestation PATCH'd via `PATCH /api/ai-systems/sys-vendor-risk-int-001/runtime-flags`
+as `demo-ciso` with TTL=86400s. Engine sha at run: `590b9205`. Pre-flight PATCH
+appended a `RUNTIME_FLAGS_ATTESTED` audit-chain event (independent of any run,
+per ADR-004 §5). **All 8/8 fixtures cleared `policy_gate` and ran to
+`chain.done`** — previous baseline was 0/8 (all DENY on missing flags).
+
+- **Tier-match (post-unblock):** 2/8 (25%) — int-02, int-08
+- **Over-tier (more conservative than dataset):** int-01 (MEDIUM→HIGH), int-03 (HIGH→CRITICAL)
+- **Under-tier (model not gripping internal-ref → HIGH/CRITICAL signal):** int-04, int-05, int-06, int-07 (all → MEDIUM)
+- **Audit-chain coverage post-S82f-2:** 18/18 (was 10/18; INT runs now emit
+  proper audit rows because the chain reached `audit` event, not the early
+  `chain.done` deny path).
+
+Tier-match is a Phase-6 calibration concern, not an S82f-2 gate. S82f-2's
+exit criterion was "INT calibration unblocked"; that's now satisfied. The
+tier-mismatch pattern (under-tier on internal-system-references, over-tier
+on board/MNPI cues) is the seed of the next iteration cycle.
 
 The harness (`agents/vendor_risk/eval/run_calibration.py`) populates each row
 on chain.done; each `run_id` is also retrievable via

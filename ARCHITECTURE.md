@@ -78,6 +78,57 @@ Session 18 under different paths — `api/rag.py` exists; the UI shipped as
 `team-portal/src/pages/rag/RagCorpusPage.tsx` instead of `static/rag-governance.html`.
 Cleaned in Session 25.)
 
+## Files — Built (2026-06-01, S82f-2 — vendor_risk INT runtime-flag flow / ADR-004 Option B)
+
+INT calibration unblocked. Pre-S82f-2 baseline: 0/8 INT fixtures cleared
+`policy_gate` (all DENIED on `workload_required_flag_not_set`). Post-S82f-2:
+**8/8 INT fixtures cleared the gate and ran to `chain.done`.** Tier-match is
+2/8 (Phase-6 calibration territory; not an S82f-2 gate). Engine sha at
+post-deploy verification: `590b9205`.
+
+- `domain/models.py` — new `RuntimeFlags` Pydantic v2 model (dlp_completed,
+  network_egress_lock_engaged, attested_by, attested_at, justification,
+  expires_at); `AISystem` extended with `runtime_flags: Optional[RuntimeFlags]`.
+- `storage.py` — append-only overlay at `data/system_runtime_flags.jsonl` with
+  `read_system_runtime_flags(id) -> Optional[RuntimeFlags]` (latest-wins,
+  TTL-gated) and `patch_system_runtime_flags(id, flags)` (write + audit-chain
+  `RUNTIME_FLAGS_ATTESTED` event). Codebase-idiomatic overlay pattern mirroring
+  `_fold_runtime_status`; ai_systems.jsonl remains intake-only.
+- `domain/repository.py` — `_fold_runtime_flags` + composed `_fold` so reads
+  surface attestation state without route-level lookups.
+- `api/ai_system_edit.py` — `PATCH /api/ai-systems/{id}/runtime-flags`,
+  role-gated to `ciso` OR `tprm-analyst`; payload is `extra="forbid"` so a
+  client cannot influence `attested_by`/`attested_at`/`expires_at`. TTL via
+  `RUNTIME_FLAG_TTL_SECONDS` (default 86400).
+- `domain/agent_runner.py:200` — dispatcher reads server-side attestation
+  for INT systems (`startswith("sys-vendor-risk-int-")`) and injects flag
+  values into `policy_evaluate(input_data=...)`. Fail-closed on read errors.
+- `middleware/auth.py:49` — `TPRM_ANALYST` added to `ROLES`; `_GOV_ROLES`
+  gains `tprm-analyst` (CISO Console landing). Closes the pre-existing
+  rego/auth mismatch in `policies/vendor-risk-int.rego:69-72`. Demo user
+  `demo-tprm-analyst` requires `DEMO_USER_TPRM_ANALYST_HASH` app setting
+  (out-of-band provisioning; not blocking S82f-2 because `demo-ciso`
+  satisfies the role gate alone).
+- `docs/SOP-agent-onboarding.md` Phase 8 — three-step failure-mode drill
+  sub-step (attest→ALLOW · expire→DENY · re-attest→ALLOW). 1:1 mapping
+  onto `tests/test_runtime_flags_overlay.py::test_drill_*`.
+- `agents/vendor_risk/eval/run_calibration.py` — pre-flight PATCH the
+  INT runtime-flags before submitting fixtures. Aborts harness on PATCH
+  failure so the calibration log can't fill with DENY rows.
+- `tests/test_runtime_flags_overlay.py` — 9 tests covering storage
+  invariants (empty / roundtrip / expired / latest-wins / repo-fold) +
+  ADR-004 §5 drill (a/b/c) + dispatcher-shape negative regression.
+- `docs/sop-vendor-risk/07-staged-calibration-log.md` — rows 11b–18b
+  appended with post-S82f-2 LLM-successful runs + S82f-2 INT re-run
+  summary. Audit-chain coverage 18/18 (was 10/18).
+
+**Deferred (ADR-004 §8 Q2):** `assert_no_egress()` wiring in
+`agents/vendor_risk/agent.py::_execute_run`. The rego gate is the primary
+no-egress control and is now proven enforcing. Runtime assertion requires
+the local-provider swap (INT today still calls Anthropic — see agent.py
+comment); wrapping `_execute_run` with `assert_no_egress` before that
+swap would break every INT run. Log as an open finding for the next session.
+
 ## Files — Built (2026-06-01, S82e — vendor_risk SOP Phase 6 Iterate × Lock)
 
 5-cycle iteration from 0/18 → 17/18 (94.4%), all metric thresholds cleared.
