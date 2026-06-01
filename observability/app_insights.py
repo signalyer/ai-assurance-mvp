@@ -69,3 +69,41 @@ def init_app_insights(connection_string: str | None) -> None:
         )
     except Exception as exc:
         _log.error("app_insights_init_failed error=%s", exc)
+
+
+def instrument_fastapi_app(app: object) -> None:
+    """Attach OpenTelemetry's FastAPI instrumentor to *app*.
+
+    Must be called AFTER ``init_app_insights`` has set the global
+    TracerProvider, otherwise the instrumentor binds to the no-op
+    default provider and never emits any spans.
+
+    Silently no-ops when:
+      - ``init_app_insights`` did not initialise (no connection string,
+        or SDK missing), OR
+      - ``opentelemetry-instrumentation-fastapi`` is not installed.
+
+    Never raises -- a missing instrumentor must not crash startup.
+
+    S77 #2: without this call, observability/app_insights.py wired the
+    AzureMonitorTraceExporter but no spans were ever created for HTTP
+    requests, so App Insights workspace `appi-aigovern-dev` stayed empty.
+    """
+    if not _initialised:
+        _log.info(
+            "fastapi_instrument_skipped reason=tracer_provider_not_initialised"
+        )
+        return
+
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(app)  # type: ignore[arg-type]
+        _log.info("fastapi_instrumented spans_per_request=true")
+    except ImportError as exc:
+        _log.error(
+            "fastapi_instrumentor_missing error=%s hint=install opentelemetry-instrumentation-fastapi",
+            exc,
+        )
+    except Exception as exc:
+        _log.error("fastapi_instrument_failed error=%s", exc)
