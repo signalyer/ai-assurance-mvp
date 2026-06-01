@@ -54,6 +54,18 @@ langfuse>=4.0.0
 # Database — Postgres (used by domain/agent_memory.py + projection at module load)
 psycopg[binary]>=3.2
 psycopg-pool>=3.2
+# SQLAlchemy engine — used at module-load by domain/agent_memory.py,
+# domain/agents.py, domain/agent_bindings.py, domain/agent_subscribers.py.
+# Missing in S76 prod caused every agent/version/binding/episode to fall back
+# to in-process dicts (volatile across cold starts). Same drift class as S69
+# sse-starlette: present in requirements.txt, absent here. See
+# [[requirements-deploy-drift]].
+sqlalchemy>=2.0.0
+# psycopg2-binary: SQLAlchemy 2.x routes bare `postgresql://` URLs to the
+# psycopg2 dialect. Production DATABASE_URL uses that scheme, so without
+# this the engine would fail a second time with ModuleNotFoundError:
+# psycopg2 right after sqlalchemy was fixed. Matches requirements.txt:30.
+psycopg2-binary>=2.9.0
 
 # RAG — Azure AI Search (used by domain/rag_engine.py at module load)
 azure-search-documents>=11.4.0
