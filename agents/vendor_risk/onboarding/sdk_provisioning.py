@@ -14,15 +14,21 @@ Idempotency:
       if the system is already at the destination status; we treat that
       as success.
 
-Plaintext secret handling:
-    SDK secrets are surfaced exactly once at issuance (the wizard UX
-    referenced in `domain/sdk_keys.py`). For lifespan-minted keys there
-    is no operator in the loop, so we persist the plaintext to
-    `/home/.s82f-secrets-<system_id>.txt` with mode 0600. App Service's
-    `/home/` is the only path that survives cold-start data wipes
-    (per [[kudu-rest-faster-than-ssh]] and the deploy-zip rule). The
-    operator pulls the file via `az webapp ssh` after deploy completes.
-    Never log the secret — see `domain.sdk_keys` invariants.
+Plaintext secret handling (revised S82f-1b):
+    SDK secrets are surfaced exactly once at issuance. For lifespan-minted
+    keys there is no operator in the loop, so the plaintext is emitted as
+    a single CRITICAL-level structured log line tagged
+    `SECRET_BOOTSTRAP_DO_NOT_LEAK`. App Insights captures container stdout,
+    so the operator retrieves it via a tagged Kusto query against the
+    workspace and stores it in the org secret store, then ages it out per
+    the AI workspace retention policy.
+
+    Prior implementation wrote plaintext to `/home/.s82f-secrets-<id>.txt`
+    at 0600. That pattern is unsafe: App Service Linux mounts `/home` via
+    Azure Files (CIFS) with a fixed umask, so `os.chmod(path, 0o600)`
+    silently no-ops and the file lands at 0777. See CLAUDE.md 2026-06-01
+    rule "App Service /home permissions are not enforced" and
+    [[appservice-home-permissions]].
 
 Per docs/SOP-agent-onboarding.md Phase 7. The promotion to STAGED uses
 the synthetic "system:bootstrap" actor — a documented first-class value
@@ -32,9 +38,6 @@ used only by lifespan bootstraps (NOT a back door). See
 from __future__ import annotations
 
 import logging
-import os
-import stat
-from pathlib import Path
 from typing import Final
 
 _log = logging.getLogger(__name__)
@@ -72,32 +75,28 @@ _BOOTSTRAP_REASON: Final[str] = (
 )
 _BOOTSTRAP_ACTOR: Final[str] = "system:bootstrap"
 
-# App Service /home survives cold starts; everything else is wiped.
-_SECRETS_DIR: Final[Path] = Path(os.environ.get("VENDOR_RISK_SECRETS_DIR") or "/home")
+# Tag used in the CRITICAL log line carrying the plaintext secret. The
+# operator queries App Insights traces for this exact string to extract
+# bootstrap-minted secrets, then stores them in the org secret store and
+# ages out the trace per retention policy. Centralized as a Final so any
+# future renames stay in sync with the runbook.
+_SECRET_BOOTSTRAP_TAG: Final[str] = "SECRET_BOOTSTRAP_DO_NOT_LEAK"
 
 
-def _write_plaintext_secret(system_id: str, key_id: str, plaintext: str) -> Path:
-    """Persist a freshly-minted SDK secret to /home/ at 0600.
+def _emit_plaintext_secret(system_id: str, key_id: str, plaintext: str) -> str:
+    """Surface a freshly-minted SDK secret via a single CRITICAL log line.
 
-    Returns the path so the lifespan logger can surface it. Never logs the
-    secret itself — only the path.
+    Returns an opaque marker string for the lifespan summary — the marker
+    contains NO secret material; it's just a query hint for the operator
+    runbook ("look up this key_id in App Insights traces with tag X").
+    The plaintext appears exactly once in the log stream, tagged so the
+    operator can extract + delete it from the workspace.
     """
-    target = _SECRETS_DIR / f".s82f-secrets-{system_id}.txt"
-    body = (
-        f"# vendor_risk SDK key for {system_id}\n"
-        f"# minted by sdk_provisioning lifespan bootstrap (S82f)\n"
-        f"# DO NOT COMMIT — pull via `az webapp ssh` then delete\n"
-        f"SL_KEY_ID={key_id}\n"
-        f"SL_HMAC_SECRET={plaintext}\n"
+    _log.critical(
+        "%s system_id=%s key_id=%s secret=%s",
+        _SECRET_BOOTSTRAP_TAG, system_id, key_id, plaintext,
     )
-    # Write then chmod (Windows dev environments will silently no-op the chmod;
-    # production target is Linux App Service where 0600 is enforced).
-    target.write_text(body, encoding="utf-8")
-    try:
-        os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
-    except (PermissionError, OSError):  # noqa: BLE001 — non-fatal on Windows
-        _log.debug("chmod 0600 failed on %s (non-Linux fs?)", target)
-    return target
+    return f"appinsights:{_SECRET_BOOTSTRAP_TAG}:{key_id}"
 
 
 def _ensure_catalog_row() -> str:
@@ -156,12 +155,12 @@ def _ensure_sdk_key(system_id: str) -> str:
         return f"failed:issue:{type(exc).__name__}: {exc}"
 
     try:
-        path = _write_plaintext_secret(system_id, record.key_id, plaintext)
+        marker = _emit_plaintext_secret(system_id, record.key_id, plaintext)
     except Exception as exc:  # noqa: BLE001
         # Key exists in the store; only the side-channel handoff failed.
         # Surface this honestly — operator will need to revoke + re-mint.
-        return f"failed:write_secret:{type(exc).__name__}: {exc}"
-    return f"created:{path}"
+        return f"failed:emit_secret:{type(exc).__name__}: {exc}"
+    return f"created:{marker}"
 
 
 def _promote_system(system_id: str) -> str:

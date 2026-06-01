@@ -99,6 +99,26 @@ that is never invoked from `dashboard.py` lifespan today — don't add new
 systems there. S80 closed without this; S81 backfill added finadvice and
 azure-architect.
 
+### 2026-06-01 — Never persist secrets to App Service `/home`; surface via tagged CRITICAL log
+App Service Linux mounts `/home` via Azure Files (CIFS) with a fixed
+permissive umask. `os.chmod(path, 0o600)` against any file under `/home`
+silently no-ops — the file lands at `0777` regardless of the chmod call,
+and there is no exception raised that code can catch. The provisioner
+LOOKS correct on Windows/local dev (where chmod works) and SILENTLY
+ships a world-readable secret to prod.
+
+Rule: Bootstrap-minted secrets MUST be surfaced via a single
+CRITICAL-level log line tagged `SECRET_BOOTSTRAP_DO_NOT_LEAK` (or an
+equivalent grep-able sentinel), captured by App Insights, retrieved by
+the operator via a tagged Kusto query, and aged out per the workspace
+retention policy. Never write secret material to `/home`, never trust a
+chmod against it.
+
+S82f-1 wrote vendor_risk SDK secrets to `/home/.s82f-secrets-*.txt`
+expecting 0600; S82f-1b verification found the actual mode was 0777.
+See [[appservice-home-permissions]] and the deploy-side mirror
+[[appservice-deploy-python]].
+
 ## Workflow + token bands
 Operating rules (workflow classification, token bands, review/stop/cost
 control) live in global `~/.claude/CLAUDE.md` under SESSION MANAGEMENT.
