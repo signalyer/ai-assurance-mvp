@@ -26,20 +26,44 @@ export function AgentPicker({ agents, selectedAgentId, onSelect, loading, loadEr
         onChange={(e) => onSelect((e.target as HTMLSelectElement).value)}
         style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-card-hover)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4 }}
       >
-        {agents.map((a) => (
-          <option
-            key={a.agent_id}
-            value={a.agent_id}
-            disabled={a.cli_only}
-            title={a.cli_only ? 'CLI-only agent — not invocable from the runner UI yet.' : a.description}
-          >
-            {a.name}{a.cli_only ? ' (CLI only)' : ''} — {a.agent_id}
-          </option>
-        ))}
+        {agents.map((a) => {
+          const suffix = [a.cli_only ? 'CLI only' : null, a.demo_only ? 'DEMO ONLY' : null]
+            .filter(Boolean)
+            .join(' · ');
+          return (
+            <option
+              key={a.agent_id}
+              value={a.agent_id}
+              disabled={a.cli_only}
+              title={a.cli_only ? 'CLI-only agent — not invocable from the runner UI yet.' : a.description}
+            >
+              {a.name}{suffix ? ` (${suffix})` : ''} — {a.agent_id}
+            </option>
+          );
+        })}
       </select>
       {selectedAgentId ? (
-        <div class="text-xs text-tertiary" style={{ marginTop: '0.4rem' }}>
-          {agents.find((a) => a.agent_id === selectedAgentId)?.description ?? ''}
+        <div style={{ marginTop: '0.4rem' }}>
+          <div class="text-xs text-tertiary">
+            {agents.find((a) => a.agent_id === selectedAgentId)?.description ?? ''}
+          </div>
+          {agents.find((a) => a.agent_id === selectedAgentId)?.demo_only ? (
+            <div
+              class="card"
+              style={{
+                marginTop: '0.5rem',
+                padding: '0.5rem 0.7rem',
+                borderLeft: '3px solid var(--medium)',
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+              }}
+              title="See docs/SOP-agent-onboarding.md"
+            >
+              <strong>DEMO ONLY</strong> — this agent has not completed the
+              onboarding SOP (notably eval suite + pre-release assessment).
+              Not production-governed.
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

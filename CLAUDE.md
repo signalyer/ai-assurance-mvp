@@ -58,6 +58,26 @@ but agents/ was never in the include list. See [[appservice-deploy-python]]
 failure mode #1 and [[lazy-imports-skip-module-load-bootstrap]] — this
 rule is the deploy-side mirror of the latter.
 
+### 2026-06-01 — Agent onboarding follows docs/SOP-agent-onboarding.md; eval is the spec
+Any plan that adds, modifies, or promotes an agent MUST cite
+`docs/SOP-agent-onboarding.md` and explicitly account for all 13 phases
+(executed / waived-with-reason / deferred-with-date).
+
+The SOP is **eval-co-evolved**: Phase 4 (Behavioral Spec — dataset.jsonl,
+per-metric thresholds, MRM sign-off) gates Phase 5 (V0 Build). Writing
+agent code before the eval skeleton exists violates the SOP and the
+global CLAUDE.md PROMPT CALIBRATION rule (the worked-example calibration
+the global rule requires IS the seed eval).
+
+Agents that explicitly cannot complete the SOP (PoCs, demos, spikes)
+MUST set `demo_only=True` in their `AgentSpec` (`agents/_registry.py`).
+The flag propagates to API and UI so consumers see "DEMO ONLY —
+not production-governed." `demo_only=True` is honest, not aspirational —
+removing the flag requires executing the missing phases.
+
+S80 added `finadvice` skipping 11/13 phases (notably Phase 4 — no eval
+suite); S81b marks it `demo_only=True`. Same for `azure-architect`.
+
 ### 2026-06-01 — Agent default_system_id must be backed by an AI system row
 When a new agent is registered in `agents/_registry.py` with a
 `default_system_id`, that id must also exist as an `AISystem` entry in

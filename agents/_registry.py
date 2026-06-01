@@ -84,6 +84,13 @@ class AgentSpec:
     inner_entrypoint: str | None = None
     tool_specs: list[dict[str, Any]] = field(default_factory=list)
     cli_only: bool = False
+    demo_only: bool = False
+    """When True, the agent has not completed `docs/SOP-agent-onboarding.md`
+    (notably Phase 4 Behavioral Spec / eval suite + Phase 9 Pre-Release
+    Assessment). The runner still dispatches it, but the API + picker
+    surface a "DEMO ONLY — not production-governed" badge so operators
+    can't mistake it for a production-onboarded agent. Removing this flag
+    requires executing the missing SOP phases, not just flipping the bool."""
 
 
 # Registry is a tuple, not a dict, so iteration order is stable for the
@@ -104,6 +111,7 @@ REGISTRY: tuple[AgentSpec, ...] = (
         inner_entrypoint="_run_review_inner",
         tool_specs=[],  # populated by the agent module at import time; see note below
         cli_only=False,
+        demo_only=True,  # S80 shipped without Phase 4 eval suite / Phase 9 assessment — see docs/SOP-agent-onboarding.md
     ),
     AgentSpec(
         agent_id="azure-architect",
@@ -119,6 +127,7 @@ REGISTRY: tuple[AgentSpec, ...] = (
         entrypoint=None,
         tool_specs=[],
         cli_only=True,
+        demo_only=True,  # CLI-only PoC; no Phase 1-12 SOP execution — see docs/SOP-agent-onboarding.md
     ),
 )
 

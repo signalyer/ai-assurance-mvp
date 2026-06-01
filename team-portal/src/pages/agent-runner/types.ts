@@ -171,6 +171,7 @@ export interface RegistryAgent {
   description: string;
   default_system_id: string;
   cli_only: boolean;
+  demo_only?: boolean;
 }
 
 export interface RegistryListResponse {

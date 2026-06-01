@@ -84,6 +84,7 @@ class AgentSpecOut(BaseModel):
     description: str
     default_system_id: str
     cli_only: bool
+    demo_only: bool = False
 
 
 class AgentsListOut(BaseModel):
@@ -142,6 +143,7 @@ async def list_agents(
                 description=spec.description,
                 default_system_id=spec.default_system_id,
                 cli_only=spec.cli_only,
+                demo_only=spec.demo_only,
             )
             for spec in list_registered_agents()
         ]
