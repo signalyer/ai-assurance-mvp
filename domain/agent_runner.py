@@ -380,6 +380,36 @@ async def stream_agent_run_with_chain_events(
     if model is not None:
         agent_kwargs["model"] = model
 
+    # S82f-2: thread agent-specific context (system_id, vendor_package_ref)
+    # into the inner call when the agent's signature accepts them. The
+    # dispatcher historically only knew about finadvice's kwargs (prompt,
+    # vault_id, event_sink, model); vendor_risk also wants system_id (to
+    # pick EXT vs INT system prompt) and vendor_package_ref (so the
+    # parse_vendor_document tool has a fixture to bind to). Without this,
+    # vendor_risk runs via the SPA degrade silently: parsers return "no
+    # fixture" errors and the agent synthesizes from corpus signal alone.
+    #
+    # We inspect-filter so finadvice (which doesn't declare these kwargs)
+    # is unaffected. The vendor_package_ref is extracted from the prompt
+    # body since the API's RunRequest schema is extra="forbid" — clients
+    # cannot send a separate field, but the calibration harness format
+    # inlines "Vendor package: fixtures/<id>/" which the regex below
+    # picks up.
+    import inspect
+    import re as _re
+    try:
+        _sig = inspect.signature(inner)
+        _params = _sig.parameters
+        if "system_id" in _params and effective_system_id:
+            agent_kwargs["system_id"] = effective_system_id
+        if "vendor_package_ref" in _params:
+            _m = _re.search(r"Vendor package:\s*(\S+)", prompt or "")
+            if _m:
+                agent_kwargs["vendor_package_ref"] = _m.group(1).rstrip("/")
+    except (TypeError, ValueError):
+        # Builtin / C-level callable without a signature — skip the threading.
+        pass
+
     async def _run_agent() -> dict[str, Any]:
         try:
             return await inner(**agent_kwargs)
