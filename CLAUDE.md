@@ -46,6 +46,18 @@ Stop. State the blocker. Never fake output. Never work around silently.
 Every mistake I correct → add a new rule to this file immediately.
 Label it with the date. This file grows with experience.
 
+### 2026-06-01 — Eager-imported top-level packages must be in deploy/build-zip.py INCLUDE
+When dashboard.py adds a NEW top-level package eager import
+(`from <pkg>...` or `import <pkg>` at module scope),
+deploy/build-zip.py::INCLUDE must list `"<pkg>"` in the same commit.
+Otherwise the engine container crashes on startup with
+ModuleNotFoundError and /api/health 502s with the SCM "Application Error"
+page — no error in the path that fails because the path never opens.
+S80 ate one CD round-trip on this: agents._registry was eager-imported
+but agents/ was never in the include list. See [[appservice-deploy-python]]
+failure mode #1 and [[lazy-imports-skip-module-load-bootstrap]] — this
+rule is the deploy-side mirror of the latter.
+
 ## Workflow + token bands
 Operating rules (workflow classification, token bands, review/stop/cost
 control) live in global `~/.claude/CLAUDE.md` under SESSION MANAGEMENT.
