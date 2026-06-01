@@ -70,6 +70,7 @@ from api.agent_notifications import router as agent_notifications_router
 # until the first agent_runner request lazy-loads it — exactly the failure
 # mode S77 #2 burned a session on.
 from api.agent_runner import router as agent_runner_router
+from api.agent_runs import router as agent_runs_router
 import agents._registry as _agent_registry_eager  # noqa: F401  side-effect
 from api.right_to_forget import router as rtf_router
 from api.audit_verify import router as audit_verify_router
@@ -444,6 +445,7 @@ app.include_router(agents_router)
 app.include_router(agent_bindings_router)
 app.include_router(agent_notifications_router)
 app.include_router(agent_runner_router)
+app.include_router(agent_runs_router)
 app.include_router(rtf_router)
 app.include_router(audit_verify_router)
 app.include_router(projection_router)

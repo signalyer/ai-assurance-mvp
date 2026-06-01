@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -45,6 +47,44 @@ from sse_starlette.sse import EventSourceResponse
 from agents._registry import list_registered_agents
 from domain.agent_runner import stream_agent_run_with_chain_events
 from middleware.auth import require_role, _read_cookie
+
+# S82f-1c: persist a per-run summary record on chain.done so the new
+# /api/agent-runs/{run_id} read endpoint has a backing store. JSONL append
+# only, via storage helper per [[storage-only-jsonl-pattern]].
+_AGENT_RUNS_FILE: Path = Path("data") / "agent_runs.jsonl"
+
+
+def _persist_run_record(events: list[dict[str, Any]]) -> None:
+    """Build a summary record from a full event list and append to disk.
+
+    Called on chain.done from the SSE wrapper. Best-effort: any failure is
+    logged and swallowed so persistence never breaks the live stream.
+    """
+    try:
+        from storage import _append_jsonl
+        start_evt = next((e for e in events if e.get("event") == "chain.start"), {})
+        done_evt = next((e for e in events if e.get("event") == "chain.done"), {})
+        audit_evt = next((e for e in events if e.get("event") == "audit"), {})
+        record = {
+            "run_id": start_evt.get("run_id") or done_evt.get("run_id") or "",
+            "agent_id": start_evt.get("agent_id", ""),
+            "agent_name": start_evt.get("agent_name", ""),
+            "system_id": start_evt.get("system_id", ""),
+            "provider_id": start_evt.get("provider_id", ""),
+            "user": start_evt.get("user", ""),
+            "started_at": start_evt.get("started_at", ""),
+            "ended_at": datetime.now(tz=timezone.utc).isoformat(),
+            "outcome": done_evt.get("outcome", ""),
+            "audit_id": audit_evt.get("audit_id") or done_evt.get("audit_id", ""),
+            "operation_id": audit_evt.get("operation_id", ""),
+            "appinsights_url": audit_evt.get("appinsights_url"),
+            "langfuse_url": audit_evt.get("langfuse_url"),
+            "total_elapsed_ms": done_evt.get("total_elapsed_ms", 0),
+            "events": events,
+        }
+        _append_jsonl(_AGENT_RUNS_FILE, record)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("agent_runs persistence skipped (non-fatal): %s", exc)
 
 _log = logging.getLogger(__name__)
 
@@ -186,6 +226,7 @@ async def run_agent(
     user = _resolve_user(request)
 
     async def _gen() -> AsyncIterator[dict[str, Any]]:
+        collected: list[dict[str, Any]] = []
         try:
             async for evt in stream_agent_run_with_chain_events(
                 agent_id=req.agent_id,
@@ -195,6 +236,7 @@ async def run_agent(
                 demo_mode=req.demo_mode,
                 model=req.model,
             ):
+                collected.append(evt)
                 # sse_starlette expects {"event": str, "data": str}. We JSON-
                 # encode the full event dict so the SPA can reconstruct it
                 # from event.data on the client without per-step parsers.
@@ -203,6 +245,8 @@ async def run_agent(
                     "event": evt.get("event", "unknown"),
                     "data": json.dumps(evt, default=str),
                 }
+                if evt.get("event") == "chain.done":
+                    _persist_run_record(collected)
         except Exception as exc:  # noqa: BLE001
             # The dispatcher's contract is to never raise; if we land here
             # it's an infrastructure failure (e.g. SSE transport). Emit a
