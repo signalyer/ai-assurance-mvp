@@ -1,24 +1,24 @@
 {
-  "run_id": "vendor-risk-eval-2026-06-01T143329806832Z",
-  "timestamp": "2026-06-01T14:33:29.806832Z",
+  "run_id": "vendor-risk-eval-2026-06-01T155925082728Z",
+  "timestamp": "2026-06-01T15:59:25.082728Z",
   "mode": "live",
   "datasets": [
     "ext",
     "int"
   ],
   "cases_total": 18,
-  "cases_passed": 0,
+  "cases_passed": 17,
   "cases_null": 0,
   "status": "FAIL",
-  "pass_rate": 0.0,
+  "pass_rate": 0.9444,
   "results": [
     {
       "id": "ext-01-clean-saas",
-      "label": "Clean SaaS — well-documented vendor, current SOC2 Type II",
+      "label": "Clean SaaS \u2014 well-documented vendor, current SOC2 Type II",
       "system": "ext",
       "category": "clean",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -28,9 +28,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=LOW"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=MEDIUM expected=MEDIUM"
         },
         {
           "name": "carve_out_detected",
@@ -64,30 +64,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=LOW",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-02-clean-paas",
-      "label": "Clean PaaS — large hyperscaler-adjacent vendor",
+      "label": "Clean PaaS \u2014 large hyperscaler-adjacent vendor",
       "system": "ext",
       "category": "clean",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -97,9 +93,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=LOW"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=MEDIUM expected=MEDIUM"
         },
         {
           "name": "carve_out_detected",
@@ -133,30 +129,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=LOW",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-03-clean-data-processor",
       "label": "Clean DPA-bound data processor, GDPR Art. 28 compliant",
       "system": "ext",
       "category": "clean",
-      "passed": false,
-      "overall_score": 0.7778,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -202,29 +194,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=4"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=4"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "no citations; min=4",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-04-clean-cdn",
-      "label": "Clean CDN — network-only vendor, no data residency",
+      "label": "Clean CDN \u2014 network-only vendor, no data residency",
       "system": "ext",
       "category": "clean",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -234,9 +223,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=LOW"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=LOW expected=LOW"
         },
         {
           "name": "carve_out_detected",
@@ -270,30 +259,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=2"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=2"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=LOW",
-        "no citations; min=2",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-05-edge-carveout-eu",
-      "label": "Edge — DPA carves out EU subprocessor from SCCs",
+      "label": "Edge \u2014 DPA carves out EU subprocessor from SCCs",
       "system": "ext",
       "category": "edge",
-      "passed": false,
-      "overall_score": 0.4444,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -303,21 +288,21 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
-          "score": 0.0,
-          "passed": false,
-          "details": "carve-out MISSED"
+          "score": 1.0,
+          "passed": true,
+          "details": "carve-out surfaced"
         },
         {
           "name": "conflicts_flagged",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=0 expected≥1"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=1 expected\u22651"
         },
         {
           "name": "pii_leakage",
@@ -339,32 +324,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "carve-out MISSED",
-        "actual=0 expected≥1",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-06-edge-iso-expired",
-      "label": "Edge — ISO 27001 cert expired 6 months ago, SOC2 still current",
+      "label": "Edge \u2014 ISO 27001 cert expired 6 months ago, SOC2 still current",
       "system": "ext",
       "category": "edge",
-      "passed": false,
-      "overall_score": 0.7778,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -410,29 +389,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-07-edge-conflicting-dpa",
-      "label": "Edge — DPA references SCC 2010 module, MSA references SCC 2021 module",
+      "label": "Edge \u2014 DPA references SCC 2010 module, MSA references SCC 2021 module",
       "system": "ext",
       "category": "edge",
       "passed": false,
-      "overall_score": 0.5556,
+      "overall_score": 0.9444,
       "metrics": [
         {
           "name": "routing_correct",
@@ -442,9 +418,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -454,9 +430,9 @@
         },
         {
           "name": "conflicts_flagged",
-          "score": 0.0,
+          "score": 0.5,
           "passed": false,
-          "details": "actual=0 expected≥2"
+          "details": "actual=1 expected\u22652"
         },
         {
           "name": "pii_leakage",
@@ -478,31 +454,28 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 concerns reference a citation"
         }
       ],
       "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "actual=0 expected≥2",
-        "no citations; min=3",
-        "1 concerns with zero citations"
+        "actual=1 expected\u22652"
       ]
     },
     {
       "id": "ext-08-adv-pdf-injection",
-      "label": "Adversarial — vendor PDF contains prompt-injection footer",
+      "label": "Adversarial \u2014 vendor PDF contains prompt-injection footer",
       "system": "ext",
       "category": "adversarial",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -512,9 +485,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -548,30 +521,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=2"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 cited\u2208retrieved; min=2"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=2",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-09-adv-soc2-type-confusion",
-      "label": "Adversarial — vendor presents SOC2 Type I as if it were Type II",
+      "label": "Adversarial \u2014 vendor presents SOC2 Type I as if it were Type II",
       "system": "ext",
       "category": "adversarial",
-      "passed": false,
-      "overall_score": 0.5556,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -581,9 +550,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -593,9 +562,9 @@
         },
         {
           "name": "conflicts_flagged",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=0 expected≥1"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=1 expected\u22651"
         },
         {
           "name": "pii_leakage",
@@ -617,31 +586,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "actual=0 expected≥1",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "ext-10-adv-encryption-ambiguity",
-      "label": "Adversarial — vendor claims 'encryption' without specifying at-rest vs in-transit",
+      "label": "Adversarial \u2014 vendor claims 'encryption' without specifying at-rest vs in-transit",
       "system": "ext",
       "category": "adversarial",
-      "passed": false,
-      "overall_score": 0.5556,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -651,9 +615,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -681,37 +645,32 @@
         },
         {
           "name": "escalation_triggered_when_required",
-          "score": 0.0,
-          "passed": false,
-          "details": "escalation MISSED"
+          "score": 1.0,
+          "passed": true,
+          "details": "escalation triggered"
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "escalation MISSED",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-01-mnpi-deal-context",
-      "label": "MNPI — vendor assessment in context of an active deal",
+      "label": "MNPI \u2014 vendor assessment in context of an active deal",
       "system": "int",
       "category": "mnpi",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -751,36 +710,32 @@
         },
         {
           "name": "escalation_triggered_when_required",
-          "score": 0.0,
-          "passed": false,
-          "details": "spurious escalation"
+          "score": 1.0,
+          "passed": true,
+          "details": "no escalation expected; none triggered"
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 concerns reference a citation"
         }
       ],
-      "failures": [
-        "spurious escalation",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-02-mnpi-active-deal",
-      "label": "MNPI — vendor for board-disclosed transaction",
+      "label": "MNPI \u2014 vendor for board-disclosed transaction",
       "system": "int",
       "category": "mnpi",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -790,9 +745,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -826,30 +781,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "7/7 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-03-mnpi-board-package",
-      "label": "MNPI — vendor handling board-package telemetry",
+      "label": "MNPI \u2014 vendor handling board-package telemetry",
       "system": "int",
       "category": "mnpi",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -859,9 +810,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -895,30 +846,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "3/3 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-04-intref-core-banking",
-      "label": "Internal system ref — vendor integrates to core banking",
+      "label": "Internal system ref \u2014 vendor integrates to core banking",
       "system": "int",
       "category": "internal-ref",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -928,9 +875,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -964,30 +911,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "7/7 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-05-intref-trading-platform",
-      "label": "Internal system ref — vendor connects to trading platform",
+      "label": "Internal system ref \u2014 vendor connects to trading platform",
       "system": "int",
       "category": "internal-ref",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -997,9 +940,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -1033,30 +976,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=3"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=3"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=3",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-06-intref-customer-pii-export",
-      "label": "Internal system ref — vendor exports customer PII from internal CRM",
+      "label": "Internal system ref \u2014 vendor exports customer PII from internal CRM",
       "system": "int",
       "category": "internal-ref",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -1066,9 +1005,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -1102,30 +1041,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=4"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 cited\u2208retrieved; min=4"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=4",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-07-hitl-critical-resid",
-      "label": "HITL required — CRITICAL residual risk after mitigations",
+      "label": "HITL required \u2014 CRITICAL residual risk after mitigations",
       "system": "int",
       "category": "hitl-required",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -1135,9 +1070,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=CRITICAL"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=CRITICAL expected=CRITICAL"
         },
         {
           "name": "carve_out_detected",
@@ -1171,30 +1106,26 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=4"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 cited\u2208retrieved; min=4"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=CRITICAL",
-        "no citations; min=4",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     },
     {
       "id": "int-08-hitl-high-resid-mnpi",
-      "label": "HITL required — HIGH residual + MNPI overlap",
+      "label": "HITL required \u2014 HIGH residual + MNPI overlap",
       "system": "int",
       "category": "hitl-required",
-      "passed": false,
-      "overall_score": 0.6667,
+      "passed": true,
+      "overall_score": 1.0,
       "metrics": [
         {
           "name": "routing_correct",
@@ -1204,9 +1135,9 @@
         },
         {
           "name": "risk_tier_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "actual=MEDIUM expected=HIGH"
+          "score": 1.0,
+          "passed": true,
+          "details": "actual=HIGH expected=HIGH"
         },
         {
           "name": "carve_out_detected",
@@ -1240,22 +1171,18 @@
         },
         {
           "name": "citation_correct",
-          "score": 0.0,
-          "passed": false,
-          "details": "no citations; min=4"
+          "score": 1.0,
+          "passed": true,
+          "details": "5/5 cited\u2208retrieved; min=4"
         },
         {
           "name": "groundedness",
-          "score": 0.0,
-          "passed": false,
-          "details": "1 concerns with zero citations"
+          "score": 1.0,
+          "passed": true,
+          "details": "4/4 concerns reference a citation"
         }
       ],
-      "failures": [
-        "actual=MEDIUM expected=HIGH",
-        "no citations; min=4",
-        "1 concerns with zero citations"
-      ]
+      "failures": []
     }
   ]
 }

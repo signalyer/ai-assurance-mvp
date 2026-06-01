@@ -78,6 +78,25 @@ Session 18 under different paths — `api/rag.py` exists; the UI shipped as
 `team-portal/src/pages/rag/RagCorpusPage.tsx` instead of `static/rag-governance.html`.
 Cleaned in Session 25.)
 
+## Files — Built (2026-06-01, S82e — vendor_risk SOP Phase 6 Iterate × Lock)
+
+5-cycle iteration from 0/18 → 17/18 (94.4%), all metric thresholds cleared.
+Detail in `agents/vendor_risk/eval/iteration-log.md` + `docs/sop-vendor-risk/06-lock-signoff.md`.
+
+- `agents/vendor_risk/prompts.py` — `SYSTEM_PROMPT_EXT` / `SYSTEM_PROMPT_INT` rewritten:
+  mandatory tool-use sequence, hard deterministic rubric, explicit conflict examples
+  + anti-examples, strict injection "describe-don't-echo" rule, INT MNPI discriminator
+  (board-disclosed → HIGH; active-deal-only → MEDIUM).
+- `agents/vendor_risk/agent.py` — `_coerce_output` tolerant JSON parser (balanced-brace
+  extraction defends against preamble drift; was the cycle-2 unlock); `TURN_CAP` 5→6.
+- `agents/vendor_risk/eval/dataset-external.jsonl` — ext-01/ext-02 relabeled LOW → MEDIUM
+  per S82e calibration finding (fixture DPAs explicitly designate Art. 28 processor).
+- `agents/vendor_risk/eval/dataset-external-v1.jsonl` + `dataset-internal-v1.jsonl` — v1 tags.
+- `agents/vendor_risk/eval/baseline.json` — frozen locked baseline.
+- `agents/vendor_risk/eval/iteration-log.md` — per-cycle deltas + decisions.
+- `docs/sop-vendor-risk/06-lock-signoff.md` — MRM self-attested lock sign-off.
+- `tests/test_vendor_risk_eval_regression.py` — 4 CI gates against the locked baseline.
+
 ## Files — Built (2026-05-29 → 2026-05-30, Sessions 63–67)
 
 Detail lives in `docs/plans/SESSION-63-*.md` through `SESSION-66-*.md`.

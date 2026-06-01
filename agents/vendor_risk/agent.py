@@ -84,7 +84,7 @@ from agents.vendor_risk.tools import (
 # Mirrors finadvice / azure-architect: hard 5-turn cap on the tool-use loop.
 # Cost compounds per turn and tool_use can pathologically loop on ambiguous
 # tool errors. Bump deliberately, never silently.
-TURN_CAP: int = 5
+TURN_CAP: int = 6
 
 # Load the agent's own .env if present. ANTHROPIC_API_KEY is the only
 # required var for the eval seam; SL_* are required for the decorated
@@ -144,17 +144,57 @@ def _coerce_output(
     # emits despite the schema instruction.
     if raw.startswith("```"):
         raw = raw.strip("`")
-        # Drop a possible language token on the first line.
         if "\n" in raw:
             head, _, body = raw.partition("\n")
             if head.strip().lower() in {"json", "json5"}:
                 raw = body
-    parsed: dict[str, Any]
+    parsed: dict[str, Any] | None = None
+    parse_exc: Exception | None = None
+    # First attempt: parse raw as-is.
     try:
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError("synthesis was JSON but not an object")
+        candidate = json.loads(raw)
+        if isinstance(candidate, dict):
+            parsed = candidate
     except (ValueError, json.JSONDecodeError) as exc:
+        parse_exc = exc
+    # Second attempt: extract the first balanced {...} object from the text.
+    # Defends against preamble like "Based on my analysis:\n{...}" — a common
+    # Sonnet failure mode that otherwise drops every run to MEDIUM fallback.
+    if parsed is None:
+        start = raw.find("{")
+        if start != -1:
+            depth = 0
+            in_str = False
+            esc = False
+            end = -1
+            for i in range(start, len(raw)):
+                ch = raw[i]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                else:
+                    if ch == '"':
+                        in_str = True
+                    elif ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+            if end != -1:
+                try:
+                    candidate = json.loads(raw[start:end + 1])
+                    if isinstance(candidate, dict):
+                        parsed = candidate
+                except (ValueError, json.JSONDecodeError) as exc:
+                    parse_exc = exc
+    if parsed is None:
+        exc = parse_exc or ValueError("no JSON object found")
         parsed = {
             "risk_tier": "MEDIUM",
             "concerns": [f"Synthesis JSON parse failed: {type(exc).__name__}"],
