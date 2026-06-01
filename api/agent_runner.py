@@ -105,6 +105,14 @@ _RUNNER_ROLES: tuple[str, ...] = (
     "ciso",
     "auditor",
     "admin",
+    # S82f-2: ENGINEER is the role assigned to demo-engineer (the default
+    # Team Portal landing user per V2-PORTAL-SPLIT A6). Without this entry
+    # the Agent Runner page renders for engineer logins but every call to
+    # /api/agent-runner/agents returns 403 → SPA shows "insufficient_role".
+    "engineer",
+    # tprm-analyst added for vendor_risk INT runs (ADR-004 Path A). Same
+    # role as the rego operator gate; second-line risk function.
+    "tprm-analyst",
 )
 
 
