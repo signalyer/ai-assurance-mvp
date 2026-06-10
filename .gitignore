@@ -97,3 +97,9 @@ agent-*.jsonl
 # Local curl/test debris (S69 cookies.txt, etc.)
 cookies.txt
 **/cookies.txt
+
+# Azure teardown / startup state + logs (scripts/teardown-azure.ps1, startup-azure.ps1)
+scripts/.teardown-state.json
+scripts/.teardown-state.json.restored-*
+scripts/.teardown-log-*.txt
+scripts/.startup-log-*.txt
