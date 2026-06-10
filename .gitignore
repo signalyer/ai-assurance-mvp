@@ -103,3 +103,8 @@ scripts/.teardown-state.json
 scripts/.teardown-state.json.restored-*
 scripts/.teardown-log-*.txt
 scripts/.startup-log-*.txt
+
+# Azure snapshot tarballs (contain secrets — never commit)
+scripts/snapshots/
+scripts/.destroy-log-*.txt
+scripts/.rebuild-log-*.txt
