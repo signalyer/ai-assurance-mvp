@@ -1,0 +1,52 @@
+{
+  "mode": "B-prime",
+  "started_at": "20260616T07:05:47Z",
+  "completed_at": "2026-06-16T07:15:41Z",
+  "subscription": "SignalLayerDev",
+  "resource_group": "rg-aigovern-dev",
+  "starting_resource_count": 26,
+  "ending_resource_count": 10,
+  "deleted": [
+    "psql-aigovern-dev (Postgres Flexible Server)",
+    "search-aigovern-dev (Azure AI Search Basic)",
+    "appi-aigovern-dev (App Insights)",
+    "appi-aigovern-prod (App Insights)",
+    "log-aigovern-dev (Log Analytics)",
+    "log-aigovern-prod (Log Analytics)",
+    "ag-aigovern-dev (Action Group)",
+    "alert-opa-unreachable",
+    "alert-http-5xx-rate",
+    "alert-rtf-partial-failure",
+    "alert-pii-leak",
+    "alert-audit-chain-broken",
+    "alert-vault-error",
+    "alert-scrub-rate-regression",
+    "alert-p95-latency",
+    "app-aigovern-dev/staging slot"
+  ],
+  "modified": [
+    "asp-aigovern-dev: PremiumV3/P2v3 -> Basic/B1",
+    "app-aigovern-dev: stopped (state=Stopped)"
+  ],
+  "preserved": [
+    "asp-aigovern-dev (now Basic B1)",
+    "app-aigovern-dev (stopped, code intact)",
+    "aigovern.sandboxhub.co (managed cert)",
+    "api.aigovern.sandboxhub.co (managed cert)",
+    "swa-aigovern-portal-dev (SWA Free)",
+    "swa-aigovern-gov-dev (SWA Free)",
+    "kv-aigovern-sl-dev (Key Vault)"
+  ],
+  "estimated_monthly_cost_before_usd": 680,
+  "estimated_monthly_cost_after_usd": 16,
+  "monthly_savings_usd": 664,
+  "rebuild_path": "deploy/bicep/main.bicep + restore home-data.zip via Kudu",
+  "backup_assets": {
+    "app-settings-production.json": "6472 bytes",
+    "app-settings-staging.json": "6047 bytes",
+    "home-data.zip": "240081 bytes (16 JSONL files)",
+    "keyvault-secret-names.json": "36 bytes",
+    "keyvault-metadata.json": "128 bytes",
+    "search-indexes.json": "96 bytes (0 indexes captured)"
+  }
+}

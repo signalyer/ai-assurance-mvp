@@ -66,6 +66,11 @@ deploy/jar.txt
 deploy/creds.txt
 deploy/appsettings.json
 
+# Teardown backups (contain prod env vars + /home/data JSONL · NEVER commit)
+deploy/teardown-backup-*/
+deploy/.teardown-backup-current
+deploy/teardown-log-*.jsonl
+
 # Azure Functions
 local.settings.json
 
