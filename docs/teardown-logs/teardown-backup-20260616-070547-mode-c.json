@@ -1,0 +1,48 @@
+{
+  "mode": "C (Demolish) - executed after Mode B-prime",
+  "started_at": "2026-06-18T07:30:00Z",
+  "completed_at": "2026-06-18T02:47:17Z",
+  "subscription": "SignalLayerDev",
+  "resource_group": "rg-aigovern-dev",
+  "starting_resource_count": 10,
+  "ending_resource_count": 5,
+  "ending_resources_breakdown": "5 zero-cost auto-cleanup placeholders (cert binding stubs + Smart Detection orphans). Azure GC sweeps within 24h.",
+  "deleted_this_cycle": [
+    "swa-aigovern-portal-dev (Static Web App)",
+    "swa-aigovern-gov-dev (Static Web App)",
+    "aigovern.sandboxhub.co hostname binding",
+    "api.aigovern.sandboxhub.co hostname binding",
+    "app-aigovern-dev (App Service)",
+    "asp-aigovern-dev (App Service Plan B1)",
+    "kv-aigovern-sl-dev (Key Vault → SOFT-DELETED, recoverable until 2026-09-16)"
+  ],
+  "preserved_via_soft_delete": {
+    "kv-aigovern-sl-dev": {
+      "recoverable_until": "2026-09-16T07:46:20Z",
+      "recovery_command": "az keyvault recover --name kv-aigovern-sl-dev --location eastus",
+      "contained_secrets": ["entra-oidc-client-secret"]
+    }
+  },
+  "additional_backup_assets_captured_this_cycle": [
+    "app-custom-hostnames.json (3 hostnames including 2 SniEnabled SSL bindings)",
+    "ssl-bindings.json (0 separate certs - all App Service managed)",
+    "swa-swa-aigovern-portal-dev.json (full SWA config)",
+    "swa-swa-aigovern-gov-dev.json (full SWA config)",
+    "rg-arm-export.json (689 lines - full RG ARM template)"
+  ],
+  "estimated_monthly_cost_before_mode_c": 14.14,
+  "estimated_monthly_cost_after_mode_c": 0,
+  "monthly_savings_this_cycle": 14.14,
+  "cumulative_savings_vs_baseline": 680,
+  "rebuild_path": "deploy/bicep/main.bicep + Kudu restore of home-data.zip + DNS CNAMEs already exist (sandboxhub.co DNS lives outside this RG)",
+  "rebuild_time_estimate_minutes": 30,
+  "dns_records_status": "PRESERVED - gov./portal./api./apex CNAMEs live in sandboxhub.co zone outside this RG, no action needed",
+  "next_actions_if_rebuilding": [
+    "az deployment group create --resource-group rg-aigovern-dev --template-file deploy/bicep/main.bicep",
+    "az keyvault recover --name kv-aigovern-sl-dev --location eastus",
+    "Restore /home/data via Kudu PUT /api/zip/data/ with home-data.zip",
+    "az webapp config appsettings set from app-settings-production.json (filter to non-KV-ref values)",
+    "az webapp config hostname add for both custom domains",
+    "az webapp start"
+  ]
+}
